@@ -3,49 +3,49 @@ import type { PageContent } from '../../types/content';
 export const staticPages: Record<string, PageContent> = {
   home: {
     slug: 'home',
-    eyebrow: 'Prestige in Motion',
-    title: 'Yor Legacy',
+    eyebrow: 'Business Presentation',
+    title: 'Yor International',
     strapline: 'Legacy',
     summary:
-      'A premium direct selling experience shaped by aspiration, craftsmanship, and generational ambition.',
+      'A premium fragrance-driven direct selling platform built around legacy, entrepreneurship, and shared success.',
     ctaLabel: 'Join Now',
     ctaHref: '/packages',
     stats: [
-      { label: 'Premium Positioning', value: 'Luxury-first' },
+      { label: 'Official Deck', value: '19 Slides' },
       { label: 'Network Model', value: '8 Ways to Earn' },
       { label: 'Core Promise', value: 'Build Your Legacy' }
     ],
     sections: [
       {
         key: 'vision',
-        heading: 'A private-club standard for digital direct selling',
-        body: 'Yor Legacy presents opportunity with the tone of a luxury house: poised, deliberate, and unmistakably premium.'
+        heading: 'Built to turn aspiration into shared success',
+        body: 'Yor presents its opportunity through dark luxury visuals, premium product storytelling, and a public compensation plan built for ambitious entrepreneurs.'
       },
       {
         key: 'invitation',
-        heading: 'Built for ambitious entrepreneurs',
-        body: 'The platform guides distributors and prospects through products, packages, and the compensation story with polished clarity.'
+        heading: 'Products, packages, and opportunity in one polished journey',
+        body: 'The public experience should move visitors from the business presentation into vision, mission, products, packages, and the eight ways to earn without losing brand confidence.'
       }
     ]
   },
   vision: {
     slug: 'vision',
-    eyebrow: 'Future State',
+    eyebrow: 'Vision',
     title: 'Our Vision',
     summary:
-      'To shape a legacy-led business ecosystem where elegance, entrepreneurship, and enduring wealth-building move together.',
+      'To build a global community of empowered entrepreneurs where every member can create a lasting legacy of financial freedom, personal growth, and positive impact.',
     ctaLabel: 'Explore Mission',
     ctaHref: '/mission',
     sections: [
       {
         key: 'north-star',
-        heading: 'Lead with prestige and permanence',
-        body: 'Yor Legacy envisions a future where network-building feels as curated and credible as a heritage brand.'
+        heading: 'A future where success is shared',
+        body: 'Yor positions its growth story around accessible opportunity, mutual support, and a community that scales without losing its sense of purpose.'
       },
       {
         key: 'human-impact',
-        heading: 'Translate aspiration into upward mobility',
-        body: 'The platform is designed to help people elevate their income, presence, and sense of possibility through structured opportunity.'
+        heading: 'Opportunity that reaches beyond the present',
+        body: 'The public vision language emphasizes long-term freedom, personal development, and the idea that business can create a legacy for future generations.'
       }
     ]
   },
@@ -77,20 +77,20 @@ export const staticPages: Record<string, PageContent> = {
   },
   founder: {
     slug: 'founder',
-    eyebrow: 'Founding Presence',
-    title: 'Meet the Founder',
+    eyebrow: 'Our President / CEO',
+    title: 'Mr. Yoren B. Abihay',
     summary:
-      'A leadership story framed around vision, discipline, and a premium standard of opportunity-building.',
+      'Traditional businessman, trainer, mentor, network builder, and six-time top earner guiding the public face of Yor International.',
     stats: [
-      { label: 'Leadership Standard', value: 'High Trust' },
-      { label: 'Visual Tone', value: 'Executive' },
-      { label: 'Brand Posture', value: 'Prestigious' }
+      { label: 'Corporate Experience', value: '8 Years' },
+      { label: 'Top Earner', value: '6x' },
+      { label: 'Degree', value: 'BS Criminology' }
     ],
     sections: [
       {
         key: 'story',
-        heading: 'A founder narrative with executive polish',
-        body: 'The founder page should feel cinematic and deeply intentional, combining a strong portrait treatment with clear statements of belief and purpose.'
+        heading: 'A founder profile rooted in direct-selling credibility',
+        body: 'The PDF positions the founder through lived business experience, mentoring, and network-building authority rather than abstract brand language.'
       }
     ]
   },
@@ -99,26 +99,26 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Signature Products',
     title: 'The Yor Perfume Collection',
     summary:
-      'A fragrance lineup positioned as both premium product and prestige anchor for the brand story.',
+      'A men\'s and women\'s fragrance lineup that anchors the Yor business story with recognizable scent references.',
     sections: [
       {
         key: 'catalog',
-        heading: 'Products presented like a luxury line',
-        body: 'Use focused imagery, restrained copy, and elevated hierarchy to make each item feel premium.'
+        heading: 'The scent of legacy',
+        body: 'The public deck highlights men\'s and women\'s entries such as Hugo Boss, Swiss Army, Chanel Bleu, Paris Hilton, Bvlgari Amethyste, and VS Bombshell.'
       }
     ]
   },
   packages: {
     slug: 'packages',
-    eyebrow: 'Choose Your Entry',
+    eyebrow: 'Entry Packages',
     title: 'Entry Packages Comparison',
     summary:
-      'A side-by-side package decision screen that makes joining feel premium, clear, and confidence-building.',
+      'Five public package tiers create a clear ladder from Basic through VIP, each with its own price point and PV value.',
     sections: [
       {
         key: 'comparison',
-        heading: 'Structured for high-confidence decisions',
-        body: 'Packages should be easy to compare through clear price anchors, highlighted benefits, and elegant visual emphasis.'
+        heading: 'Basic to VIP with visible value progression',
+        body: 'The public Yor package ladder currently reads Basic, Classic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.'
       }
     ]
   },
@@ -127,19 +127,19 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Join the Legacy',
     title: 'Registration & Package Checkout',
     summary:
-      'A polished onboarding path for capturing commitment without losing the elevated visual language.',
+      'A premium registration path that captures account details, sponsor information, and package selection without losing the luxury brand treatment.',
     sections: [
       {
         key: 'details',
-        heading: 'Capture only what matters first',
-        body: 'The first registration pass should gather the essential lead and package information without overwhelming the user.'
+        heading: 'Lead with confidence and low-friction trust',
+        body: 'The registration screen should keep the Yor visual tone while clearly collecting legal name, email, phone, sponsor details, and selected package.'
       }
     ]
   },
   'thank-you': {
     slug: 'thank-you',
     eyebrow: 'Next Chapter',
-    title: 'Thank You — Start Your Legacy',
+    title: 'Thank You - Start Your Legacy',
     summary:
       'A premium confirmation state that closes the loop and points the user toward the next meaningful action.',
     sections: [
@@ -152,25 +152,25 @@ export const staticPages: Record<string, PageContent> = {
   },
   earn: {
     slug: 'earn',
-    eyebrow: 'Compensation Story',
+    eyebrow: '8 Ways to Earn',
     title: '8 Ways to Earn Overview',
     summary:
-      'An overview route that introduces the compensation framework and links into each bonus page.',
+      'The public Yor deck presents eight distinct ways to earn, from direct selling through global bonus.',
     highlights: [
       { title: 'Direct Selling Bonus', body: 'Earn from immediate product movement.' },
       { title: 'Direct Referral Bonus', body: 'Reward introductions that convert.' },
       { title: 'Salesmatch Bonus', body: 'Benefit from balanced binary growth.' },
-      { title: 'Leadership Bonus', body: 'Monetize team development and influence.' },
-      { title: 'Get Five Bonus', body: 'Unlock rewards from key duplication.' },
-      { title: 'Lifestyle Rewards', body: 'Translate milestones into prestige experiences.' },
-      { title: 'Unilevel Rank Bonus', body: 'Sustain higher ranks with broad depth.' },
-      { title: 'Global Bonus', body: 'Participate in larger shared success.' }
+      { title: 'Binary Cycle Bonus', body: 'Receive a public cycle-based income layer from wider network flow.' },
+      { title: 'Get Yor Five Bonus', body: 'Unlock rewards from five direct signups on the same package.' },
+      { title: 'Lifestyle Rewards', body: 'Translate repeat purchase results into prestige experiences.' },
+      { title: 'Unilevel Bonus', body: 'Expand across up to ten public levels of percentage income.' },
+      { title: 'Global Bonus', body: 'Participate in yearly global sales success.' }
     ],
     sections: [
       {
         key: 'framework',
-        heading: 'The business model explained with elegance',
-        body: 'This page should orient the visitor quickly and then let them drill into the details of each incentive.'
+        heading: 'The public compensation story at a glance',
+        body: 'This page should orient the visitor quickly and then let them drill into the details of each public incentive.'
       }
     ]
   },
@@ -178,12 +178,12 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/direct-selling',
     eyebrow: 'Way 1',
     title: '1. Direct Selling Bonus',
-    summary: 'Earn directly from sales activity with a clear premium explanation of value and conversion.',
+    summary: 'Public materials position direct selling around lifetime discount and retail margin from each package tier.',
     sections: [
       {
         key: 'mechanics',
-        heading: 'Reward product movement immediately',
-        body: 'This incentive demonstrates how revenue can begin from direct customer engagement.'
+        heading: 'Sell premium perfume with tier-based retail upside',
+        body: 'The deck presents a 40% lifetime discount and package-based direct selling values, making product movement the first visible income stream.'
       }
     ]
   },
@@ -191,12 +191,12 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/direct-referral',
     eyebrow: 'Way 2',
     title: '2. Direct Referral Bonus',
-    summary: 'Reward trusted introductions with a clean, easy-to-explain payout narrative.',
+    summary: 'Referral rewards rise by package tier, from Classic-level entry rewards through the VIP top-end payout.',
     sections: [
       {
         key: 'mechanics',
-        heading: 'Turn introductions into meaningful return',
-        body: 'The page should explain the straightforward benefit of sponsoring new members into the network.'
+        heading: 'Personally sponsor and earn package-based bonuses',
+        body: 'The PDF shows public referral values such as PHP 200, PHP 1,000, PHP 5,000, PHP 7,000, and PHP 15,000 depending on the package involved.'
       }
     ]
   },
@@ -205,7 +205,7 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Way 3',
     title: '3. Salesmatch Bonus',
     summary:
-      'Maximize earnings through a binary-style structure designed for momentum, matching, and retained strength.',
+      'Maximize earnings through matched left and right volume with strong-leg retention, no daily flush-out, and Tuesday encashment / Friday payout language.',
     stats: [
       { label: 'Left Leg', value: '24,000 pts' },
       { label: 'Right Leg', value: '18,000 pts' },
@@ -214,21 +214,27 @@ export const staticPages: Record<string, PageContent> = {
     sections: [
       {
         key: 'binary',
-        heading: 'A visual system for balanced growth',
-        body: 'The Salesmatch page benefits from a strong diagram or card layout that shows two legs, matching volume, and retained strong-leg value.'
+        heading: 'Match both legs without losing the strong side',
+        body: 'Public salesmatch messaging emphasizes no fifth-pair rule, no two-cycle limit, no side lock, no maintenance, and no daily flush-out.'
+      },
+      {
+        key: 'schedule',
+        heading: 'Public payout rhythm is part of the story',
+        body: 'Yor presents Tuesday encashment, Friday payout, and a PHP 500 minimum encashment threshold as part of its earnings narrative.'
       }
     ]
   },
-  'earn/leadership': {
-    slug: 'earn/leadership',
+  'earn/binary-cycle': {
+    slug: 'earn/binary-cycle',
     eyebrow: 'Way 4',
-    title: '4. Leadership Bonus',
-    summary: 'Monetize mentorship, development, and influence across the organization.',
+    title: '4. Binary Cycle Bonus',
+    summary:
+      'The public deck describes a percentage-based bonus layer tied to the salesmatch structure and wider crossline / upline activity.',
     sections: [
       {
-        key: 'leadership',
-        heading: 'Leadership becomes visible value',
-        body: 'The page should connect team-building effort with elevated compensation and long-term leverage.'
+        key: 'cycle',
+        heading: 'A second layer beyond direct matching',
+        body: 'The slide references 2% through 5% public values and frames binary cycle bonus as an added reward stream linked to the broader network.'
       }
     ]
   },
@@ -236,12 +242,12 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/get-five',
     eyebrow: 'Way 5',
     title: '5. Get Five Bonus',
-    summary: 'A milestone-based reward that celebrates focused duplication and disciplined activation.',
+    summary: 'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic.',
     sections: [
       {
         key: 'milestone',
-        heading: 'Small focused wins with visible prestige',
-        body: 'This route should feel celebratory while still being structured and easy to understand.'
+        heading: 'Unlimited direct sponsor momentum',
+        body: 'The public slide ties the bonus to package duplication and presents it as a repeatable milestone rather than a one-time campaign.'
       }
     ]
   },
@@ -249,25 +255,26 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/lifestyle-rewards',
     eyebrow: 'Way 6',
     title: '6. Lifestyle Rewards',
-    summary: 'Translate milestone performance into elevated experiences and status-driven rewards.',
+    summary:
+      'Lifestyle rewards are described as a 3% bonus based on repeat purchase products and account activation rules once potential income is reached.',
     sections: [
       {
         key: 'reward',
-        heading: 'Business results reflected in lifestyle',
-        body: 'The route should feel especially luxurious, with reward framing that reinforces ambition and aspiration.'
+        heading: 'Repeat purchase drives prestige rewards',
+        body: 'The public page pairs 3% repeat purchase language with public monthly potential examples and a real-time framing of the reward flow.'
       }
     ]
   },
   'earn/unilevel-rank': {
     slug: 'earn/unilevel-rank',
     eyebrow: 'Way 7',
-    title: '7. Unilevel Rank Bonus',
-    summary: 'Build sustainable rank-based earnings through breadth, depth, and consistency.',
+    title: '7. Unilevel Bonus',
+    summary: 'Public unilevel percentages extend across ten levels, beginning at 10% and stepping down through deeper generations.',
     sections: [
       {
         key: 'rank',
-        heading: 'Climb with structure and stability',
-        body: 'This page should explain advancement and bonus logic with confidence and restraint.'
+        heading: 'Ten visible levels of public percentages',
+        body: 'The business presentation shows 10%, 8%, 5%, 5%, 3%, 3%, 2%, 1%, 1%, and 1% across ten public levels.'
       }
     ]
   },
@@ -275,12 +282,13 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/global',
     eyebrow: 'Way 8',
     title: '8. Global Bonus',
-    summary: 'Participate in the upside of the larger system through a high-prestige shared pool narrative.',
+    summary:
+      'The public deck presents a 2% yearly global sales pool tied to repeat purchase, Hall of Fame qualification, and account maintenance.',
     sections: [
       {
         key: 'global',
-        heading: 'Shared success at the highest tier',
-        body: 'The page should signal that this bonus sits at the most expansive and aspirational end of the compensation story.'
+        heading: 'Yearly global sales participation for top qualifiers',
+        body: 'The page should explain that global bonus is reserved for higher-status qualifiers and depends on maintaining the account over time.'
       }
     ]
   },
@@ -288,12 +296,13 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'rank-incentives',
     eyebrow: 'Leadership Roadmap',
     title: 'Rank & Incentive System',
-    summary: 'A structured path that maps rank progression and the prestige markers associated with each stage.',
+    summary:
+      'Bronze Director through Hall of Famer ranks are paired with public reward milestones such as cash, gadgets, travel, vehicle, and property incentives.',
     sections: [
       {
         key: 'path',
-        heading: 'See the climb clearly',
-        body: 'This page should present progression as both disciplined and desirable, with clear thresholds and elevated visual rhythm.'
+        heading: 'Recognition grows from director status to hall of fame',
+        body: 'The business presentation frames progression through income milestones and incentive markers, culminating in high-prestige rewards and global bonus participation.'
       }
     ]
   }

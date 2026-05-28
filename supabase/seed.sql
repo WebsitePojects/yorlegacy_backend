@@ -2,23 +2,23 @@ insert into site_pages (slug, title, eyebrow, strapline, summary, stats, highlig
 values
   (
     'home',
-    'Yor Legacy',
-    'Prestige in Motion',
+    'Yor International',
+    'Business Presentation',
     'Legacy',
-    'A premium direct selling experience shaped by aspiration, craftsmanship, and generational ambition.',
-    '[{"label":"Premium Positioning","value":"Luxury-first"},{"label":"Network Model","value":"8 Ways to Earn"},{"label":"Core Promise","value":"Build Your Legacy"}]'::jsonb,
-    '[{"title":"Atmospheric Branding","body":"Deep charcoal canvases, copper gradients, and amber glow create an exclusive visual identity."},{"title":"Structured Opportunity","body":"Every route in the experience is designed to move visitors from intrigue to confidence to action."}]'::jsonb,
+    'A premium fragrance-driven direct selling platform built around legacy, entrepreneurship, and shared success.',
+    '[{"label":"Official Deck","value":"19 Slides"},{"label":"Network Model","value":"8 Ways to Earn"},{"label":"Core Promise","value":"Build Your Legacy"}]'::jsonb,
+    '[{"title":"Luxury Presentation","body":"Dark graphite canvases, copper accents, and editorial typography create the Yor International brand impression."},{"title":"Structured Opportunity","body":"The journey moves from business presentation to products, packages, and the public eight ways to earn."}]'::jsonb,
     'Join Now',
     '/packages'
   ),
   (
     'vision',
     'Our Vision',
-    'Future State',
+    'Vision',
     null,
-    'To shape a legacy-led business ecosystem where elegance, entrepreneurship, and enduring wealth-building move together.',
+    'To build a global community of empowered entrepreneurs where every member can create a lasting legacy of financial freedom, personal growth, and positive impact.',
     '[]'::jsonb,
-    '[{"title":"Aspirational Identity","body":"Everything from typography to motion reinforces refinement, confidence, and long-term value."},{"title":"Community With Gravity","body":"The experience positions every partner as part of a serious and elevated movement rather than a disposable campaign."}]'::jsonb,
+    '[{"title":"Aspirational Identity","body":"Everything from typography to motion reinforces refinement, confidence, and long-term value."},{"title":"Shared Success","body":"Yor describes a global community where opportunity is accessible, success is shared, and support remains central."}]'::jsonb,
     'Explore Mission',
     '/mission'
   ),
@@ -35,11 +35,11 @@ values
   ),
   (
     'founder',
-    'Meet the Founder',
-    'Founding Presence',
+    'Mr. Yoren B. Abihay',
+    'Our President / CEO',
     null,
-    'A leadership story framed around vision, discipline, and a premium standard of opportunity-building.',
-    '[{"label":"Leadership Standard","value":"High Trust"},{"label":"Visual Tone","value":"Executive"},{"label":"Brand Posture","value":"Prestigious"}]'::jsonb,
+    'Traditional businessman, trainer, mentor, network builder, and six-time top earner guiding the public face of Yor International.',
+    '[{"label":"Corporate Experience","value":"8 Years"},{"label":"Top Earner","value":"6x"},{"label":"Degree","value":"BS Criminology"}]'::jsonb,
     '[]'::jsonb,
     'View Collection',
     '/perfume-collection'
@@ -49,18 +49,18 @@ values
     'The Yor Perfume Collection',
     'Signature Products',
     null,
-    'A fragrance lineup positioned as both premium product and prestige anchor for the brand story.',
+    'A men''s and women''s fragrance lineup that anchors the Yor business story with recognizable scent references.',
     '[]'::jsonb,
-    '[{"title":"Luxury Framing","body":"Product cards should feel curated, luminous, and tactile with glass panels and controlled glow."},{"title":"Commercial Clarity","body":"Descriptions should be elegant while still supporting practical product understanding."}]'::jsonb,
+    '[{"title":"Luxury Framing","body":"Product cards should feel curated, luminous, and tactile with glass panels and controlled glow."},{"title":"Commercial Clarity","body":"The public deck names men''s and women''s scents directly, so the coded lineup should stay legible for presentation and selling confidence."}]'::jsonb,
     'Compare Packages',
     '/packages'
   ),
   (
     'packages',
     'Entry Packages Comparison',
-    'Choose Your Entry',
+    'Entry Packages',
     null,
-    'A side-by-side package decision screen that makes joining feel premium, clear, and confidence-building.',
+    'Five public package tiers create a clear ladder from Basic through VIP, each with its own price point and PV value.',
     '[{"label":"Format","value":"Comparison Grid"},{"label":"Tone","value":"Decisive"},{"label":"Primary Action","value":"Join Now"}]'::jsonb,
     '[]'::jsonb,
     'Register',
@@ -71,7 +71,7 @@ values
     'Registration & Package Checkout',
     'Join the Legacy',
     null,
-    'A polished onboarding path for capturing commitment without losing the elevated visual language.',
+    'A premium registration path that captures account details, sponsor information, and package selection without losing the luxury brand treatment.',
     '[]'::jsonb,
     '[]'::jsonb,
     'Start Your Legacy',
@@ -79,7 +79,7 @@ values
   ),
   (
     'thank-you',
-    'Thank You — Start Your Legacy',
+    'Thank You - Start Your Legacy',
     'Next Chapter',
     null,
     'A premium confirmation state that closes the loop and points the user toward their next meaningful action.',
@@ -91,11 +91,11 @@ values
   (
     'earn',
     '8 Ways to Earn Overview',
-    'Compensation Story',
+    '8 Ways to Earn',
     null,
-    'Discover a rewards ecosystem designed for the modern architect of legacy. From direct sales to global dividends, every action builds your empire.',
+    'The public Yor deck presents eight distinct ways to earn, from direct selling through global bonus.',
     '[]'::jsonb,
-    '[{"title":"Direct Selling Bonus","body":"Earn from immediate product movement."},{"title":"Direct Referral Bonus","body":"Reward introductions that convert."},{"title":"Salesmatch Bonus","body":"Benefit from balanced binary growth."},{"title":"Leadership Bonus","body":"Monetize team development and influence."},{"title":"Get Five Bonus","body":"Unlock rewards from key duplication."},{"title":"Lifestyle Rewards","body":"Translate milestones into prestige experiences."},{"title":"Unilevel Rank Bonus","body":"Sustain higher ranks with broad depth."},{"title":"Global Bonus","body":"Participate in larger shared success."}]'::jsonb,
+    '[{"title":"Direct Selling Bonus","body":"Earn from immediate product movement."},{"title":"Direct Referral Bonus","body":"Reward introductions that convert."},{"title":"Salesmatch Bonus","body":"Benefit from balanced binary growth."},{"title":"Binary Cycle Bonus","body":"Receive a public cycle-based income layer from wider network flow."},{"title":"Get Yor Five Bonus","body":"Unlock rewards from five direct signups on the same package."},{"title":"Lifestyle Rewards","body":"Translate repeat purchase results into prestige experiences."},{"title":"Unilevel Bonus","body":"Expand across up to ten public levels of percentage income."},{"title":"Global Bonus","body":"Participate in yearly global sales success."}]'::jsonb,
     'View Direct Selling Bonus',
     '/earn/direct-selling'
   ),
@@ -104,7 +104,7 @@ values
     '1. Direct Selling Bonus',
     'Way 1',
     null,
-    'Earn directly from sales activity with a clear premium explanation of value and conversion.',
+    'Public materials position direct selling around lifetime discount and retail margin from each package tier.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -115,7 +115,7 @@ values
     '2. Direct Referral Bonus',
     'Way 2',
     null,
-    'Reward trusted introductions with a clean, easy-to-explain payout narrative.',
+    'Referral rewards rise by package tier, from Classic-level entry rewards through the VIP top-end payout.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -126,18 +126,18 @@ values
     '3. Salesmatch Bonus',
     'Way 3',
     null,
-    'Maximize earnings through a binary-style structure designed for momentum, matching, and retained strength.',
+    'Maximize earnings through matched left and right volume with strong-leg retention, no daily flush-out, and Tuesday encashment / Friday payout language.',
     '[{"label":"Left Leg","value":"24,000 pts"},{"label":"Right Leg","value":"18,000 pts"},{"label":"Matching In Progress","value":"PHP 15,000"}]'::jsonb,
     '[]'::jsonb,
     null,
     null
   ),
   (
-    'earn/leadership',
-    '4. Leadership Bonus',
+    'earn/binary-cycle',
+    '4. Binary Cycle Bonus',
     'Way 4',
     null,
-    'Monetize mentorship, development, and influence across the organization.',
+    'The public deck describes a percentage-based bonus layer tied to the salesmatch structure and wider crossline / upline activity.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -148,7 +148,7 @@ values
     '5. Get Five Bonus',
     'Way 5',
     null,
-    'A milestone-based reward that celebrates focused duplication and disciplined activation.',
+    'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -159,7 +159,7 @@ values
     '6. Lifestyle Rewards',
     'Way 6',
     null,
-    'Translate milestone performance into elevated experiences and status-driven rewards.',
+    'Lifestyle rewards are described as a 3% bonus based on repeat purchase products and account activation rules once potential income is reached.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -167,10 +167,10 @@ values
   ),
   (
     'earn/unilevel-rank',
-    '7. Unilevel Rank Bonus',
+    '7. Unilevel Bonus',
     'Way 7',
     null,
-    'Build sustainable rank-based earnings through breadth, depth, and consistency.',
+    'Public unilevel percentages extend across ten levels, beginning at 10% and stepping down through deeper generations.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -181,7 +181,7 @@ values
     '8. Global Bonus',
     'Way 8',
     null,
-    'Participate in the upside of the larger system through a high-prestige shared pool narrative.',
+    'The public deck presents a 2% yearly global sales pool tied to repeat purchase, Hall of Fame qualification, and account maintenance.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -192,7 +192,7 @@ values
     'Rank & Incentive System',
     'Leadership Roadmap',
     null,
-    'A structured path that maps rank progression and the prestige markers associated with each stage.',
+    'Bronze Director through Hall of Famer ranks are paired with public reward milestones such as cash, gadgets, travel, vehicle, and property incentives.',
     '[]'::jsonb,
     '[]'::jsonb,
     null,
@@ -213,24 +213,71 @@ delete from page_sections;
 
 insert into page_sections (page_slug, section_key, heading, body, sort_order)
 values
-  ('home', 'vision', 'A private-club standard for digital direct selling', 'Yor Legacy presents opportunity with the tone of a luxury house: poised, deliberate, and unmistakably premium.', 1),
-  ('home', 'invitation', 'Built for ambitious entrepreneurs', 'The platform guides distributors and prospects through products, packages, and the compensation story with polished clarity.', 2),
-  ('vision', 'north-star', 'Lead with prestige and permanence', 'Yor Legacy envisions a future where network-building feels as curated and credible as a heritage brand.', 1),
-  ('vision', 'human-impact', 'Translate aspiration into upward mobility', 'The platform is designed to help people elevate their income, presence, and sense of possibility through structured opportunity.', 2),
+  ('home', 'vision', 'Built to turn aspiration into shared success', 'Yor presents its opportunity through dark luxury visuals, premium product storytelling, and a public compensation plan built for ambitious entrepreneurs.', 1),
+  ('home', 'invitation', 'Products, packages, and opportunity in one polished journey', 'The public experience should move visitors from the business presentation into vision, mission, products, packages, and the eight ways to earn without losing brand confidence.', 2),
+  ('vision', 'north-star', 'A future where success is shared', 'Yor positions its growth story around accessible opportunity, mutual support, and a community that scales without losing its sense of purpose.', 1),
+  ('vision', 'human-impact', 'Opportunity that reaches beyond the present', 'The public vision language emphasizes long-term freedom, personal development, and the idea that business can create a legacy for future generations.', 2),
   ('mission', 'ethics', 'Ethical practices and transparent leadership', 'The mission emphasizes credibility, honest opportunity, and support structures that respect both distributor and customer.', 1),
   ('mission', 'legacy', 'A legacy that extends beyond the present', 'The aim is not only business growth, but a durable improvement in lives, communities, and future generations.', 2),
-  ('founder', 'story', 'A founder narrative with executive polish', 'The founder page should feel cinematic and deeply intentional, combining a strong portrait treatment with clear statements of belief and purpose.', 1),
-  ('perfume-collection', 'catalog', 'Products presented like a luxury line', 'Use focused imagery, restrained copy, and elevated hierarchy to make each item feel premium.', 1),
-  ('packages', 'comparison', 'Structured for high-confidence decisions', 'Packages should be easy to compare through clear price anchors, highlighted benefits, and elegant visual emphasis.', 1),
-  ('register', 'details', 'Capture only what matters first', 'The first registration pass should gather the essential lead and package information without overwhelming the user.', 1),
+  ('founder', 'story', 'A founder profile rooted in direct-selling credibility', 'The PDF positions the founder through lived business experience, mentoring, and network-building authority rather than abstract brand language.', 1),
+  ('perfume-collection', 'catalog', 'The scent of legacy', 'The public deck highlights men''s and women''s entries such as Hugo Boss, Swiss Army, Chanel Bleu, Paris Hilton, Bvlgari Amethyste, and VS Bombshell.', 1),
+  ('packages', 'comparison', 'Basic to VIP with visible value progression', 'The public Yor package ladder currently reads Basic, Classic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.', 1),
+  ('register', 'details', 'Lead with confidence and low-friction trust', 'The registration screen should keep the Yor visual tone while clearly collecting legal name, email, phone, sponsor details, and selected package.', 1),
   ('thank-you', 'confirmation', 'A calm and elevated confirmation experience', 'The thank-you page should reward commitment with clarity, warmth, and a next-step pathway.', 1),
-  ('earn', 'framework', 'The business model explained with elegance', 'This page should orient the visitor quickly and then let them drill into the details of each incentive.', 1),
-  ('earn/direct-selling', 'mechanics', 'Reward product movement immediately', 'This incentive demonstrates how revenue can begin from direct customer engagement.', 1),
-  ('earn/direct-referral', 'mechanics', 'Turn introductions into meaningful return', 'The page should explain the straightforward benefit of sponsoring new members into the network.', 1),
-  ('earn/salesmatch', 'binary', 'A visual system for balanced growth', 'The Salesmatch page benefits from a strong diagram or card layout that shows two legs, matching volume, and retained strong-leg value.', 1),
-  ('earn/leadership', 'leadership', 'Leadership becomes visible value', 'The page should connect team-building effort with elevated compensation and long-term leverage.', 1),
-  ('earn/get-five', 'milestone', 'Small focused wins with visible prestige', 'This route should feel celebratory while still being structured and easy to understand.', 1),
-  ('earn/lifestyle-rewards', 'reward', 'Business results reflected in lifestyle', 'The route should feel especially luxurious, with reward framing that reinforces ambition and aspiration.', 1),
-  ('earn/unilevel-rank', 'rank', 'Climb with structure and stability', 'This page should explain advancement and bonus logic with confidence and restraint.', 1),
-  ('earn/global', 'global', 'Shared success at the highest tier', 'This page should signal that this bonus sits at the most expansive and aspirational end of the compensation story.', 1),
-  ('rank-incentives', 'path', 'See the climb clearly', 'This page should present progression as both disciplined and desirable, with clear thresholds and elevated visual rhythm.', 1);
+  ('earn', 'framework', 'The public compensation story at a glance', 'This page should orient the visitor quickly and then let them drill into the details of each public incentive.', 1),
+  ('earn/direct-selling', 'mechanics', 'Sell premium perfume with tier-based retail upside', 'The deck presents a 40% lifetime discount and package-based direct selling values, making product movement the first visible income stream.', 1),
+  ('earn/direct-referral', 'mechanics', 'Personally sponsor and earn package-based bonuses', 'The PDF shows public referral values such as PHP 200, PHP 1,000, PHP 5,000, PHP 7,000, and PHP 15,000 depending on the package involved.', 1),
+  ('earn/salesmatch', 'binary', 'Match both legs without losing the strong side', 'Public salesmatch messaging emphasizes no fifth-pair rule, no two-cycle limit, no side lock, no maintenance, and no daily flush-out.', 1),
+  ('earn/salesmatch', 'schedule', 'Public payout rhythm is part of the story', 'Yor presents Tuesday encashment, Friday payout, and a PHP 500 minimum encashment threshold as part of its earnings narrative.', 2),
+  ('earn/binary-cycle', 'cycle', 'A second layer beyond direct matching', 'The slide references 2% through 5% public values and frames binary cycle bonus as an added reward stream linked to the broader network.', 1),
+  ('earn/get-five', 'milestone', 'Unlimited direct sponsor momentum', 'The public slide ties the bonus to package duplication and presents it as a repeatable milestone rather than a one-time campaign.', 1),
+  ('earn/lifestyle-rewards', 'reward', 'Repeat purchase drives prestige rewards', 'The public page pairs 3% repeat purchase language with public monthly potential examples and a real-time framing of the reward flow.', 1),
+  ('earn/unilevel-rank', 'rank', 'Ten visible levels of public percentages', 'The business presentation shows 10%, 8%, 5%, 5%, 3%, 3%, 2%, 1%, 1%, and 1% across ten public levels.', 1),
+  ('earn/global', 'global', 'Yearly global sales participation for top qualifiers', 'The page should explain that global bonus is reserved for higher-status qualifiers and depends on maintaining the account over time.', 1),
+  ('rank-incentives', 'path', 'Recognition grows from director status to hall of fame', 'The business presentation frames progression through income milestones and incentive markers, culminating in high-prestige rewards and global bonus participation.', 1);
+
+insert into app_users (email, display_name, role, status, password_hash, password_salt)
+values
+  (
+    'member@yor.local',
+    'Yor Member',
+    'member',
+    'active',
+    '4496c246a0354cebf0ed2589b71ba3fd4f5eee7626cc0d93e6fcfcbb55be53d6b2005fa6f3c8eddce625bfb8ecc59e34407cb78fe1a15d779ae42eee434c0253',
+    'yor-member-salt-v1'
+  ),
+  (
+    'admin@yor.local',
+    'Yor Admin',
+    'admin',
+    'active',
+    'f40d9facef59241c5e2043d5962ce8a2e49e6515f17f520e016c9c311a50510be726d5f910d4c10107892eef1970544077aec9430963e5343d3677695bf42f48',
+    'yor-admin-salt-v1'
+  )
+on conflict (email) do update
+set
+  display_name = excluded.display_name,
+  role = excluded.role,
+  status = excluded.status,
+  password_hash = excluded.password_hash,
+  password_salt = excluded.password_salt;
+
+insert into member_profiles (user_id, referral_code, sponsor_code, package_tier, account_status)
+select id, 'YOR-MEMBER-001', 'YOR-SPONSOR-001', 'Standard', 'active'
+from app_users
+where email = 'member@yor.local'
+on conflict (user_id) do update
+set
+  referral_code = excluded.referral_code,
+  sponsor_code = excluded.sponsor_code,
+  package_tier = excluded.package_tier,
+  account_status = excluded.account_status;
+
+insert into admin_profiles (user_id, access_scope, office_title)
+select id, 'platform', 'Operations Admin'
+from app_users
+where email = 'admin@yor.local'
+on conflict (user_id) do update
+set
+  access_scope = excluded.access_scope,
+  office_title = excluded.office_title;

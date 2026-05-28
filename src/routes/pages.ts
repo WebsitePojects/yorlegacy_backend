@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getPageBySlug } from '../modules/pages/page-service';
+import { getPageBySlug } from '../modules/pages/page-service.js';
 
 export const pagesRouter = Router();
 

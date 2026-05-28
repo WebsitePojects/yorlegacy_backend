@@ -1,6 +1,6 @@
-import { getSupabaseClient } from '../../lib/supabase';
+import { getSupabaseClient } from '../../lib/supabase.js';
 import type { PageContent } from '../../types/content';
-import { staticPages } from './static-pages';
+import { staticPages } from './static-pages.js';
 
 type PageRow = {
   slug: string;

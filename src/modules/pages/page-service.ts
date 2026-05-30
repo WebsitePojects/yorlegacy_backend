@@ -1,4 +1,4 @@
-import { getSupabaseClient } from '../../lib/supabase.js';
+import { getSupabasePublicClient } from '../../lib/supabase.js';
 import type { PageContent } from '../../types/content';
 import { staticPages } from './static-pages.js';
 
@@ -21,8 +21,50 @@ type PageSectionRow = {
   sort_order: number;
 };
 
+function overlayCanonicalSections(current: PageContent['sections'], canonical: PageContent['sections']) {
+  const canonicalByKey = new Map(canonical.map((section) => [section.key, section]));
+
+  return current.map((section) => {
+    const canonicalSection = canonicalByKey.get(section.key);
+
+    return canonicalSection
+      ? {
+          ...section,
+          heading: canonicalSection.heading,
+          body: canonicalSection.body
+        }
+      : section;
+  });
+}
+
+function normalizePageContent(page: PageContent): PageContent {
+  const canonical = staticPages[page.slug];
+
+  if (!canonical) {
+    return page;
+  }
+
+  switch (page.slug) {
+    case 'founder':
+      return {
+        ...page,
+        summary: canonical.summary
+      };
+    case 'packages':
+    case 'earn/direct-referral':
+    case 'rank-incentives':
+      return {
+        ...page,
+        summary: canonical.summary,
+        sections: overlayCanonicalSections(page.sections, canonical.sections)
+      };
+    default:
+      return page;
+  }
+}
+
 export async function getPageBySlug(slug: string): Promise<PageContent | null> {
-  const supabase = getSupabaseClient();
+  const supabase = getSupabasePublicClient();
 
   if (!supabase) {
     return staticPages[slug] ?? null;
@@ -49,7 +91,7 @@ export async function getPageBySlug(slug: string): Promise<PageContent | null> {
     return staticPages[slug] ?? null;
   }
 
-  return {
+  return normalizePageContent({
     slug: page.slug,
     title: page.title,
     eyebrow: page.eyebrow ?? '',
@@ -64,5 +106,5 @@ export async function getPageBySlug(slug: string): Promise<PageContent | null> {
       heading: section.heading,
       body: section.body
     }))
-  };
+  });
 }

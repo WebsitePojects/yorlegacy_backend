@@ -1,4 +1,10 @@
 import { getSupabaseClient } from '../../lib/supabase.js';
+import {
+  findSandboxAdminProfileByUserId,
+  findSandboxMemberProfileByUserId,
+  findSandboxUserByEmail,
+  isSandboxMode
+} from '../sandbox/dev-sandbox-store.js';
 import type { AppRole, SessionUser } from '../../types/auth';
 
 type AppUserRow = {
@@ -56,6 +62,24 @@ function toSessionUser(row: AppUserRow): PersistedUser {
 export async function findAppUserByEmail(
   email: string
 ): Promise<PersistedUser | null> {
+  if (isSandboxMode()) {
+    const sandboxUser = findSandboxUserByEmail(email);
+
+    if (!sandboxUser) {
+      return null;
+    }
+
+    return {
+      id: sandboxUser.id,
+      name: sandboxUser.name,
+      email: sandboxUser.email,
+      role: sandboxUser.role,
+      passwordHash: sandboxUser.passwordHash,
+      passwordSalt: sandboxUser.passwordSalt,
+      status: sandboxUser.status
+    };
+  }
+
   const supabase = getSupabaseClient();
 
   if (!supabase) {
@@ -80,6 +104,21 @@ export async function findAppUserByEmail(
 export async function findMemberProfileByUserId(
   userId: string
 ): Promise<PersistedMemberProfile | null> {
+  if (isSandboxMode()) {
+    const sandboxProfile = findSandboxMemberProfileByUserId(userId);
+
+    if (!sandboxProfile) {
+      return null;
+    }
+
+    return {
+      referralCode: sandboxProfile.referralCode,
+      sponsorCode: sandboxProfile.sponsorCode,
+      packageTier: sandboxProfile.packageTier,
+      accountStatus: sandboxProfile.accountStatus
+    };
+  }
+
   const supabase = getSupabaseClient();
 
   if (!supabase) {
@@ -107,6 +146,19 @@ export async function findMemberProfileByUserId(
 export async function findAdminProfileByUserId(
   userId: string
 ): Promise<PersistedAdminProfile | null> {
+  if (isSandboxMode()) {
+    const sandboxProfile = findSandboxAdminProfileByUserId(userId);
+
+    if (!sandboxProfile) {
+      return null;
+    }
+
+    return {
+      accessScope: sandboxProfile.accessScope,
+      officeTitle: sandboxProfile.officeTitle
+    };
+  }
+
   const supabase = getSupabaseClient();
 
   if (!supabase) {

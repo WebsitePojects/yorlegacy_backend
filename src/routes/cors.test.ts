@@ -39,12 +39,14 @@ describe('CORS handling', () => {
     const response = await request(app)
       .options('/api/auth/me')
       .set('Origin', 'https://yorinternational.net')
-      .set('Access-Control-Request-Method', 'GET');
+      .set('Access-Control-Request-Method', 'GET')
+      .set('Access-Control-Request-Headers', 'content-type');
 
     expect(response.status).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe(
       'https://yorinternational.net'
     );
+    expect(response.headers['access-control-allow-headers']).toBe('content-type');
   });
 
   it('allows the www Yor International custom domain origin', async () => {

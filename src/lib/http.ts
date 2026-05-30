@@ -26,6 +26,7 @@ export function applyCors(req: Request, res: Response, next: NextFunction): void
   const origin = req.headers.origin;
   const allowedOrigins = getAllowedFrontendOrigins();
   const normalizeOrigin = (value: string) => value.replace(/\/+$/, '');
+  const requestedHeaders = req.headers['access-control-request-headers'];
 
   if (
     origin &&
@@ -34,8 +35,14 @@ export function applyCors(req: Request, res: Response, next: NextFunction): void
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      typeof requestedHeaders === 'string' && requestedHeaders.trim().length > 0
+        ? requestedHeaders
+        : 'Content-Type, Authorization'
+    );
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Max-Age', '86400');
   } else if (origin) {
     console.warn(
       `Blocked CORS request from origin=${origin}. Allowed origins: ${allowedOrigins.join(', ')}`

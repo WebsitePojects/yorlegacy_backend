@@ -80,7 +80,7 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Our President / CEO',
     title: 'Mr. Yoren B. Abihay',
     summary:
-      'Traditional businessman, trainer, mentor, network builder, and six-time top earner guiding the public face of Yor International.',
+      'A visionary leader dedicated to building a sustainable financial legacy for families across the globe through strategic innovation, ethical leadership, and direct-selling excellence.',
     stats: [
       { label: 'Corporate Experience', value: '8 Years' },
       { label: 'Top Earner', value: '6x' },
@@ -113,12 +113,12 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Entry Packages',
     title: 'Entry Packages Comparison',
     summary:
-      'Five public package tiers create a clear ladder from Basic through VIP, each with its own price point and PV value.',
+      'Five public package tiers create a clear ladder from Classic through VIP, each with its own price point and PV value.',
     sections: [
       {
         key: 'comparison',
-        heading: 'Basic to VIP with visible value progression',
-        body: 'The public Yor package ladder currently reads Basic, Classic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.'
+        heading: 'Classic to VIP with visible value progression',
+        body: 'The public Yor package ladder currently reads Classic, Basic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.'
       }
     ]
   },
@@ -196,7 +196,7 @@ export const staticPages: Record<string, PageContent> = {
       {
         key: 'mechanics',
         heading: 'Personally sponsor and earn package-based bonuses',
-        body: 'The PDF shows public referral values such as PHP 200, PHP 1,000, PHP 5,000, PHP 7,000, and PHP 15,000 depending on the package involved.'
+        body: 'The PDF shows public referral values such as Classic: PHP 200, Basic: PHP 1,000, Standard: PHP 5,000, Business: PHP 7,000, and VIP: PHP 15,000.'
       }
     ]
   },
@@ -241,7 +241,7 @@ export const staticPages: Record<string, PageContent> = {
   'earn/get-five': {
     slug: 'earn/get-five',
     eyebrow: 'Way 5',
-    title: '5. Get Five Bonus',
+    title: '5. Get Yor Five Bonus',
     summary: 'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic.',
     sections: [
       {
@@ -297,11 +297,11 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Leadership Roadmap',
     title: 'Rank & Incentive System',
     summary:
-      'Bronze Director through Hall of Famer ranks are paired with public reward milestones such as cash, gadgets, travel, vehicle, and property incentives.',
+      'Manager through Hall of Famer ranks are paired with public reward milestones such as cash, gadgets, travel, vehicle, and property incentives.',
     sections: [
       {
         key: 'path',
-        heading: 'Recognition grows from director status to hall of fame',
+        heading: 'Recognition grows from manager status to hall-of-famer prestige',
         body: 'The business presentation frames progression through income milestones and incentive markers, culminating in high-prestige rewards and global bonus participation.'
       }
     ]

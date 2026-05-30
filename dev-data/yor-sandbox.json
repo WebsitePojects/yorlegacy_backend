@@ -1,0 +1,330 @@
+{
+  "runtimeMode": "sandbox",
+  "metadata": {
+    "version": 1,
+    "lastResetAt": "2026-05-30T08:55:59.253Z",
+    "lastMutationAt": "2026-05-30T08:55:59.485Z"
+  },
+  "users": [
+    {
+      "id": "yor-member-demo",
+      "role": "member",
+      "name": "Yor Member",
+      "email": "member@yor.local",
+      "passwordHash": "5fa5650e506436eec4efd337bb42b99e1693fcbef0fa1582b08f8a1a2bb5a82cac5de80bf2496defc2f91131d26d16014aa32c219e015802f054c9dc6bb88036",
+      "passwordSalt": "157196c288037c27ed4978142321c162",
+      "status": "active"
+    },
+    {
+      "id": "yor-admin-demo",
+      "role": "admin",
+      "name": "Yor Admin",
+      "email": "admin@yor.local",
+      "passwordHash": "b0f1318b56ad46b5ae86e2f057cdc57031274680b62223b922f09401b7bf1dafe5a59bdf50529ae0f7c4451380ac79ca3061e2ef993d86249b765dbb69a28e9c",
+      "passwordSalt": "0c90ceaee501d2c4a156dd060b29bb0e",
+      "status": "active"
+    },
+    {
+      "id": "yor-cashier-demo",
+      "role": "cashier",
+      "name": "Yor Cashier",
+      "email": "cashier@yor.local",
+      "passwordHash": "b98247c4cd3cb225ec9720ffb71217085dbbb2ff890e60d35fa496ef573f781c4a63a4b72c4e6a2d17831e9a7b8324dc1cba8e0414bf65380248f0247077033c",
+      "passwordSalt": "0614dce9fe83174fe71a6d2b67b4384a",
+      "status": "active"
+    },
+    {
+      "id": "yor-bod-demo",
+      "role": "bod",
+      "name": "Yoren Abihay - BOD",
+      "email": "bod@yor.local",
+      "passwordHash": "c80f4392ea8516447fcf451b3ad4da9dfdd965c484b6e33d68e2d929ee9ec52d662b5ee957cc3121d973f3e31c40e5f6b4a536e3e2f569a625a9ffa2fca03334",
+      "passwordSalt": "14626ca7e66dd194aaa1bd9ad7398ee5",
+      "status": "active"
+    },
+    {
+      "id": "yor-superadmin-demo",
+      "role": "superadmin",
+      "name": "Yor Super Admin",
+      "email": "yoradmin@gmail.com",
+      "passwordHash": "1abdf015b20d22e75f11d68c39ea13036e29cad741d96154c211a243eed31d4d585d541ece9953a11077d04243626bf6cebd4dc177969515c48c79be52fe2b4b",
+      "passwordSalt": "96f9cc43c68c9411f91b76e43784d5e2",
+      "status": "active"
+    }
+  ],
+  "adminProfiles": [
+    {
+      "userId": "yor-admin-demo",
+      "accessScope": "admin",
+      "officeTitle": "Admin Office"
+    },
+    {
+      "userId": "yor-cashier-demo",
+      "accessScope": "cashier",
+      "officeTitle": "Cashier Office"
+    },
+    {
+      "userId": "yor-bod-demo",
+      "accessScope": "bod",
+      "officeTitle": "Board Office"
+    },
+    {
+      "userId": "yor-superadmin-demo",
+      "accessScope": "superadmin",
+      "officeTitle": "Super Admin Office"
+    }
+  ],
+  "members": [
+    {
+      "userId": "yor-member-demo",
+      "username": "YOR0001",
+      "fullName": "Yor Member",
+      "email": "member@yor.local",
+      "phone": "+63 900 000 0001",
+      "packageTier": "Standard",
+      "accountStatus": "active",
+      "referralCode": "YOR-MEMBER-001",
+      "sponsorCode": "YOR-SPONSOR-001",
+      "placement": "root",
+      "placementParentUsername": null,
+      "directReferrals": 5,
+      "leftPoints": 24000,
+      "rightPoints": 18000,
+      "walletAvailable": 15200.75,
+      "walletPending": 4300,
+      "cdBalance": 0,
+      "lastActivity": "2026-05-28"
+    },
+    {
+      "userId": "yor-legacy-002",
+      "username": "YOR0002",
+      "fullName": "Alyssa Cruz",
+      "email": "alyssa.cruz@example.test",
+      "packageTier": "Business",
+      "accountStatus": "active",
+      "referralCode": "YOR-ALYSSA",
+      "sponsorCode": "YOR-MEMBER-001",
+      "placement": "left",
+      "placementParentUsername": "YOR0001",
+      "directReferrals": 3,
+      "leftPoints": 12000,
+      "rightPoints": 8000,
+      "walletAvailable": 8950,
+      "walletPending": 1500,
+      "cdBalance": 500,
+      "lastActivity": "2026-05-27"
+    },
+    {
+      "userId": "yor-legacy-003",
+      "username": "YOR0003",
+      "fullName": "Marco Reyes",
+      "email": "marco.reyes@example.test",
+      "packageTier": "VIP",
+      "accountStatus": "active",
+      "referralCode": "YOR-MARCO",
+      "sponsorCode": "YOR-MEMBER-001",
+      "placement": "right",
+      "placementParentUsername": "YOR0001",
+      "directReferrals": 7,
+      "leftPoints": 18000,
+      "rightPoints": 21000,
+      "walletAvailable": 31420,
+      "walletPending": 6100,
+      "cdBalance": 0,
+      "lastActivity": "2026-05-26"
+    },
+    {
+      "userId": "yor-legacy-004",
+      "username": "YOR0004",
+      "fullName": "Nica Santos",
+      "email": "nica.santos@example.test",
+      "packageTier": "Classic",
+      "accountStatus": "pending",
+      "referralCode": "YOR-NICA",
+      "sponsorCode": "YOR-ALYSSA",
+      "placement": "left",
+      "placementParentUsername": "YOR0002",
+      "directReferrals": 1,
+      "leftPoints": 2500,
+      "rightPoints": 1500,
+      "walletAvailable": 700,
+      "walletPending": 300,
+      "cdBalance": 0,
+      "lastActivity": "2026-05-25"
+    },
+    {
+      "userId": "yor-legacy-005",
+      "username": "YOR0005",
+      "fullName": "Ramon Dela Cruz",
+      "email": "ramon.dc@example.test",
+      "packageTier": "Basic",
+      "accountStatus": "active",
+      "referralCode": "YOR-RAMON",
+      "sponsorCode": "YOR-MARCO",
+      "placement": "right",
+      "placementParentUsername": "YOR0003",
+      "directReferrals": 2,
+      "leftPoints": 3000,
+      "rightPoints": 4000,
+      "walletAvailable": 1850,
+      "walletPending": 250,
+      "cdBalance": 150,
+      "lastActivity": "2026-05-24"
+    }
+  ],
+  "activationRows": [
+    {
+      "code": "YOR-ACT-1001",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "used",
+      "generatedAt": "2026-05-20"
+    },
+    {
+      "code": "YOR-ACT-1002",
+      "packageTier": "Business",
+      "assignedTo": "YOR0002",
+      "status": "used",
+      "generatedAt": "2026-05-21"
+    },
+    {
+      "code": "YOR-ACT-1003",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    },
+    {
+      "code": "YOR-ACT-1004",
+      "packageTier": "Business",
+      "assignedTo": "YOR0003",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    },
+    {
+      "code": "YOR-ACT-1005",
+      "packageTier": "Basic",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    },
+    {
+      "code": "YOR-ACT-1006",
+      "packageTier": "Classic",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    },
+    {
+      "code": "YOR-ACT-1007",
+      "packageTier": "Business",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    },
+    {
+      "code": "YOR-ACT-1008",
+      "packageTier": "VIP",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "generatedAt": "2026-05-28"
+    }
+  ],
+  "pairingRows": [
+    {
+      "week": "2026-W22",
+      "leftPoints": 24000,
+      "rightPoints": 18000,
+      "matchedPoints": 18000,
+      "salesmatch": "PHP 15,000.00",
+      "carryForward": "6,000 left pts"
+    },
+    {
+      "week": "2026-W21",
+      "leftPoints": 16000,
+      "rightPoints": 12000,
+      "matchedPoints": 12000,
+      "salesmatch": "PHP 10,000.00",
+      "carryForward": "4,000 left pts"
+    }
+  ],
+  "payoutRows": [
+    {
+      "reference": "ENC-20260524-001",
+      "member": "YOR0001",
+      "gross": "PHP 8,000.00",
+      "fee": "PHP 100.00",
+      "cdDeduction": "PHP 0.00",
+      "net": "PHP 7,900.00",
+      "status": "released Friday",
+      "method": "GCash",
+      "createdAt": "2026-05-24T08:00:00Z"
+    },
+    {
+      "reference": "ENC-20260517-002",
+      "member": "YOR0003",
+      "gross": "PHP 12,500.00",
+      "fee": "PHP 100.00",
+      "cdDeduction": "PHP 500.00",
+      "net": "PHP 11,900.00",
+      "status": "for verification",
+      "method": "Bank",
+      "createdAt": "2026-05-17T08:00:00Z"
+    }
+  ],
+  "walletLedgerEntries": [
+    {
+      "id": "WL-001",
+      "memberUsername": "YOR0001",
+      "walletType": "main",
+      "entryType": "direct_referral",
+      "sourceReference": "YOR-ALYSSA",
+      "creditAmount": 5000,
+      "debitAmount": 0,
+      "balanceAfter": 15200.75,
+      "status": "posted",
+      "occurredAt": "2026-05-28T08:00:00Z",
+      "processId": "sandbox-wl-001"
+    },
+    {
+      "id": "WL-002",
+      "memberUsername": "YOR0001",
+      "walletType": "main",
+      "entryType": "salesmatch",
+      "sourceReference": "YOR0001 L/R match",
+      "creditAmount": 7500,
+      "debitAmount": 0,
+      "balanceAfter": 10200.75,
+      "status": "posted",
+      "occurredAt": "2026-05-27T08:00:00Z",
+      "processId": "sandbox-wl-002"
+    },
+    {
+      "id": "WL-003",
+      "memberUsername": "YOR0001",
+      "walletType": "encashment",
+      "entryType": "encashment_fee",
+      "sourceReference": "ENC-20260524-001",
+      "creditAmount": 0,
+      "debitAmount": 100,
+      "balanceAfter": 7900,
+      "status": "deducted",
+      "occurredAt": "2026-05-24T08:00:00Z",
+      "processId": "sandbox-wl-003"
+    }
+  ],
+  "auditEvents": [
+    {
+      "actor": "Yor Super Admin",
+      "action": "login_verified",
+      "target": "yoradmin@gmail.com",
+      "occurredAt": "2026-05-28T10:00:00Z"
+    },
+    {
+      "actor": "System",
+      "action": "sandbox_runtime_enabled",
+      "target": "dev-only mutable store",
+      "occurredAt": "2026-05-30T08:55:59.253Z"
+    }
+  ]
+}

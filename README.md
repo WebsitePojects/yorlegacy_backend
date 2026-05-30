@@ -15,12 +15,26 @@ Copy `.env.example` to `.env` and fill:
 
 ```bash
 PORT=8787
-FRONTEND_ORIGIN=http://127.0.0.1:5173
+FRONTEND_ORIGIN=http://localhost:5173,http://127.0.0.1:5173,https://yorinternational.net,https://www.yorinternational.net
 APP_SESSION_SECRET=change-me-before-production
 SESSION_TTL_HOURS=12
 SUPABASE_URL=your-supabase-url
+SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+SUPABASE_SECRET_KEY=your-supabase-secret-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DEMO_MEMBER_EMAIL=member@yor.local
+DEMO_MEMBER_PASSWORD=YorMember123!
+DEMO_ADMIN_EMAIL=admin@yor.local
+DEMO_ADMIN_PASSWORD=YorAdmin123!
+DEMO_CASHIER_EMAIL=cashier@yor.local
+DEMO_CASHIER_PASSWORD=joyjoy05
+DEMO_BOD_EMAIL=bod@yor.local
+DEMO_BOD_PASSWORD=yoralliance321654
+DEMO_SUPERADMIN_EMAIL=yoradmin@gmail.com
+DEMO_SUPERADMIN_PASSWORD=1
 ```
+
+`FRONTEND_ORIGIN` accepts a comma-separated allowlist for local dev origins and deployed frontend domains.
 
 If Supabase is not configured yet:
 
@@ -32,6 +46,9 @@ If Supabase is configured and you apply the schema/seed:
 - auth can read from `app_users`
 - member data can read from `member_profiles`
 - admin data can read from `admin_profiles`
+- public pages and compensation policy can read from Supabase using a publishable key only
+
+`SUPABASE_SECRET_KEY` is the preferred modern server-side key. `SUPABASE_SERVICE_ROLE_KEY` is kept for compatibility with older projects. `SUPABASE_PUBLISHABLE_KEY` can safely power read-only public routes when server credentials are not present.
 
 ## Supabase Setup
 
@@ -44,6 +61,9 @@ The seed creates local starter accounts:
 
 - `member@yor.local`
 - `admin@yor.local`
+- `cashier@yor.local`
+- `bod@yor.local`
+- `yoradmin@gmail.com`
 
 ## Verify
 

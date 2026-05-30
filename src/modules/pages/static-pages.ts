@@ -97,14 +97,14 @@ export const staticPages: Record<string, PageContent> = {
   'perfume-collection': {
     slug: 'perfume-collection',
     eyebrow: 'Signature Products',
-    title: 'The Yor Perfume Collection',
+    title: 'Yor Product Collection',
     summary:
-      'A men\'s and women\'s fragrance lineup that anchors the Yor business story with recognizable scent references.',
+      'A public product page that separates the fragrance collection from featured non-fragrance products such as Yor Vision.',
     sections: [
       {
         key: 'catalog',
-        heading: 'The scent of legacy',
-        body: 'The public deck highlights men\'s and women\'s entries such as Hugo Boss, Swiss Army, Chanel Bleu, Paris Hilton, Bvlgari Amethyste, and VS Bombshell.'
+        heading: 'Fragrance collection and featured product story',
+        body: 'The public deck highlights men\'s and women\'s fragrance entries such as Hugo Boss, Swiss Army, Chanel Bleu, Paris Hilton, Bvlgari Amethyste, and VS Bombshell, while Yor Vision should be presented separately as its own product feature.'
       }
     ]
   },
@@ -242,12 +242,18 @@ export const staticPages: Record<string, PageContent> = {
     slug: 'earn/get-five',
     eyebrow: 'Way 5',
     title: '5. Get Yor Five Bonus',
-    summary: 'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic.',
+    summary:
+      'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic, keeping the bonus tied to same-tier product movement.',
     sections: [
       {
         key: 'milestone',
         heading: 'Unlimited direct sponsor momentum',
         body: 'The public slide ties the bonus to package duplication and presents it as a repeatable milestone rather than a one-time campaign.'
+      },
+      {
+        key: 'product-led',
+        heading: 'Built around repeatable package and fragrance momentum',
+        body: 'Get Yor Five works best when the member can present a clear product story, move the same-tier package confidently, and repeat the milestone through real retail and sponsorship energy.'
       }
     ]
   },

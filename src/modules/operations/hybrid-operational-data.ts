@@ -22,6 +22,7 @@ import {
   type PairingRow,
   type PayoutRow
 } from '../sandbox/dev-sandbox-store.js';
+import { packagePolicies } from '../compensation/mvp-service.js';
 
 const STAFF_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 const FINANCE_ROLES: AppRole[] = ['admin', 'cashier', 'superadmin'];
@@ -40,6 +41,10 @@ const money = (value: number): string =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`;
+
+function packagePolicyForTier(packageTier: string) {
+  return packagePolicies.find((policy) => policy.name.toLowerCase() === packageTier.toLowerCase()) ?? null;
+}
 
 const members: MemberRecord[] = [
   {
@@ -293,6 +298,49 @@ function currentWalletRows(memberUsername?: string) {
   return isSandboxMode() ? buildSandboxWalletRows(memberUsername) : walletRows;
 }
 
+function directMembersFor(member: MemberRecord) {
+  return currentMembers().filter((candidate) => candidate.sponsorCode === member.referralCode);
+}
+
+function samePackageDirectCount(member: MemberRecord) {
+  return directMembersFor(member).filter((candidate) => candidate.packageTier === member.packageTier).length;
+}
+
+function completedDirectGroups(member: MemberRecord) {
+  return Math.floor(samePackageDirectCount(member) / 5);
+}
+
+function directsRemainingToNextGroup(member: MemberRecord) {
+  const remainder = samePackageDirectCount(member) % 5;
+  return remainder === 0 ? 0 : 5 - remainder;
+}
+
+function subtreeMembers(rootUsername: string, side: 'left' | 'right') {
+  const all = currentMembers();
+  const directRoot = all.find((member) => member.placementParentUsername === rootUsername && member.placement === side);
+
+  if (!directRoot) {
+    return [] as MemberRecord[];
+  }
+
+  const collected: MemberRecord[] = [];
+  const queue = [directRoot.username];
+
+  while (queue.length) {
+    const parentUsername = queue.shift()!;
+    const member = all.find((candidate) => candidate.username === parentUsername);
+
+    if (member) {
+      collected.push(member);
+      all
+        .filter((candidate) => candidate.placementParentUsername === member.username)
+        .forEach((child) => queue.push(child.username));
+    }
+  }
+
+  return collected;
+}
+
 const branchRuntimeNotes: GatedAction[] = [
   {
     label: 'Branch-local mutable runtime',
@@ -523,11 +571,24 @@ function adminModules(): OperationalModule[] {
       status: 'read-only',
       legacyReference: 'adminpanel/accounts-redeem.php',
       permissions: ALL_OPS_ROLES,
-      metrics: [metric('Qualified Members', '2'), metric('Pending Review', '1', undefined, 'warning')],
-      table: table('Get Yor Five review', [
-        { username: 'YOR0001', package: 'Standard', directSamePackage: 5, status: 'qualified' },
-        { username: 'YOR0003', package: 'VIP', directSamePackage: 4, status: 'watch' }
-      ]),
+      metrics: [
+        metric('Qualified Members', String(currentMembers().filter((candidate) => samePackageDirectCount(candidate) >= 5).length)),
+        metric(
+          'Claimable Groups',
+          String(currentMembers().reduce((total, candidate) => total + completedDirectGroups(candidate), 0))
+        )
+      ],
+      table: table(
+        'Get Yor Five review',
+        currentMembers().map((candidate) => ({
+          username: candidate.username,
+          package: candidate.packageTier,
+          directSamePackage: samePackageDirectCount(candidate),
+          completedGroups: completedDirectGroups(candidate),
+          remainingToNextGroup: directsRemainingToNextGroup(candidate),
+          status: samePackageDirectCount(candidate) >= 5 ? 'qualified' : 'building'
+        }))
+      ),
       gatedActions: []
     },
     {
@@ -575,9 +636,76 @@ function adminModules(): OperationalModule[] {
     adminMvpModule('direct-referral-reports', 'Direct Referral Reports', 'Compensation', 'Direct sponsor bonus simulation and eligibility trace.'),
     adminMvpModule('salesmatch-reports', 'Salesmatch Reports', 'Compensation', 'Binary matching, strong-leg carryover, and cap simulation trace.'),
     adminMvpModule('binary-cycle-reports', 'Binary Cycle Reports', 'Compensation', 'Percentage-based cycle simulation tied to salesmatch events.'),
-    adminMvpModule('lifestyle-rewards-reports', 'Lifestyle Rewards Reports', 'Compensation', 'Repeat purchase reward simulation and lifestyle wallet threshold review.'),
-    adminMvpModule('unilevel-rank-reports', 'Unilevel / Rank Reports', 'Compensation', 'Ten-level unilevel and rank incentive simulation.'),
-    adminMvpModule('global-bonus-pool', 'Global Bonus Pool', 'Compensation', 'Annual 2% pool, qualifier, maintenance, and distribution review.'),
+    {
+      id: 'lifestyle-rewards-reports',
+      label: 'Lifestyle Rewards Reports',
+      path: '/admin/lifestyle-rewards-reports',
+      group: 'Compensation',
+      description: 'Repeat purchase reward monitoring, 3% lifestyle-rate preview, and threshold visibility by package.',
+      status: 'read-only',
+      legacyReference: 'yor-lifestyle-repeat-purchase',
+      permissions: ALL_OPS_ROLES,
+      metrics: [metric('Tracked Packages', '4'), metric('Reward Rate', '3% public rule')],
+      table: table(
+        'Lifestyle reward monitor',
+        currentMembers().map((candidate) => {
+          const policy = packagePolicyForTier(candidate.packageTier);
+          const target = policy?.lifestyleRepeatPurchase ?? 0;
+          const currentRepeat = target ? Math.round(target * 0.72) : 0;
+          return {
+            username: candidate.username,
+            package: candidate.packageTier,
+            repeatPurchaseTarget: target ? money(target) : 'Not eligible',
+            currentRepeatPurchase: target ? money(currentRepeat) : 'Not eligible',
+            progressPercent: target ? `${Math.min(100, Math.round((currentRepeat / target) * 100))}%` : '0%',
+            projectedReward: target ? money(currentRepeat * 0.03) : 'Not eligible'
+          };
+        })
+      ),
+      gatedActions: []
+    },
+    {
+      id: 'unilevel-rank-reports',
+      label: 'Unilevel / Rank Reports',
+      path: '/admin/unilevel-rank-reports',
+      group: 'Compensation',
+      description: 'Ten-level unilevel monitoring with the public 11 billion illustration and rank oversight.',
+      status: 'read-only',
+      legacyReference: 'yor-unilevel-rank',
+      permissions: ALL_OPS_ROLES,
+      metrics: [metric('Potential Income', 'PHP 11 Billion'), metric('Visible Levels', '10')],
+      table: table('Unilevel rank monitor', [
+        { level: '01', percent: '10%', potential: 'PHP 10,000', note: '200 PV foundation level' },
+        { level: '02', percent: '8%', potential: 'PHP 100,000', note: '200 PV growth level' },
+        { level: '03', percent: '5%', potential: 'PHP 1,000,000', note: '200 PV builder level' },
+        { level: '10', percent: '1%', potential: 'PHP 10,000,000,000', note: 'Long-range legacy level' }
+      ]),
+      gatedActions: []
+    },
+    {
+      id: 'global-bonus-pool',
+      label: 'Global Bonus Pool',
+      path: '/admin/global-bonus-pool',
+      group: 'Compensation',
+      description: 'VIP-only eligibility review for the annual 2% global sales pool and maintenance window.',
+      status: 'read-only',
+      legacyReference: 'yor-global-bonus',
+      permissions: ALL_OPS_ROLES,
+      metrics: [metric('Eligible Accounts', String(currentMembers().filter((candidate) => candidate.packageTier === 'VIP').length)), metric('Pool Rule', '2% yearly')],
+      table: table(
+        'Global bonus qualifiers',
+        currentMembers()
+          .filter((candidate) => candidate.packageTier === 'VIP')
+          .map((candidate) => ({
+            username: candidate.username,
+            package: candidate.packageTier,
+            maintenance: '6-month active account maintenance',
+            qualifierPath: 'Hall of Famer / top global qualifiers',
+            status: 'eligible to monitor'
+          }))
+      ),
+      gatedActions: []
+    },
     adminMvpModule('wallet-ledger', 'Wallet Ledger', 'Finance', 'Append-only wallet ledger and adjustment audit surface.', FINANCE_ROLES, walletRowsForTables),
     adminMvpModule('system-health', 'System Health', 'Security', 'Health, logging, backup, and operational readiness surface.')
   ];
@@ -589,8 +717,25 @@ function memberModules(member: MemberRecord): OperationalModule[] {
   const treeRows = genealogyRows();
   const memberRows = currentMembers();
   const activationRowsForMember = currentActivationRows();
+  const memberPolicy = packagePolicyForTier(member.packageTier);
+  const sameTierDirects = samePackageDirectCount(member);
+  const completedGroups = completedDirectGroups(member);
+  const directsRemaining = directsRemainingToNextGroup(member);
+  const lifestyleTarget = memberPolicy?.lifestyleRepeatPurchase ?? 0;
+  const lifestyleCurrent = lifestyleTarget ? Math.round(lifestyleTarget * 0.72) : 0;
+  const lifestyleRate = lifestyleCurrent ? lifestyleCurrent * 0.03 : 0;
+  const unilevelRows = [
+    { level: '01', percent: '10%', requiredPV: '200 PV', potential: 'PHP 10,000', status: 'building' },
+    { level: '02', percent: '8%', requiredPV: '200 PV', potential: 'PHP 100,000', status: 'building' },
+    { level: '03', percent: '5%', requiredPV: '200 PV', potential: 'PHP 1,000,000', status: 'building' },
+    { level: '04', percent: '5%', requiredPV: '200 PV', potential: 'PHP 10,000,000', status: 'locked' },
+    { level: '05', percent: '3%', requiredPV: '200 PV', potential: 'PHP 100,000,000', status: 'locked' },
+    { level: '06', percent: '3%', requiredPV: '200 PV', potential: 'PHP 1,000,000,000', status: 'locked' },
+    { level: '07-10', percent: '2% / 1% / 1% / 1%', requiredPV: '200 PV', potential: 'PHP 10,000,000,000+', status: 'long-range' }
+  ];
+  const includeGlobalBonus = member.packageTier === 'VIP';
 
-  return [
+  return ([
     {
       id: 'dashboard',
       label: 'Member Dashboard',
@@ -724,9 +869,20 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       status: 'read-only',
       legacyReference: 'ecom/hifive-bonus.php',
       permissions: ['member', ...STAFF_ROLES],
-      metrics: [metric('Direct Same Package', String(member.directReferrals)), metric('Next Milestone', '5 direct signups')],
+      metrics: [
+        metric('Direct Same Package', String(sameTierDirects)),
+        metric('Claimable Groups', String(completedGroups)),
+        metric('Next Milestone', directsRemaining === 0 ? 'ready now' : `${directsRemaining} remaining`)
+      ],
       table: table('Get Yor Five progress', [
-        { package: member.packageTier, directSamePackage: member.directReferrals, target: 5, status: member.directReferrals >= 5 ? 'qualified' : 'building' }
+        {
+          package: member.packageTier,
+          directSamePackage: sameTierDirects,
+          completedGroups,
+          remainingToNextGroup: directsRemaining,
+          target: 5,
+          status: sameTierDirects >= 5 ? 'qualified' : 'building'
+        }
       ]),
       gatedActions: []
     },
@@ -777,11 +933,72 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
     },
     memberMvpModule('product-orders', 'Direct Selling / Product Orders', 'Products', 'Product purchases, refill orders, retail margin, and repeat purchase readiness.'),
-    memberMvpModule('lifestyle-rewards', 'Lifestyle Rewards', 'Compensation', 'Repeat purchase reward progress and lifestyle qualification status.'),
-    memberMvpModule('unilevel-rank-progress', 'Unilevel / Rank Progress', 'Compensation', 'Ten-level unilevel and rank incentive progress.'),
-    memberMvpModule('global-bonus-eligibility', 'Global Bonus Eligibility', 'Compensation', 'Annual global bonus qualifier, maintenance, and HOF path review.'),
+    {
+      id: 'lifestyle-rewards',
+      label: 'Lifestyle Rewards',
+      path: '/member/lifestyle-rewards',
+      group: 'Compensation',
+      description: 'Repeat purchase reward progress, lifestyle-wallet threshold, and monthly target visibility.',
+      status: 'read-only',
+      legacyReference: 'yor-lifestyle-repeat-purchase',
+      permissions: ['member', ...STAFF_ROLES],
+      metrics: [
+        metric('Repeat Purchase', lifestyleTarget ? money(lifestyleCurrent) : 'Not eligible'),
+        metric('3% Reward', lifestyleTarget ? money(lifestyleRate) : 'Not eligible')
+      ],
+      table: table('Lifestyle rewards progress', [
+        {
+          package: member.packageTier,
+          repeatPurchaseTarget: lifestyleTarget ? money(lifestyleTarget) : 'Not eligible',
+          currentRepeatPurchase: lifestyleTarget ? money(lifestyleCurrent) : 'Not eligible',
+          progressPercent: lifestyleTarget ? `${Math.min(100, Math.round((lifestyleCurrent / lifestyleTarget) * 100))}%` : '0%',
+          projectedReward: lifestyleTarget ? money(lifestyleRate) : 'Not eligible',
+          thresholdStatus: lifestyleTarget && lifestyleCurrent >= 1000 ? 'lifestyle wallet ready' : 'building threshold'
+        }
+      ]),
+      gatedActions: []
+    },
+    {
+      id: 'unilevel-rank-progress',
+      label: 'Unilevel / Rank Progress',
+      path: '/member/unilevel-rank-progress',
+      group: 'Compensation',
+      description: 'Ten-level public percentages, rank path visibility, and the 11 billion potential-income illustration.',
+      status: 'read-only',
+      legacyReference: 'yor-unilevel-rank',
+      permissions: ['member', ...STAFF_ROLES],
+      metrics: [metric('Potential Income', 'PHP 11 Billion'), metric('Levels Visible', '10 Levels')],
+      table: table('Unilevel rank ladder', unilevelRows),
+      gatedActions: []
+    },
     memberMvpModule('binary-cycle-bonus', 'Binary Cycle Bonus', 'Compensation', 'Cycle percentage simulations tied to salesmatch movement.')
-  ];
+  ] as OperationalModule[]).concat(
+    includeGlobalBonus
+      ? [
+          {
+            id: 'global-bonus-eligibility',
+            label: 'Global Bonus Eligibility',
+            path: '/member/global-bonus-eligibility',
+            group: 'Compensation',
+            description: 'Annual global bonus qualifier review reserved for VIP accounts and hall-of-fame paths.',
+            status: 'read-only',
+            legacyReference: 'yor-global-bonus',
+            permissions: ['member', ...STAFF_ROLES],
+            metrics: [metric('Eligibility', 'VIP qualified'), metric('Maintenance Window', '6 months active')],
+            table: table('Global bonus eligibility', [
+              {
+                package: member.packageTier,
+                qualification: 'VIP',
+                maintenance: '6-month active account maintenance',
+                pool: '2% yearly global sales pool',
+                status: 'eligible to monitor'
+              }
+            ]),
+            gatedActions: []
+          }
+        ]
+      : []
+  );
 }
 
 function effectiveOpsRole(user: SessionUser, profile?: AdminScopeProfile | null): AppRole {

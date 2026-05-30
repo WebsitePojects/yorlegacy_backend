@@ -3,3 +3,5 @@ dist
 .env
 .env.*
 *.tsbuildinfo
+docs/*.local.md
+docs/LOCAL_*.md

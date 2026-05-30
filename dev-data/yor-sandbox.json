@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-05-30T08:55:59.253Z",
-    "lastMutationAt": "2026-05-30T08:55:59.485Z"
+    "lastResetAt": "2026-05-30T17:21:27.533Z",
+    "lastMutationAt": "2026-05-30T17:21:27.719Z"
   },
   "users": [
     {
@@ -11,8 +11,8 @@
       "role": "member",
       "name": "Yor Member",
       "email": "member@yor.local",
-      "passwordHash": "5fa5650e506436eec4efd337bb42b99e1693fcbef0fa1582b08f8a1a2bb5a82cac5de80bf2496defc2f91131d26d16014aa32c219e015802f054c9dc6bb88036",
-      "passwordSalt": "157196c288037c27ed4978142321c162",
+      "passwordHash": "7b271baa5abfcfc78d2779cff2ea256332dfc4327d0d0dafcae60729d34d2229dddae52c17ead7e756767eb0a82345645108ce42eb504d5c382f019edc6e3505",
+      "passwordSalt": "ba43c72b000c8a310deced20454ebeb2",
       "status": "active"
     },
     {
@@ -20,8 +20,8 @@
       "role": "admin",
       "name": "Yor Admin",
       "email": "admin@yor.local",
-      "passwordHash": "b0f1318b56ad46b5ae86e2f057cdc57031274680b62223b922f09401b7bf1dafe5a59bdf50529ae0f7c4451380ac79ca3061e2ef993d86249b765dbb69a28e9c",
-      "passwordSalt": "0c90ceaee501d2c4a156dd060b29bb0e",
+      "passwordHash": "a43b96a757b46a35ad953fb441614e801a64669c3203fb24746aa23c8c0bed3c1b8ecd1667cbfacdfeb2826ed89837df8927c6fbb615087e3b9fbb83668810d0",
+      "passwordSalt": "ca2e6d6a23f52dbc1de66ef9e105091a",
       "status": "active"
     },
     {
@@ -29,8 +29,8 @@
       "role": "cashier",
       "name": "Yor Cashier",
       "email": "cashier@yor.local",
-      "passwordHash": "b98247c4cd3cb225ec9720ffb71217085dbbb2ff890e60d35fa496ef573f781c4a63a4b72c4e6a2d17831e9a7b8324dc1cba8e0414bf65380248f0247077033c",
-      "passwordSalt": "0614dce9fe83174fe71a6d2b67b4384a",
+      "passwordHash": "d3b75ed04eb1125436cbb9b3df4c49f4342965785f5bee7a6868aa02487d4285d8fd4d6ae5bee023080b866740c4444b2687b0f51442da1471070145fa97136a",
+      "passwordSalt": "7d85fda79bc1f818d8d50f804f79ac1e",
       "status": "active"
     },
     {
@@ -38,8 +38,8 @@
       "role": "bod",
       "name": "Yoren Abihay - BOD",
       "email": "bod@yor.local",
-      "passwordHash": "c80f4392ea8516447fcf451b3ad4da9dfdd965c484b6e33d68e2d929ee9ec52d662b5ee957cc3121d973f3e31c40e5f6b4a536e3e2f569a625a9ffa2fca03334",
-      "passwordSalt": "14626ca7e66dd194aaa1bd9ad7398ee5",
+      "passwordHash": "3d33201f37e3b811593698a2e771bfe9310472d5021c6329d0b65fd4cac970042bb0fc467e2636977d87921db8cb9b8dc83b7bcce6e6ba650e9ede8e43846326",
+      "passwordSalt": "89163257b38b2ef817bdbf4c149ce163",
       "status": "active"
     },
     {
@@ -47,8 +47,8 @@
       "role": "superadmin",
       "name": "Yor Super Admin",
       "email": "yoradmin@gmail.com",
-      "passwordHash": "1abdf015b20d22e75f11d68c39ea13036e29cad741d96154c211a243eed31d4d585d541ece9953a11077d04243626bf6cebd4dc177969515c48c79be52fe2b4b",
-      "passwordSalt": "96f9cc43c68c9411f91b76e43784d5e2",
+      "passwordHash": "de03724d3e0a945fc1f8a1cb73d69ae16e445f7c92d0710e589de9196e806b433fff0fa683d7e2a1f19bc4373db76366e2fbe9269e6542659b9f55874117050a",
+      "passwordSalt": "1ce26b792208c87bc68727308f18d209",
       "status": "active"
     }
   ],
@@ -324,7 +324,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-05-30T08:55:59.253Z"
+      "occurredAt": "2026-05-30T17:21:27.533Z"
     }
   ]
 }

@@ -183,11 +183,13 @@ describe('auth and protected access', () => {
         'salesmatch-bonus',
         'binary-cycle-bonus',
         'unilevel-rank-progress',
-        'global-bonus-eligibility',
         'account-details',
         'activation-codes',
         'upgrade-registration'
       ])
+    );
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain(
+      'global-bonus-eligibility'
     );
 
     for (const module of officeResponse.body.modules as Array<{ id: string }>) {

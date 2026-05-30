@@ -97,6 +97,10 @@ type SandboxState = {
   auditEvents: AuditEvent[];
 };
 
+type SandboxStateInput = Partial<SandboxState> & {
+  metadata?: Partial<SandboxState['metadata']>;
+};
+
 const currency = (value: number): string =>
   `PHP ${value.toLocaleString('en-PH', {
     minimumFractionDigits: 2,
@@ -412,9 +416,64 @@ function ensureSandboxStateFile(): void {
   }
 }
 
+function mergeSeededRows<T extends Record<string, unknown>>(
+  seedRows: T[],
+  stateRows: unknown,
+  key: keyof T
+): T[] {
+  const existingRows = Array.isArray(stateRows) ? (stateRows as T[]) : [];
+  const merged = [...existingRows];
+  const seen = new Set(existingRows.map((row) => String(row[key] ?? '')));
+
+  for (const seedRow of seedRows) {
+    const seedKey = String(seedRow[key] ?? '');
+
+    if (!seen.has(seedKey)) {
+      merged.push(seedRow);
+      seen.add(seedKey);
+    }
+  }
+
+  return merged;
+}
+
+function normalizeSandboxState(input: SandboxStateInput): SandboxState {
+  const seed = buildSeedState();
+
+  return {
+    runtimeMode: 'sandbox',
+    metadata: {
+      version: typeof input.metadata?.version === 'number' ? input.metadata.version : seed.metadata.version,
+      lastResetAt:
+        typeof input.metadata?.lastResetAt === 'string' ? input.metadata.lastResetAt : seed.metadata.lastResetAt,
+      lastMutationAt:
+        typeof input.metadata?.lastMutationAt === 'string'
+          ? input.metadata.lastMutationAt
+          : seed.metadata.lastMutationAt
+    },
+    users: mergeSeededRows(seed.users, input.users, 'id'),
+    adminProfiles: mergeSeededRows(seed.adminProfiles, input.adminProfiles, 'userId'),
+    members: Array.isArray(input.members) ? input.members : seed.members,
+    activationRows: Array.isArray(input.activationRows) ? input.activationRows : seed.activationRows,
+    pairingRows: Array.isArray(input.pairingRows) ? input.pairingRows : seed.pairingRows,
+    payoutRows: Array.isArray(input.payoutRows) ? input.payoutRows : seed.payoutRows,
+    walletLedgerEntries: Array.isArray(input.walletLedgerEntries) ? input.walletLedgerEntries : seed.walletLedgerEntries,
+    auditEvents: Array.isArray(input.auditEvents) ? input.auditEvents : seed.auditEvents
+  };
+}
+
 function readState(): SandboxState {
   ensureSandboxStateFile();
-  return JSON.parse(readFileSync(sandboxDataFile, 'utf8')) as SandboxState;
+  const rawJson = readFileSync(sandboxDataFile, 'utf8');
+  const rawState = JSON.parse(rawJson) as SandboxStateInput;
+  const state = normalizeSandboxState(rawState);
+  const normalizedJson = JSON.stringify(state, null, 2);
+
+  if (normalizedJson !== rawJson) {
+    writeFileSync(sandboxDataFile, normalizedJson, 'utf8');
+  }
+
+  return state;
 }
 
 function writeState(state: SandboxState): void {

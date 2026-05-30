@@ -5,7 +5,7 @@ This runbook is for the current Yor setup:
 - frontend domain: `https://yorinternational.net`
 - frontend `www`: `https://www.yorinternational.net`
 - backend API domain: `https://api.yorinternational.net`
-- backend repo: `git@github.com:WebsitePojects/yorlegacy_backend.git`
+- backend repo: `https://github.com/WebsitePojects/yorlegacy_backend.git`
 - backend app dir: `/opt/yor-backend`
 - backend port: `8787`
 - VPS IP from local server notes: `72.62.25.21`
@@ -13,9 +13,9 @@ This runbook is for the current Yor setup:
 Important:
 
 - `WebsitePojects/yorlegacy_backend` is private
+- `WebsitePojects` policy disables repository deploy keys
 - the VPS cannot clone it anonymously over HTTPS
-- first-time server setup must authenticate GitHub before `git clone`
-- this guide uses an SSH deploy key, which is the cleanest server-side option for a private repo
+- this guide uses a fine-grained GitHub token with read-only repo access
 
 ## 1. Hostinger DNS
 
@@ -40,7 +40,22 @@ Name: www
 Value: cname.vercel-dns.com
 ```
 
-## 2. First-Time GitHub Access For The Private Repo
+## 2. Create A GitHub Token That Can Read The Private Repo
+
+Because deploy keys are disabled by org policy, use a fine-grained personal access token.
+
+Create it in GitHub with:
+
+- Resource owner: the account that has access to `WebsitePojects/yorlegacy_backend`
+- Repository access: `Only select repositories`
+- Selected repository: `yorlegacy_backend`
+- Repository permissions:
+  - `Contents: Read-only`
+  - `Metadata: Read-only`
+
+Keep the token ready. You will paste it once on the VPS.
+
+## 3. First-Time VPS Git Access Setup
 
 SSH into the VPS:
 
@@ -56,62 +71,27 @@ set -e
 apt update
 apt install -y git curl nginx ufw certbot python3-certbot-nginx ca-certificates openssl
 
-mkdir -p /root/.ssh
-chmod 700 /root/.ssh
+git config --global credential.helper store
 
-if [ ! -f /root/.ssh/yor_backend_deploy_key ]; then
-  ssh-keygen -t ed25519 -C "yor-backend-vps" -f /root/.ssh/yor_backend_deploy_key -N ""
-fi
-
-cat > /root/.ssh/config <<'EOF'
-Host github.com
-  HostName github.com
-  User git
-  IdentityFile /root/.ssh/yor_backend_deploy_key
-  IdentitiesOnly yes
-  StrictHostKeyChecking accept-new
-EOF
-
-chmod 600 /root/.ssh/config
-
+read -p "GitHub username: " GITHUB_USER
+read -s -p "Fine-grained GitHub token: " GITHUB_TOKEN
 echo
-echo "COPY THIS PUBLIC KEY INTO GITHUB AS A READ-ONLY DEPLOY KEY:"
-echo
-cat /root/.ssh/yor_backend_deploy_key.pub
-echo
-echo "GitHub path: WebsitePojects / yorlegacy_backend / Settings / Deploy keys / Add deploy key"
-echo "Title: yor-backend-vps"
-echo "Allow write access: leave unchecked"
-echo
-echo "After adding the deploy key in GitHub, test with:"
-echo "ssh -T git@github.com || true"
-```
 
-Then do this in GitHub:
+printf "https://%s:%s@github.com\n" "$GITHUB_USER" "$GITHUB_TOKEN" > /root/.git-credentials
+chmod 600 /root/.git-credentials
 
-1. Open `https://github.com/WebsitePojects/yorlegacy_backend`
-2. Go to `Settings`
-3. Go to `Deploy keys`
-4. Click `Add deploy key`
-5. Title: `yor-backend-vps`
-6. Paste the printed public key
-7. Leave `Allow write access` unchecked
-8. Save
-
-Back on the VPS, verify access:
-
-```bash
-ssh -T git@github.com || true
-git ls-remote git@github.com:WebsitePojects/yorlegacy_backend.git
+git ls-remote https://github.com/WebsitePojects/yorlegacy_backend.git
 ```
 
 Expected result:
 
 - `git ls-remote` prints refs instead of `403`
 
-## 3. Server Bootstrap
+If it still fails, the token does not have repository access yet.
 
-Paste this whole block into the Linux terminal after the deploy key is already added in GitHub:
+## 4. Server Bootstrap
+
+Paste this whole block into the Linux terminal after `git ls-remote` succeeds:
 
 ```bash
 set -e
@@ -124,15 +104,12 @@ mkdir -p /opt
 cd /opt
 
 if [ ! -d /opt/yor-backend/.git ]; then
-  GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" \
-    git clone git@github.com:WebsitePojects/yorlegacy_backend.git /opt/yor-backend
+  git clone https://github.com/WebsitePojects/yorlegacy_backend.git /opt/yor-backend
 else
-  git -C /opt/yor-backend remote set-url origin git@github.com:WebsitePojects/yorlegacy_backend.git
-  GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" \
-    git -C /opt/yor-backend fetch origin main
+  git -C /opt/yor-backend remote set-url origin https://github.com/WebsitePojects/yorlegacy_backend.git
+  git -C /opt/yor-backend fetch origin main
   git -C /opt/yor-backend checkout main
-  GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" \
-    git -C /opt/yor-backend pull origin main
+  git -C /opt/yor-backend pull origin main
 fi
 
 cd /opt/yor-backend
@@ -197,7 +174,7 @@ curl -fsS http://127.0.0.1:8787/health
 pm2 status
 ```
 
-## 4. Nginx And HTTPS
+## 5. Nginx And HTTPS
 
 Paste this whole block into the same VPS terminal:
 
@@ -250,7 +227,7 @@ curl -fsS https://api.yorinternational.net/health
 certbot renew --dry-run
 ```
 
-## 5. Frontend Wiring
+## 6. Frontend Wiring
 
 The frontend should not call the dev tunnel directly in production.
 
@@ -279,7 +256,7 @@ Update [vercel.json](C:\Users\Win10\Desktop\YorLegacyMLM\yor_frontend\vercel.jso
 
 Do not set `VITE_API_BASE_URL` in Vercel production after that change.
 
-## 6. GitHub Actions CI/CD
+## 7. GitHub Actions CI/CD
 
 Create these GitHub Actions secrets in `WebsitePojects/yorlegacy_backend`:
 
@@ -333,10 +310,10 @@ jobs:
           script: |
             set -e
             cd "${{ secrets.VPS_APP_DIR }}"
-            git remote set-url origin git@github.com:WebsitePojects/yorlegacy_backend.git
-            GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" git fetch origin main
+            git remote set-url origin https://github.com/WebsitePojects/yorlegacy_backend.git
+            git fetch origin main
             git checkout main
-            GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" git pull origin main
+            git pull origin main
             npm ci
             npm test
             npm run build
@@ -346,17 +323,17 @@ jobs:
             curl -fsS http://127.0.0.1:8787/health
 ```
 
-## 7. Manual Update
+## 8. Manual Update
 
 If you need to redeploy manually, SSH into the server and paste:
 
 ```bash
 set -e
 cd /opt/yor-backend
-git remote set-url origin git@github.com:WebsitePojects/yorlegacy_backend.git
-GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" git fetch origin main
+git remote set-url origin https://github.com/WebsitePojects/yorlegacy_backend.git
+git fetch origin main
 git checkout main
-GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" git pull origin main
+git pull origin main
 npm ci
 npm test
 npm run build
@@ -367,7 +344,7 @@ curl -fsS http://127.0.0.1:8787/health
 pm2 status
 ```
 
-## 8. Verify
+## 9. Verify
 
 From the VPS:
 
@@ -377,7 +354,7 @@ curl -i http://127.0.0.1:8787/health
 curl -i https://api.yorinternational.net/health
 nginx -t
 systemctl status nginx --no-pager
-GIT_SSH_COMMAND="ssh -i /root/.ssh/yor_backend_deploy_key -o IdentitiesOnly=yes" git -C /opt/yor-backend remote -v
+git -C /opt/yor-backend remote -v
 ```
 
 From the browser after frontend redeploy:

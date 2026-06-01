@@ -32,8 +32,8 @@ const sourceReferences = [
 
 export const packagePolicies: PackagePolicy[] = [
   {
-    code: 'CLASSIC',
-    name: 'Classic',
+    code: 'BASIC',
+    name: 'Basic',
     price: 1998,
     pv: 5,
     directSellingPrice: 350,
@@ -43,8 +43,8 @@ export const packagePolicies: PackagePolicy[] = [
     monthlySalesmatchCap: 20000
   },
   {
-    code: 'BASIC',
-    name: 'Basic',
+    code: 'CLASSIC',
+    name: 'Classic',
     price: 5998,
     pv: 10,
     directSellingPrice: 320,

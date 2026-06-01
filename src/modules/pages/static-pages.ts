@@ -113,12 +113,12 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Entry Packages',
     title: 'Entry Packages Comparison',
     summary:
-      'Five public package tiers create a clear ladder from Classic through VIP, each with its own price point and PV value.',
+      'Five public package tiers create a clear ladder from Basic through VIP, each with its own price point and PV value.',
     sections: [
       {
         key: 'comparison',
         heading: 'Classic to VIP with visible value progression',
-        body: 'The public Yor package ladder currently reads Classic, Basic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.'
+        body: 'The public Yor package ladder currently reads Basic, Classic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.'
       }
     ]
   },
@@ -196,7 +196,7 @@ export const staticPages: Record<string, PageContent> = {
       {
         key: 'mechanics',
         heading: 'Personally sponsor and earn package-based bonuses',
-        body: 'The PDF shows public referral values such as Classic: PHP 200, Basic: PHP 1,000, Standard: PHP 5,000, Business: PHP 7,000, and VIP: PHP 15,000.'
+        body: 'The PDF shows public referral values such as Basic: PHP 200, Classic: PHP 1,000, Standard: PHP 5,000, Business: PHP 7,000, and VIP: PHP 15,000.'
       }
     ]
   },
@@ -243,12 +243,12 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Way 5',
     title: '5. Get Yor Five Bonus',
     summary:
-      'Every five direct signups on the same package unlock a public milestone reward under the Get Yor Five mechanic, keeping the bonus tied to same-tier product movement.',
+      'Every five direct signups on the same package unlock a public Get Yor Five claim under the same-tier package mechanic, keeping the release tied to product movement.',
     sections: [
       {
         key: 'milestone',
         heading: 'Unlimited direct sponsor momentum',
-        body: 'The public slide ties the bonus to package duplication and presents it as a repeatable milestone rather than a one-time campaign.'
+        body: 'The public slide ties the claim to package duplication and presents it as a repeatable milestone rather than a one-time campaign.'
       },
       {
         key: 'product-led',

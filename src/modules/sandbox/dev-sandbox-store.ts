@@ -122,8 +122,8 @@ const currency = (value: number): string =>
 
 const sandboxDataFile = path.resolve(process.cwd(), env.YOR_SANDBOX_DATA_FILE);
 const sandboxPackagePolicies = [
-  { code: 'CLASSIC', name: 'Classic', pv: 5, directReferralBonus: 200 },
-  { code: 'BASIC', name: 'Basic', pv: 10, directReferralBonus: 1000 },
+  { code: 'BASIC', name: 'Basic', pv: 5, directReferralBonus: 200 },
+  { code: 'CLASSIC', name: 'Classic', pv: 10, directReferralBonus: 1000 },
   { code: 'STANDARD', name: 'Standard', pv: 50, directReferralBonus: 5000 },
   { code: 'BUSINESS', name: 'Business', pv: 100, directReferralBonus: 7000 },
   { code: 'VIP', name: 'VIP', pv: 300, directReferralBonus: 15000 }

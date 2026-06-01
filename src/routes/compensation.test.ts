@@ -21,22 +21,22 @@ describe('Yor MVP compensation APIs', () => {
     expect(response.status).toBe(200);
     expect(response.body.mode).toBe('sandbox');
     expect(response.body.packages.map((pkg: { code: string }) => pkg.code)).toEqual([
-      'CLASSIC',
       'BASIC',
+      'CLASSIC',
       'STANDARD',
       'BUSINESS',
       'VIP'
     ]);
     expect(response.body.packages[0]).toMatchObject({
-      code: 'CLASSIC',
-      name: 'Classic',
+      code: 'BASIC',
+      name: 'Basic',
       price: 1998,
       pv: 5,
       directReferralBonus: 200
     });
     expect(response.body.packages[1]).toMatchObject({
-      code: 'BASIC',
-      name: 'Basic',
+      code: 'CLASSIC',
+      name: 'Classic',
       price: 5998,
       pv: 10,
       directReferralBonus: 1000
@@ -204,7 +204,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(ledger.status).toBe(200);
     expect(ledger.body.entries.length).toBeGreaterThan(0);
     expect(payouts.status).toBe(200);
-    expect(payouts.body.payouts[0].status).toMatch(/sandbox|review|pending|approved|released/i);
+    expect(payouts.body.payouts[0].status).toMatch(/sandbox|review|pending|approved|released|paid/i);
     expect(codeCenter.status).toBe(200);
     expect(codeCenter.body.metrics.availableCodes).toBeGreaterThanOrEqual(0);
     expect(encashments.status).toBe(200);

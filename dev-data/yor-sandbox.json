@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-05-31T12:11:33.559Z",
-    "lastMutationAt": "2026-05-31T14:56:51.340Z"
+    "lastResetAt": "2026-06-01T15:42:25.201Z",
+    "lastMutationAt": "2026-06-01T16:07:35.206Z"
   },
   "users": [
     {
@@ -97,10 +97,10 @@
       "walletAvailable": 15200.75,
       "walletPending": 4300,
       "cdBalance": 0,
+      "stockist": false,
       "payoutOption": "GCash",
       "payoutDetails": "09170000001",
-      "lastActivity": "2026-05-31",
-      "stockist": false
+      "lastActivity": "2026-05-28"
     },
     {
       "userId": "yor-legacy-002",
@@ -124,18 +124,18 @@
       "walletAvailable": 8950,
       "walletPending": 1500,
       "cdBalance": 500,
+      "stockist": false,
       "payoutOption": "Bank Deposit",
       "payoutDetails": "Alyssa Cruz / BDO ****1202",
-      "lastActivity": "2026-05-27",
-      "stockist": false
+      "lastActivity": "2026-05-27"
     },
     {
       "userId": "yor-legacy-003",
       "username": "YOR0003",
-      "fullName": "Marco S Reyes",
+      "fullName": "Marco Reyes",
       "firstName": "Marco",
       "lastName": "Reyes",
-      "middleName": "S",
+      "middleName": "",
       "email": "marco.reyes@example.test",
       "phone": "+63 917 100 2003",
       "address": "Pasig City, Metro Manila",
@@ -151,10 +151,10 @@
       "walletAvailable": 31420,
       "walletPending": 6100,
       "cdBalance": 0,
+      "stockist": true,
       "payoutOption": "GCash",
       "payoutDetails": "09171234567",
-      "lastActivity": "2026-05-31",
-      "stockist": false
+      "lastActivity": "2026-05-26"
     },
     {
       "userId": "yor-legacy-004",
@@ -167,7 +167,7 @@
       "phone": "+63 917 100 2004",
       "address": "Marikina City, Metro Manila",
       "packageTier": "Classic",
-      "accountStatus": "active",
+      "accountStatus": "pending",
       "referralCode": "YOR-NICA",
       "sponsorCode": "YOR-ALYSSA",
       "placement": "left",
@@ -178,10 +178,10 @@
       "walletAvailable": 700,
       "walletPending": 300,
       "cdBalance": 0,
+      "stockist": false,
       "payoutOption": "Pickup",
       "payoutDetails": "Cash",
-      "lastActivity": "2026-05-31",
-      "stockist": false
+      "lastActivity": "2026-05-25"
     },
     {
       "userId": "yor-legacy-005",
@@ -205,22 +205,72 @@
       "walletAvailable": 1850,
       "walletPending": 250,
       "cdBalance": 150,
+      "stockist": true,
       "payoutOption": "Remittance Center",
       "payoutDetails": "Cebuana / Ramon Dela Cruz",
-      "lastActivity": "2026-05-24",
-      "stockist": false
+      "lastActivity": "2026-05-24"
     }
   ],
   "activationRows": [
+    {
+      "code": "PDSTXRWW9W",
+      "accountType": "PD",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "unpaid",
+      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
+      "generatedAt": "2026-06-01"
+    },
+    {
+      "code": "PDST4YJIBA",
+      "accountType": "PD",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "unpaid",
+      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
+      "generatedAt": "2026-06-01"
+    },
+    {
+      "code": "PDSTQLXDAA",
+      "accountType": "PD",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "unpaid",
+      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
+      "generatedAt": "2026-06-01"
+    },
+    {
+      "code": "PDSTDTXHW",
+      "accountType": "PD",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "unpaid",
+      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
+      "generatedAt": "2026-06-01"
+    },
+    {
+      "code": "PDSTI8GWKA",
+      "accountType": "PD",
+      "packageTier": "Standard",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "unpaid",
+      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
+      "generatedAt": "2026-06-01"
+    },
     {
       "code": "PDSTYQ8M4K",
       "accountType": "PD",
       "packageTier": "Standard",
       "assignedTo": "YOR0001",
       "status": "used",
-      "generatedAt": "2026-05-20",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "paid",
+      "remarks": "Consumed in prior registration cycle.",
+      "generatedAt": "2026-05-20"
     },
     {
       "code": "FSBUP3N9XA",
@@ -228,9 +278,9 @@
       "packageTier": "Business",
       "assignedTo": "YOR0002",
       "status": "used",
-      "generatedAt": "2026-05-21",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "externally-paid",
+      "remarks": "Settled member-to-member outside office.",
+      "generatedAt": "2026-05-21"
     },
     {
       "code": "PDSTK7V2LC",
@@ -238,9 +288,9 @@
       "packageTier": "Standard",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "paid",
+      "remarks": "Paid and ready for release cycle.",
+      "generatedAt": "2026-05-28"
     },
     {
       "code": "FSBUZ6Q1RH",
@@ -248,9 +298,9 @@
       "packageTier": "Business",
       "assignedTo": "YOR0003",
       "status": "available",
-      "generatedAt": "2026-05-28",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "externally-paid",
+      "remarks": "Stockist walk-in settlement verified by admin.",
+      "generatedAt": "2026-05-28"
     },
     {
       "code": "PDBA5D8WJ2",
@@ -258,9 +308,9 @@
       "packageTier": "Basic",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28",
       "paymentStatus": "unpaid",
-      "remarks": ""
+      "remarks": "Awaiting package settlement.",
+      "generatedAt": "2026-05-28"
     },
     {
       "code": "PDCLV4T9QB",
@@ -268,9 +318,9 @@
       "packageTier": "Classic",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "paid",
+      "remarks": "Ready for direct sponsor release.",
+      "generatedAt": "2026-05-28"
     },
     {
       "code": "FSBUH7M2KC",
@@ -278,9 +328,9 @@
       "packageTier": "Business",
       "assignedTo": null,
       "status": "unreleased",
-      "generatedAt": "2026-05-28",
       "paymentStatus": "unpaid",
-      "remarks": ""
+      "remarks": "General code pool inventory.",
+      "generatedAt": "2026-05-28"
     },
     {
       "code": "FSVI8X4R2M",
@@ -288,9 +338,9 @@
       "packageTier": "VIP",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28",
-      "paymentStatus": "unpaid",
-      "remarks": ""
+      "paymentStatus": "paid",
+      "remarks": "High-tier stockist sale cleared.",
+      "generatedAt": "2026-05-28"
     }
   ],
   "pairingRows": [
@@ -317,26 +367,26 @@
       "member": "YOR0001",
       "gross": "PHP 8,000.00",
       "fee": "PHP 100.00",
+      "tax": "PHP 0.00",
       "cdDeduction": "PHP 0.00",
       "net": "PHP 7,900.00",
-      "status": "released Friday",
+      "status": "paid",
       "method": "GCash",
-      "createdAt": "2026-05-24T08:00:00Z",
-      "tax": "PHP 0.00",
-      "remarks": ""
+      "remarks": "Paid during Friday release batch.",
+      "createdAt": "2026-05-24T08:00:00Z"
     },
     {
       "reference": "ENC-20260517-002",
       "member": "YOR0003",
       "gross": "PHP 12,500.00",
       "fee": "PHP 100.00",
+      "tax": "PHP 0.00",
       "cdDeduction": "PHP 500.00",
       "net": "PHP 11,900.00",
-      "status": "for verification",
+      "status": "requested",
       "method": "Bank",
-      "createdAt": "2026-05-17T08:00:00Z",
-      "tax": "PHP 0.00",
-      "remarks": ""
+      "remarks": "Awaiting operator review and payout note.",
+      "createdAt": "2026-05-17T08:00:00Z"
     }
   ],
   "walletLedgerEntries": [
@@ -383,45 +433,21 @@
   "auditEvents": [
     {
       "actor": "Yor Admin",
-      "action": "member_profile_updated",
-      "target": "YOR0003 -> Marco S Reyes",
-      "occurredAt": "2026-05-31T14:56:51.340Z"
+      "action": "admin_activation_code_transfer",
+      "target": "5 code(s) -> YOR0001",
+      "occurredAt": "2026-06-01T16:07:35.206Z"
     },
     {
       "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0004 -> active",
-      "occurredAt": "2026-05-31T14:55:54.492Z"
+      "action": "activation_code_release",
+      "target": "5 code(s) released",
+      "occurredAt": "2026-06-01T16:07:19.927Z"
     },
     {
       "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0004 -> active",
-      "occurredAt": "2026-05-31T14:55:51.356Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0001 -> active",
-      "occurredAt": "2026-05-31T14:55:36.771Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0001 -> suspended",
-      "occurredAt": "2026-05-31T14:55:34.907Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0001 -> active",
-      "occurredAt": "2026-05-31T14:55:32.467Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "member_status_updated",
-      "target": "YOR0001 -> frozen",
-      "occurredAt": "2026-05-31T14:55:29.460Z"
+      "action": "activation_batch_generated",
+      "target": "5 x PD Standard -> unassigned pool",
+      "occurredAt": "2026-06-01T16:06:46.424Z"
     },
     {
       "actor": "Yor Super Admin",
@@ -433,7 +459,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-05-31T12:11:33.559Z"
+      "occurredAt": "2026-06-01T15:42:25.201Z"
     }
   ]
 }

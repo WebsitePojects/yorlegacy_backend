@@ -561,7 +561,7 @@ function adminModules(): OperationalModule[] {
         : 'Live report snapshot for member volume, payout exposure, and protected playground operations.',
       status: 'live-report',
       legacyReference: 'adminpanel/admin-dashboard.php',
-      permissions: ALL_OPS_ROLES,
+      permissions: EXECUTIVE_ROLES,
       metrics: [
         metric('Total Accounts', String(allMembers.length), 'Hybrid parity seed'),
         metric(
@@ -588,7 +588,7 @@ function adminModules(): OperationalModule[] {
       description: 'Search, review, and update member profile names and contact-ready account details.',
       status: 'live-report',
       legacyReference: 'adminpanel/account-masterlist.php',
-      permissions: CASHIER_CODE_ROLES,
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
       metrics: [metric('Accounts Indexed', String(allMembers.length)), metric('Pending Accounts', String(allMembers.filter((member) => member.accountStatus === 'pending').length), undefined, 'warning')],
       table: table('Members', memberRows),
       gatedActions: []

@@ -44,7 +44,7 @@ adminRouter.get('/api/admin/dashboard', requireRole('admin', 'cashier', 'bod', '
   res.status(200).json(await buildAdminMvpDashboard(req.authUser!));
 });
 
-adminRouter.get('/api/admin/members', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members', requireRole('admin', 'superadmin'), (req, res) => {
   const query = typeof req.query.query === 'string' ? req.query.query : '';
   const username = typeof req.query.username === 'string' ? req.query.username : '';
   const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
@@ -174,7 +174,7 @@ adminRouter.post('/api/admin/sandbox/reset', requireRole('admin', 'superadmin'),
   res.status(200).json(runAdminResetSandbox(req.authUser!));
 });
 
-adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin', 'cashier', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   res.status(200).json(
     runAdminChangeMemberName(req.authUser!, {
@@ -184,7 +184,7 @@ adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin'
   );
 });
 
-adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'cashier', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   res.status(200).json(
     runAdminUpdateMemberProfile(req.authUser!, {

@@ -158,14 +158,14 @@ describe('auth and protected access', () => {
       .set('Cookie', cookie);
 
     expect(officeResponse.status).toBe(200);
-    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual(
-      expect.arrayContaining(['dashboard', 'member-management', 'activation-codes'])
-    );
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual([
+      'activation-codes'
+    ]);
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain('encashment-reports');
     expect(deniedModuleResponse.status).toBe(404);
   });
 
-  it('lets cashier update a member name from the limited office surface', async () => {
+  it('blocks cashier access to member-management APIs', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       email: 'cashier@yor.local',
       password: 'joyjoy05'
@@ -177,15 +177,12 @@ describe('auth and protected access', () => {
       .set('Cookie', cookie)
       .send({ fullName: 'Alyssa Cashier QA' });
 
-    expect(updateResponse.status).toBe(200);
-    expect(updateResponse.body.status).toBe('completed');
-
     const officeResponse = await request(app)
       .get('/api/admin/modules/member-management')
       .set('Cookie', cookie);
 
-    expect(officeResponse.status).toBe(200);
-    expect(officeResponse.body.table.rows.some((row: { username: string; name: string }) => row.username === 'YOR0002' && row.name === 'Alyssa Cashier QA')).toBe(true);
+    expect(updateResponse.status).toBe(403);
+    expect(officeResponse.status).toBe(404);
   });
 
   it('serves every member side-nav module for smoke coverage', async () => {

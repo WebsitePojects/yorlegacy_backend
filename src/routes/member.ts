@@ -14,6 +14,7 @@ import {
   buildBinaryGenealogyCenter,
   buildMemberActivationCodeCenter,
   buildMemberRegistrationReadiness,
+  buildScopedBinaryGenealogyCenter,
   buildSponsorGenealogyCenter,
   buildMemberTransactionCenter,
   buildMemberWalletDetail,
@@ -68,15 +69,17 @@ memberRouter.get('/api/member/genealogy/binary', requireRole('member', 'admin', 
 });
 
 memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(buildBinaryGenealogyCenter(req.authUser!));
+  const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
+  res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
 });
 
 memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   res.status(200).json(buildSponsorGenealogyCenter(req.authUser!));
 });
 
-memberRouter.get('/api/member/shadow-accounts', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
-  res.status(200).json(buildShadowAccounts());
+memberRouter.get('/api/member/shadow-accounts', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const ownerUsername = typeof req.query.ownerUsername === 'string' ? req.query.ownerUsername : undefined;
+  res.status(200).json(buildShadowAccounts(ownerUsername));
 });
 
 memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {

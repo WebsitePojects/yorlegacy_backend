@@ -155,7 +155,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(registrationReadiness.body.availableCodes.length).toBeGreaterThan(0);
     expect(publicRegistrationPreview.status).toBe(200);
     expect(publicRegistrationPreview.body.canProceed).toBe(true);
-    expect(publicRegistrationPreview.body.matchingCode.code).toBe('YOR-ACT-1003');
+    expect(publicRegistrationPreview.body.matchingCode.code).toMatch(/^PDST[A-Z0-9]+$/);
     expect(publicRegistrationSubmit.status).toBe(200);
     expect(publicRegistrationSubmit.body.createdMember.username).toMatch(/^YOR/);
     expect(encashPreview.status).toBe(200);
@@ -217,6 +217,179 @@ describe('Yor MVP compensation APIs', () => {
     expect(gatedWrite.body.moneyMode).toBe('sandbox');
     expect(gatedCodes.status).toBe(200);
     expect(gatedEncashment.status).toBe(200);
+  });
+
+  it('runs the admin release-transfer-registration lifecycle through the sandbox code inventory', async () => {
+    const adminCookie = await login('admin@yor.local', 'YorAdmin123!');
+    const inventoryBefore = await request(app)
+      .get('/api/admin/activation-codes')
+      .set('Cookie', adminCookie);
+
+    expect(inventoryBefore.status).toBe(200);
+
+    const existingCodes = new Set(
+      inventoryBefore.body.inventory.map((item: { code: string }) => item.code)
+    );
+
+    const generateResponse = await request(app)
+      .post('/api/admin/activation-codes/generate')
+      .set('Cookie', adminCookie)
+      .send({
+        quantity: 1,
+        packageTier: 'Standard',
+        assignedTo: 'YOR0003'
+      });
+
+    expect(generateResponse.status).toBe(200);
+    expect(generateResponse.body.status).toBe('completed');
+
+    const inventoryAfterGenerate = await request(app)
+      .get('/api/admin/activation-codes')
+      .set('Cookie', adminCookie);
+
+    expect(inventoryAfterGenerate.status).toBe(200);
+
+    const generatedCode = inventoryAfterGenerate.body.inventory.find(
+      (item: { code: string; assignedTo: string; packageTier: string; status: string }) =>
+        !existingCodes.has(item.code) &&
+        item.assignedTo === 'YOR0003' &&
+        item.packageTier === 'Standard'
+    );
+
+    expect(generatedCode).toBeTruthy();
+    if (!generatedCode) {
+      throw new Error('Expected a newly generated admin activation code.');
+    }
+
+    expect(generatedCode.status).toBe('unreleased');
+
+    const releaseResponse = await request(app)
+      .post('/api/admin/activation-codes/release')
+      .set('Cookie', adminCookie)
+      .send({ codes: [generatedCode.code] });
+
+    expect(releaseResponse.status).toBe(200);
+    expect(releaseResponse.body.status).toBe('completed');
+
+    const transferResponse = await request(app)
+      .post('/api/admin/activation-codes/transfer')
+      .set('Cookie', adminCookie)
+      .send({
+        targetUsername: 'YOR0001',
+        codes: [generatedCode.code]
+      });
+
+    expect(transferResponse.status).toBe(200);
+    expect(transferResponse.body.status).toBe('completed');
+
+    const memberCookie = await login();
+    const memberCodes = await request(app)
+      .get('/api/member/activation-codes')
+      .set('Cookie', memberCookie);
+
+    expect(memberCodes.status).toBe(200);
+    expect(
+      memberCodes.body.inventory.some(
+        (item: { code: string; visibility: string }) =>
+          item.code === generatedCode.code && item.visibility === 'released-by-sponsor'
+      )
+    ).toBe(true);
+
+    const previewResponse = await request(app).post('/api/registration/preview').send({
+      fullName: 'Transferred Code Prospect',
+      email: 'transferred.code.prospect@example.test',
+      phone: '+63 900 000 0222',
+      password: 'Sandbox123!',
+      sponsorCode: 'YOR-MEMBER-001',
+      packageTier: 'standard',
+      preferredSide: 'left'
+    });
+
+    expect(previewResponse.status).toBe(200);
+    expect(previewResponse.body.canProceed).toBe(true);
+    expect(previewResponse.body.matchingCode.code).toBe(generatedCode.code);
+
+    const submitResponse = await request(app).post('/api/registration/submit').send({
+      fullName: 'Transferred Code Prospect',
+      email: 'transferred.code.prospect@example.test',
+      phone: '+63 900 000 0222',
+      password: 'Sandbox123!',
+      sponsorCode: 'YOR-MEMBER-001',
+      packageTier: 'standard',
+      preferredSide: 'left'
+    });
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitResponse.body.createdMember.username).toMatch(/^YOR/);
+
+    const inventoryAfterSubmit = await request(app)
+      .get('/api/admin/activation-codes')
+      .set('Cookie', adminCookie);
+
+    expect(inventoryAfterSubmit.status).toBe(200);
+    expect(
+      inventoryAfterSubmit.body.inventory.some(
+        (item: { code: string; assignedTo: string; status: string }) =>
+          item.code === generatedCode.code &&
+          item.assignedTo === submitResponse.body.createdMember.username &&
+          item.status === 'used'
+      )
+    ).toBe(true);
+  });
+
+  it('keeps cashier limited to release and transfer actions while blocking generation and approvals', async () => {
+    const cashierCookie = await login('cashier@yor.local', 'joyjoy05');
+
+    const [generateResponse, payoutApprovalResponse, encashmentApprovalResponse] = await Promise.all([
+      request(app)
+        .post('/api/admin/activation-codes/generate')
+        .set('Cookie', cashierCookie)
+        .send({ quantity: 1, packageTier: 'Classic', assignedTo: 'YOR0001' }),
+      request(app)
+        .post('/api/admin/payouts/approve')
+        .set('Cookie', cashierCookie)
+        .send({ payoutId: 'ENC-20260524-001' }),
+      request(app)
+        .post('/api/admin/encashments/ENC-20260524-001/approve')
+        .set('Cookie', cashierCookie)
+    ]);
+
+    expect(generateResponse.status).toBe(403);
+    expect(payoutApprovalResponse.status).toBe(403);
+    expect(encashmentApprovalResponse.status).toBe(403);
+
+    const releaseResponse = await request(app)
+      .post('/api/admin/activation-codes/release')
+      .set('Cookie', cashierCookie)
+      .send({ codes: ['FSBUH7M2KC'] });
+
+    expect(releaseResponse.status).toBe(200);
+    expect(releaseResponse.body.status).toBe('completed');
+
+    const transferResponse = await request(app)
+      .post('/api/admin/activation-codes/transfer')
+      .set('Cookie', cashierCookie)
+      .send({
+        targetUsername: 'YOR0002',
+        codes: ['FSBUH7M2KC']
+      });
+
+    expect(transferResponse.status).toBe(200);
+    expect(transferResponse.body.status).toBe('completed');
+
+    const codeCenter = await request(app)
+      .get('/api/admin/activation-codes')
+      .set('Cookie', cashierCookie);
+
+    expect(codeCenter.status).toBe(200);
+    expect(
+      codeCenter.body.inventory.some(
+        (item: { code: string; assignedTo: string; status: string }) =>
+          item.code === 'FSBUH7M2KC' &&
+          item.assignedTo === 'YOR0002' &&
+          item.status === 'available'
+      )
+    ).toBe(true);
   });
 
   it('resets the branch-local sandbox runtime for a fresh destructive test pass', async () => {

@@ -154,13 +154,38 @@ describe('auth and protected access', () => {
       .get('/api/admin/office')
       .set('Cookie', cookie);
     const deniedModuleResponse = await request(app)
-      .get('/api/admin/modules/account-masterlist')
+      .get('/api/admin/modules/encashment-reports')
       .set('Cookie', cookie);
 
     expect(officeResponse.status).toBe(200);
-    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toContain('encashment-reports');
-    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain('account-masterlist');
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual(
+      expect.arrayContaining(['dashboard', 'member-management', 'activation-codes'])
+    );
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain('encashment-reports');
     expect(deniedModuleResponse.status).toBe(404);
+  });
+
+  it('lets cashier update a member name from the limited office surface', async () => {
+    const loginResponse = await request(app).post('/api/auth/login').send({
+      email: 'cashier@yor.local',
+      password: 'joyjoy05'
+    });
+
+    const cookie = loginResponse.headers['set-cookie'][0];
+    const updateResponse = await request(app)
+      .post('/api/admin/members/YOR0002/change-name')
+      .set('Cookie', cookie)
+      .send({ fullName: 'Alyssa Cashier QA' });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.status).toBe('completed');
+
+    const officeResponse = await request(app)
+      .get('/api/admin/modules/member-management')
+      .set('Cookie', cookie);
+
+    expect(officeResponse.status).toBe(200);
+    expect(officeResponse.body.table.rows.some((row: { username: string; name: string }) => row.username === 'YOR0002' && row.name === 'Alyssa Cashier QA')).toBe(true);
   });
 
   it('serves every member side-nav module for smoke coverage', async () => {
@@ -217,20 +242,15 @@ describe('auth and protected access', () => {
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual(
       expect.arrayContaining([
         'member-management',
-        'account-shadow-management',
-        'sponsor-tree',
-        'binary-placement-tree',
-        'payment-verification',
-        'package-rule-matrix',
-        'direct-referral-reports',
-        'salesmatch-reports',
-        'binary-cycle-reports',
+        'account-genealogy',
+        'encashment-reports',
+        'finance-accounting',
+        'cd-accounts',
+        'voucher-management',
+        'rankings',
+        'global-bonus',
         'get-five-reports',
-        'lifestyle-rewards-reports',
-        'unilevel-rank-reports',
-        'global-bonus-pool',
-        'wallet-ledger',
-        'system-health'
+        'activation-codes'
       ])
     );
   });

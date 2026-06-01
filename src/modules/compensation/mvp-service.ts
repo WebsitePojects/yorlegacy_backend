@@ -497,42 +497,49 @@ export function buildGenealogy(kind: 'sponsor' | 'binary-placement') {
   };
 }
 
-export function buildShadowAccounts(): { moneyMode: typeof moneyMode; accounts: ShadowAccount[] } {
+export function buildShadowAccounts(ownerUsername = 'YOR0001'): { moneyMode: typeof moneyMode; owner: string; accounts: ShadowAccount[] } {
+  const normalizedOwner = ownerUsername.trim().toUpperCase() || 'YOR0001';
+  const stockistOwners = new Set(['YOR0003', 'YOR0005']);
+  const isStockistOwner = stockistOwners.has(normalizedOwner);
+
   return {
     moneyMode,
+    owner: normalizedOwner,
     accounts: [
       {
-        id: 'SHADOW-L',
-        owner: 'YOR0001',
-        state: 'reserved_shadow',
+        id: `${normalizedOwner}-L`,
+        owner: normalizedOwner,
+        state: isStockistOwner ? 'activated_shadow' : 'reserved_shadow',
         placement: 'left',
         walletEnabled: false,
         unilevelEnabled: false,
-        binaryCycleEnabled: false,
-        note: 'Reserved for placement only; no PV, wallet, unilevel, or payout.'
+        binaryCycleEnabled: isStockistOwner,
+        note: isStockistOwner
+          ? 'Visible as activated shadow support in the sandbox transcript flow; payout policy still requires final approval.'
+          : 'Reserved for placement only; no PV, wallet, unilevel, or payout.'
       },
       {
-        id: 'SHADOW-R',
-        owner: 'YOR0001',
-        state: 'activated_shadow',
+        id: `${normalizedOwner}-R`,
+        owner: normalizedOwner,
+        state: 'reserved_shadow',
         placement: 'right',
         walletEnabled: false,
         unilevelEnabled: false,
         binaryCycleEnabled: false,
-        note: isSandboxMode()
-          ? 'Activated for binary support in the sandbox branch; final earning policy still requires business approval.'
-          : 'Activated for binary support in playground mode; final earning policy still requires business approval.'
+        note: 'Reserved shadow account. Non-earning until activation policy is finalized.'
       },
-      {
-        id: 'YOR0001-FULL',
-        owner: 'YOR0001',
-        state: 'converted_full',
-        placement: 'left',
-        walletEnabled: true,
-        unilevelEnabled: true,
-        binaryCycleEnabled: true,
-        note: 'Converted full accounts can earn only after explicit qualification and audit evidence.'
-      }
+      ...(isStockistOwner
+        ? [{
+            id: `${normalizedOwner}-FULL`,
+            owner: normalizedOwner,
+            state: 'converted_full' as const,
+            placement: 'left' as const,
+            walletEnabled: true,
+            unilevelEnabled: true,
+            binaryCycleEnabled: true,
+            note: 'Converted full accounts can earn only after explicit qualification and audit evidence.'
+          }]
+        : [])
     ]
   };
 }
@@ -550,10 +557,14 @@ export function buildAdminMvpDashboard(user: SessionUser) {
     ],
     modules: [
       'member-management',
-      'sponsor-tree',
-      'binary-placement-tree',
+      'account-genealogy',
       'package-rule-matrix',
       'get-five-reports',
+      'get-five-package-claims',
+      'cd-accounts',
+      'voucher-management',
+      'rankings',
+      'global-bonus',
       'wallet-ledger',
       'encashment-reports',
       'audit-status',

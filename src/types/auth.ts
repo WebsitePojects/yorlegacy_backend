@@ -99,3 +99,70 @@ export type AdminOfficeData = {
   gatedActions: GatedAction[];
   notices: string[];
 };
+
+export type MemberAccountStatus = 'active' | 'pending' | 'frozen' | 'suspended';
+
+export type AdminMemberDirectoryRow = {
+  username: string;
+  fullName: string;
+  packageTier: string;
+  accountStatus: MemberAccountStatus;
+  stockist: boolean;
+  sponsorCode: string;
+  directReferrals: number;
+  walletAvailable: string;
+  cdBalance: string;
+  lastActivity: string;
+  actions: string[];
+};
+
+export type AdminMemberProfile = {
+  username: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  packageTier: string;
+  accountStatus: MemberAccountStatus;
+  stockist: boolean;
+  referralCode: string;
+  sponsorCode: string;
+  email: string;
+  phone: string;
+  address: string;
+  payoutOption: string;
+  payoutDetails: string;
+  directReferrals: number;
+  walletAvailable: string;
+  walletPending: string;
+  cdBalance: string;
+  lastActivity: string;
+  actions: string[];
+};
+
+export type AdminMemberManagementCenter = {
+  moneyMode: 'playground' | 'sandbox';
+  query: string;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  rows: AdminMemberDirectoryRow[];
+  selectedMember: AdminMemberProfile | null;
+  actionNotes: string[];
+};
+
+export type ShadowAccountCenter = {
+  moneyMode: 'playground' | 'sandbox';
+  owner: string;
+  accounts: Array<{
+    id: string;
+    owner: string;
+    state: string;
+    placement: 'left' | 'right';
+    walletEnabled: boolean;
+    unilevelEnabled: boolean;
+    binaryCycleEnabled: boolean;
+    note: string;
+  }>;
+};

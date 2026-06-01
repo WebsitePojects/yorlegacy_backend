@@ -25,7 +25,9 @@ import {
 import { packagePolicies } from '../compensation/mvp-service.js';
 
 const STAFF_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
-const FINANCE_ROLES: AppRole[] = ['admin', 'cashier', 'superadmin'];
+const ADMIN_AND_SUPERADMIN_ROLES: AppRole[] = ['admin', 'superadmin'];
+const CASHIER_CODE_ROLES: AppRole[] = ['cashier', 'admin', 'superadmin'];
+const FINANCE_ROLES: AppRole[] = ['admin', 'superadmin'];
 const EXECUTIVE_ROLES: AppRole[] = ['admin', 'bod', 'superadmin'];
 const ALL_OPS_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 
@@ -51,6 +53,8 @@ const members: MemberRecord[] = [
     userId: 'yor-member-demo',
     username: 'YOR0001',
     fullName: 'Yor Member',
+    firstName: 'Yor',
+    lastName: 'Member',
     email: 'member@yor.local',
     packageTier: 'Standard',
     accountStatus: 'active',
@@ -64,12 +68,15 @@ const members: MemberRecord[] = [
     walletAvailable: 15200.75,
     walletPending: 4300,
     cdBalance: 0,
+    stockist: false,
     lastActivity: '2026-05-28'
   },
   {
     userId: 'yor-legacy-002',
     username: 'YOR0002',
     fullName: 'Alyssa Cruz',
+    firstName: 'Alyssa',
+    lastName: 'Cruz',
     email: 'alyssa.cruz@example.test',
     packageTier: 'Business',
     accountStatus: 'active',
@@ -83,12 +90,15 @@ const members: MemberRecord[] = [
     walletAvailable: 8950,
     walletPending: 1500,
     cdBalance: 500,
+    stockist: false,
     lastActivity: '2026-05-27'
   },
   {
     userId: 'yor-legacy-003',
     username: 'YOR0003',
     fullName: 'Marco Reyes',
+    firstName: 'Marco',
+    lastName: 'Reyes',
     email: 'marco.reyes@example.test',
     packageTier: 'VIP',
     accountStatus: 'active',
@@ -102,12 +112,15 @@ const members: MemberRecord[] = [
     walletAvailable: 31420,
     walletPending: 6100,
     cdBalance: 0,
+    stockist: true,
     lastActivity: '2026-05-26'
   },
   {
     userId: 'yor-legacy-004',
     username: 'YOR0004',
     fullName: 'Nica Santos',
+    firstName: 'Nica',
+    lastName: 'Santos',
     email: 'nica.santos@example.test',
     packageTier: 'Classic',
     accountStatus: 'pending',
@@ -121,12 +134,15 @@ const members: MemberRecord[] = [
     walletAvailable: 700,
     walletPending: 300,
     cdBalance: 0,
+    stockist: false,
     lastActivity: '2026-05-25'
   },
   {
     userId: 'yor-legacy-005',
     username: 'YOR0005',
     fullName: 'Ramon Dela Cruz',
+    firstName: 'Ramon',
+    lastName: 'Dela Cruz',
     email: 'ramon.dc@example.test',
     packageTier: 'Basic',
     accountStatus: 'active',
@@ -140,6 +156,7 @@ const members: MemberRecord[] = [
     walletAvailable: 1850,
     walletPending: 250,
     cdBalance: 150,
+    stockist: true,
     lastActivity: '2026-05-24'
   }
 ];
@@ -199,10 +216,12 @@ const payoutRows: PayoutRow[] = [
     member: 'YOR0001',
     gross: money(8000),
     fee: money(100),
+    tax: money(0),
     cdDeduction: money(0),
     net: money(7900),
-    status: 'released Friday',
+    status: 'paid',
     method: 'GCash',
+    remarks: 'Paid during Friday release batch.',
     createdAt: '2026-05-24T08:00:00Z'
   },
   {
@@ -210,41 +229,55 @@ const payoutRows: PayoutRow[] = [
     member: 'YOR0003',
     gross: money(12500),
     fee: money(100),
+    tax: money(0),
     cdDeduction: money(500),
     net: money(11900),
-    status: 'for verification',
+    status: 'requested',
     method: 'Bank',
+    remarks: 'Awaiting operator review and payout note.',
     createdAt: '2026-05-17T08:00:00Z'
   }
 ];
 
 const activationRows: ActivationRow[] = [
   {
-    code: 'YOR-ACT-1001',
+    code: 'PDSTYQ8M4K',
+    accountType: 'PD',
     packageTier: 'Standard',
     assignedTo: 'YOR0001',
     status: 'used',
+    paymentStatus: 'paid',
+    remarks: 'Consumed in prior registration cycle.',
     generatedAt: '2026-05-20'
   },
   {
-    code: 'YOR-ACT-1002',
+    code: 'FSBUP3N9XA',
+    accountType: 'FS',
     packageTier: 'Business',
     assignedTo: 'YOR0002',
     status: 'used',
+    paymentStatus: 'externally-paid',
+    remarks: 'Settled member-to-member outside office.',
     generatedAt: '2026-05-21'
   },
   {
-    code: 'YOR-ACT-1003',
+    code: 'PDSTK7V2LC',
+    accountType: 'PD',
     packageTier: 'Standard',
     assignedTo: 'YOR0001',
     status: 'available',
+    paymentStatus: 'paid',
+    remarks: 'Paid and ready for release cycle.',
     generatedAt: '2026-05-28'
   },
   {
-    code: 'YOR-ACT-1004',
+    code: 'FSBUZ6Q1RH',
+    accountType: 'FS',
     packageTier: 'Business',
-    assignedTo: 'YOR0003',
-    status: 'available',
+    assignedTo: null,
+    status: 'unreleased',
+    paymentStatus: 'unpaid',
+    remarks: 'General code pool inventory.',
     generatedAt: '2026-05-28'
   }
 ];
@@ -315,6 +348,31 @@ function directsRemainingToNextGroup(member: MemberRecord) {
   return remainder === 0 ? 0 : 5 - remainder;
 }
 
+function shadowRowsForMember(member: MemberRecord) {
+  return [
+    {
+      owner: member.username,
+      placement: 'left',
+      state: member.stockist ? 'activated_shadow' : 'reserved_shadow',
+      walletEnabled: member.stockist ? 'no' : 'no',
+      unilevelEnabled: 'no',
+      binaryCycleEnabled: member.stockist ? 'yes' : 'no',
+      note: member.stockist
+        ? 'Shadow slot is visible for binary support only until final earning policy is approved.'
+        : 'Reserved shadow slot only. No earning rights while inactive.'
+    },
+    {
+      owner: member.username,
+      placement: 'right',
+      state: 'reserved_shadow',
+      walletEnabled: 'no',
+      unilevelEnabled: 'no',
+      binaryCycleEnabled: 'no',
+      note: 'Inactive shadow slot shown for placement visibility and transcript parity.'
+    }
+  ];
+}
+
 function subtreeMembers(rootUsername: string, side: 'left' | 'right') {
   const all = currentMembers();
   const directRoot = all.find((member) => member.placementParentUsername === rootUsername && member.placement === side);
@@ -353,6 +411,13 @@ const branchRuntimeNotes: GatedAction[] = [
     requiredEvidence: 'Use the sandbox reset control before a fresh QA pass or when test data becomes noisy.'
   }
 ];
+
+function activationRowsForDisplay(rows: ActivationRow[]) {
+  return rows.map((row) => ({
+    ...row,
+    assignedTo: row.assignedTo ?? 'Unassigned'
+  }));
+}
 
 function table(title: string, rows: Array<Record<string, string | number>>): ReportTable {
   const first = rows[0] ?? {};
@@ -499,8 +564,18 @@ function adminModules(): OperationalModule[] {
       permissions: ALL_OPS_ROLES,
       metrics: [
         metric('Total Accounts', String(allMembers.length), 'Hybrid parity seed'),
-        metric('Active Accounts', String(allMembers.filter((member) => member.accountStatus === 'active').length)),
-        metric('Pending Encashments', String(payoutRowsForTables.filter((row) => row.status.includes('verification')).length), undefined, 'warning')
+        metric(
+          'Paid Accounts',
+          String(allMembers.filter((member) => member.accountStatus === 'active' && member.cdBalance <= 0 && member.packageTier !== 'Business' && member.packageTier !== 'VIP').length)
+        ),
+        metric('Free Slot Accounts', String(allMembers.filter((member) => member.packageTier === 'Business' || member.packageTier === 'VIP').length)),
+        metric('CD Accounts', String(allMembers.filter((member) => member.cdBalance > 0).length)),
+        metric(
+          'Pending Encashments',
+          String(payoutRowsForTables.filter((row) => /requested|queued|verification|pending/i.test(row.status)).length),
+          undefined,
+          'warning'
+        )
       ],
       table: table('Operational account snapshot', memberRows),
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
@@ -510,30 +585,12 @@ function adminModules(): OperationalModule[] {
       label: 'Member Management',
       path: '/admin/member-management',
       group: 'Accounts',
-      description: 'Searchable member list aligned to the current office flow, with Yor package naming.',
+      description: 'Search, review, and update member profile names and contact-ready account details.',
       status: 'live-report',
       legacyReference: 'adminpanel/account-masterlist.php',
-      permissions: EXECUTIVE_ROLES,
+      permissions: CASHIER_CODE_ROLES,
       metrics: [metric('Accounts Indexed', String(allMembers.length)), metric('Pending Accounts', String(allMembers.filter((member) => member.accountStatus === 'pending').length), undefined, 'warning')],
       table: table('Members', memberRows),
-      gatedActions: []
-    },
-    {
-      id: 'sponsor-tree',
-      label: 'Sponsor Tree',
-      path: '/admin/sponsor-tree',
-      group: 'Network',
-      description: 'Direct sponsorship structure stays separate from binary placement for cleaner operations and reporting.',
-      status: 'live-report',
-      legacyReference: 'adminpanel/account-genealogy.php',
-      permissions: EXECUTIVE_ROLES,
-      metrics: [metric('Direct Lines', String(allMembers.length - 1)), metric('Qualified Sponsors', '2')],
-      table: table('Sponsor placements', treeRows.map((row) => ({
-        username: row.username,
-        sponsor: row.sponsor,
-        package: row.package,
-        directReferrals: row.directReferrals
-      }))),
       gatedActions: []
     },
     {
@@ -544,17 +601,25 @@ function adminModules(): OperationalModule[] {
       description: 'Tuesday encashment / Friday payout report with net amounts and CD deductions visible.',
       status: isSandboxMode() ? 'sandbox-write' : 'playground-write',
       legacyReference: 'adminpanel/accounts-encashment.php',
-      permissions: FINANCE_ROLES,
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
       metrics: [metric('Encashment Requests', String(payoutRowsForTables.length)), metric('Net Payable', money(payoutRowsForTables.reduce((sum, row) => sum + (typeof row.net === 'string' ? Number(String(row.net).replace(/[^0-9.-]/g, '')) || 0 : Number(row.net) || 0), 0)))],
       table: table('Encashments', payoutRowsForTables),
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
     },
+    adminMvpModule(
+      'account-shadow-management',
+      'Shadow Accounts',
+      'Network',
+      'Reserved and activated shadow-account visibility kept explicit while final earning policy remains gated.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      allMembers.flatMap((member) => shadowRowsForMember(member))
+    ),
     {
-      id: 'binary-placement-tree',
-      label: 'Binary Placement Tree',
-      path: '/admin/binary-placement-tree',
+      id: 'account-genealogy',
+      label: 'Account Genealogy',
+      path: '/admin/account-genealogy',
       group: 'Network',
-      description: 'Binary tree for left/right placement review, registration planning, and pairing visibility.',
+      description: 'Search-first binary genealogy for left/right placement review, registration planning, and pairing traceability.',
       status: 'live-report',
       legacyReference: 'adminpanel/account-genealogy.php',
       permissions: EXECUTIVE_ROLES,
@@ -562,6 +627,93 @@ function adminModules(): OperationalModule[] {
       table: table('Binary placements', treeRows),
       gatedActions: []
     },
+    adminMvpModule(
+      'finance-accounting',
+      'Finance Accounting',
+      'Finance',
+      'Wallet exposure, payout rows, CD deductions, and accounting review in the Nogatu admin accounting pattern.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      currentWalletRows().map((row) => ({
+        date: row.date,
+        type: row.type,
+        source: row.source,
+        credit: row.credit,
+        debit: row.debit,
+        balance: row.balance,
+        status: row.status
+      }))
+    ),
+    adminMvpModule(
+      'cd-accounts',
+      'CD Accounts',
+      'Finance',
+      'Credit-deduction account balances and settlement readiness carried from the legacy CD account workflow.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      allMembers.map((member) => ({
+        username: member.username,
+        package: member.packageTier,
+        cdBalance: money(member.cdBalance),
+        status: member.cdBalance > 0 ? 'still paying CD' : 'clear',
+        lastActivity: member.lastActivity
+      }))
+    ),
+    adminMvpModule(
+      'voucher-management',
+      'Voucher Management',
+      'Vouchers',
+      'Voucher inventory and release review aligned to Yor package and activation-code controls.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      activationRowsForTables.map((row) => ({
+        code: row.code,
+        accountType: row.accountType,
+        package: row.packageTier,
+        owner: row.assignedTo ?? 'Unassigned',
+        status: row.status,
+        generatedAt: row.generatedAt
+      }))
+    ),
+    adminMvpModule(
+      'rankings',
+      'Rankings',
+      'Compensation',
+      'Rank and volume progress report based on direct referral, binary point, and package-level signals.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      allMembers.map((member) => ({
+        username: member.username,
+        package: member.packageTier,
+        directReferrals: member.directReferrals,
+        leftPoints: member.leftPoints,
+        rightPoints: member.rightPoints,
+        currentRank: member.packageTier === 'VIP' ? 'VIP builder' : 'building'
+      }))
+    ),
+    adminMvpModule(
+      'global-bonus',
+      'Global Bonus',
+      'Compensation',
+      'Stockist-only global pool qualifier review; money writes stay evidence-gated until the Yor global-bonus policy is final.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      allMembers.filter((member) => member.stockist).map((member) => ({
+        username: member.username,
+        package: member.packageTier,
+        eligible: member.packageTier === 'VIP' ? 'candidate' : 'stockist review',
+        basis: 'Stockist-only review / Yor 2% annual global sales pool reference'
+      }))
+    ),
+    adminMvpModule(
+      'get-five-package-claims',
+      'Get Yor Five Package Claims',
+      'Compensation',
+      'Package-claim review for completed five-direct groups, using Yor terminology over legacy Hi-Five naming.',
+      ADMIN_AND_SUPERADMIN_ROLES,
+      allMembers.map((member) => ({
+        username: member.username,
+        package: member.packageTier,
+        samePackageDirects: samePackageDirectCount(member),
+        completedGroups: completedDirectGroups(member),
+        status: completedDirectGroups(member) > 0 ? 'claim review' : 'building'
+      }))
+    ),
     {
       id: 'get-five-reports',
       label: 'Get Yor Five Reports',
@@ -570,7 +722,7 @@ function adminModules(): OperationalModule[] {
       description: 'Five-direct qualification review aligned to the Yor compensation plan terminology.',
       status: 'read-only',
       legacyReference: 'adminpanel/accounts-redeem.php',
-      permissions: ALL_OPS_ROLES,
+      permissions: EXECUTIVE_ROLES,
       metrics: [
         metric('Qualified Members', String(currentMembers().filter((candidate) => samePackageDirectCount(candidate) >= 5).length)),
         metric(
@@ -597,117 +749,19 @@ function adminModules(): OperationalModule[] {
       path: '/admin/activation-codes',
       group: 'Codes',
       description: isSandboxMode()
-        ? 'Activation code inventory and assignment report with branch-local generation enabled.'
-        : 'Activation code inventory and assignment report; generation runs in protected playground mode.',
+        ? 'Generate general codes, release them, review settlement, and transfer sponsor-owned activation codes inside the branch-local sandbox.'
+        : 'Activation code inventory, payment review, and assignment report; generation runs in protected playground mode.',
       status: isSandboxMode() ? 'sandbox-write' : 'playground-write',
       legacyReference: 'adminpanel/manage-codes.php, adminpanel/generate-codes.php',
-      permissions: FINANCE_ROLES,
+      permissions: CASHIER_CODE_ROLES,
       metrics: [
         metric('Codes Tracked', String(activationRowsForTables.length)),
-        metric('Available', String(activationRowsForTables.filter((row) => row.status === 'available').length))
+        metric('Released', String(activationRowsForTables.filter((row) => row.status === 'available').length)),
+        metric('Awaiting Release', String(activationRowsForTables.filter((row) => row.status === 'unreleased').length), undefined, 'warning')
       ],
-      table: table('Activation codes', activationRowsForTables),
+      table: table('Activation codes', activationRowsForDisplay(activationRowsForTables)),
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
-    },
-    {
-      id: 'audit-status',
-      label: 'Audit And Status',
-      path: '/admin/audit-status',
-      group: 'Security',
-      description: 'Auth, role, and operational safety event stream for smoke verification.',
-      status: 'live-report',
-      legacyReference: 'Yor operational hardening layer',
-      permissions: ALL_OPS_ROLES,
-      metrics: [metric('Audit Events', String(auditRows.length)), metric('Money Writes', currentMoneyMode(), isSandboxMode() ? 'Branch-local mutable runtime' : undefined, 'good')],
-      table: table(
-        'Audit trail',
-        auditRows.map((event) => ({
-          occurredAt: event.occurredAt,
-          actor: event.actor,
-          action: event.action,
-          target: event.target
-        }))
-      ),
-      gatedActions: []
-    },
-    adminMvpModule('account-shadow-management', 'Account / Shadow Account Management', 'Accounts', 'Review main, reserved shadow, activated shadow, and converted full account states.'),
-    adminMvpModule('payment-verification', 'Payment Verification', 'Finance', 'Review activation and package payment proof before any account value changes.', FINANCE_ROLES),
-    adminMvpModule('package-rule-matrix', 'Package And Rule Matrix', 'Compensation', 'Read-only package, PV, cap, threshold, and unresolved-rule matrix.'),
-    adminMvpModule('direct-referral-reports', 'Direct Referral Reports', 'Compensation', 'Direct sponsor bonus simulation and eligibility trace.'),
-    adminMvpModule('salesmatch-reports', 'Salesmatch Reports', 'Compensation', 'Binary matching, strong-leg carryover, and cap simulation trace.'),
-    adminMvpModule('binary-cycle-reports', 'Binary Cycle Reports', 'Compensation', 'Percentage-based cycle simulation tied to salesmatch events.'),
-    {
-      id: 'lifestyle-rewards-reports',
-      label: 'Lifestyle Rewards Reports',
-      path: '/admin/lifestyle-rewards-reports',
-      group: 'Compensation',
-      description: 'Repeat purchase reward monitoring, 3% lifestyle-rate preview, and threshold visibility by package.',
-      status: 'read-only',
-      legacyReference: 'yor-lifestyle-repeat-purchase',
-      permissions: ALL_OPS_ROLES,
-      metrics: [metric('Tracked Packages', '4'), metric('Reward Rate', '3% public rule')],
-      table: table(
-        'Lifestyle reward monitor',
-        currentMembers().map((candidate) => {
-          const policy = packagePolicyForTier(candidate.packageTier);
-          const target = policy?.lifestyleRepeatPurchase ?? 0;
-          const currentRepeat = target ? Math.round(target * 0.72) : 0;
-          return {
-            username: candidate.username,
-            package: candidate.packageTier,
-            repeatPurchaseTarget: target ? money(target) : 'Not eligible',
-            currentRepeatPurchase: target ? money(currentRepeat) : 'Not eligible',
-            progressPercent: target ? `${Math.min(100, Math.round((currentRepeat / target) * 100))}%` : '0%',
-            projectedReward: target ? money(currentRepeat * 0.03) : 'Not eligible'
-          };
-        })
-      ),
-      gatedActions: []
-    },
-    {
-      id: 'unilevel-rank-reports',
-      label: 'Unilevel / Rank Reports',
-      path: '/admin/unilevel-rank-reports',
-      group: 'Compensation',
-      description: 'Ten-level unilevel monitoring with the public 11 billion illustration and rank oversight.',
-      status: 'read-only',
-      legacyReference: 'yor-unilevel-rank',
-      permissions: ALL_OPS_ROLES,
-      metrics: [metric('Potential Income', 'PHP 11 Billion'), metric('Visible Levels', '10')],
-      table: table('Unilevel rank monitor', [
-        { level: '01', percent: '10%', potential: 'PHP 10,000', note: '200 PV foundation level' },
-        { level: '02', percent: '8%', potential: 'PHP 100,000', note: '200 PV growth level' },
-        { level: '03', percent: '5%', potential: 'PHP 1,000,000', note: '200 PV builder level' },
-        { level: '10', percent: '1%', potential: 'PHP 10,000,000,000', note: 'Long-range legacy level' }
-      ]),
-      gatedActions: []
-    },
-    {
-      id: 'global-bonus-pool',
-      label: 'Global Bonus Pool',
-      path: '/admin/global-bonus-pool',
-      group: 'Compensation',
-      description: 'VIP-only eligibility review for the annual 2% global sales pool and maintenance window.',
-      status: 'read-only',
-      legacyReference: 'yor-global-bonus',
-      permissions: ALL_OPS_ROLES,
-      metrics: [metric('Eligible Accounts', String(currentMembers().filter((candidate) => candidate.packageTier === 'VIP').length)), metric('Pool Rule', '2% yearly')],
-      table: table(
-        'Global bonus qualifiers',
-        currentMembers()
-          .filter((candidate) => candidate.packageTier === 'VIP')
-          .map((candidate) => ({
-            username: candidate.username,
-            package: candidate.packageTier,
-            maintenance: '6-month active account maintenance',
-            qualifierPath: 'Hall of Famer / top global qualifiers',
-            status: 'eligible to monitor'
-          }))
-      ),
-      gatedActions: []
-    },
-    adminMvpModule('wallet-ledger', 'Wallet Ledger', 'Finance', 'Append-only wallet ledger and adjustment audit surface.', FINANCE_ROLES, walletRowsForTables),
-    adminMvpModule('system-health', 'System Health', 'Security', 'Health, logging, backup, and operational readiness surface.')
+    }
   ];
 }
 
@@ -733,7 +787,7 @@ function memberModules(member: MemberRecord): OperationalModule[] {
     { level: '06', percent: '3%', requiredPV: '200 PV', potential: 'PHP 1,000,000,000', status: 'locked' },
     { level: '07-10', percent: '2% / 1% / 1% / 1%', requiredPV: '200 PV', potential: 'PHP 10,000,000,000+', status: 'long-range' }
   ];
-  const includeGlobalBonus = member.packageTier === 'VIP';
+  const includeGlobalBonus = member.stockist;
 
   return ([
     {
@@ -861,6 +915,19 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       gatedActions: []
     },
     {
+      id: 'account-shadow-management',
+      label: 'Shadow Accounts',
+      path: '/member/account-shadow-management',
+      group: 'Network',
+      description: 'Reserved and activated shadow-account visibility aligned to the transcript-style network explanation.',
+      status: 'read-only',
+      legacyReference: 'yor-shadow-account-transcript',
+      permissions: ['member', ...STAFF_ROLES],
+      metrics: [metric('Shadow Slots', String(shadowRowsForMember(member).length)), metric('Stockist', member.stockist ? 'Yes' : 'No')],
+      table: table('Shadow account states', shadowRowsForMember(member)),
+      gatedActions: []
+    },
+    {
       id: 'get-five-bonus',
       label: 'Get Yor Five Bonus',
       path: '/member/get-five-bonus',
@@ -896,7 +963,7 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       legacyReference: 'ecom/myactivation-codes.php',
       permissions: ['member', ...STAFF_ROLES],
       metrics: [metric('Owned Codes', String(activationRowsForMember.filter((row) => row.assignedTo === member.username).length))],
-      table: table('Activation codes', activationRowsForMember.filter((row) => row.assignedTo === member.username || row.assignedTo === 'available')),
+      table: table('Activation codes', activationRowsForDisplay(activationRowsForMember.filter((row) => row.assignedTo === member.username || row.assignedTo === null))),
       gatedActions: []
     },
     {
@@ -980,15 +1047,15 @@ function memberModules(member: MemberRecord): OperationalModule[] {
             label: 'Global Bonus Eligibility',
             path: '/member/global-bonus-eligibility',
             group: 'Compensation',
-            description: 'Annual global bonus qualifier review reserved for VIP accounts and hall-of-fame paths.',
+            description: 'Annual global bonus qualifier review reserved for stockist accounts and hall-of-fame paths.',
             status: 'read-only',
             legacyReference: 'yor-global-bonus',
             permissions: ['member', ...STAFF_ROLES],
-            metrics: [metric('Eligibility', 'VIP qualified'), metric('Maintenance Window', '6 months active')],
+            metrics: [metric('Eligibility', member.packageTier === 'VIP' ? 'VIP stockist' : 'Stockist review'), metric('Maintenance Window', '6 months active')],
             table: table('Global bonus eligibility', [
               {
                 package: member.packageTier,
-                qualification: 'VIP',
+                qualification: member.packageTier === 'VIP' ? 'VIP stockist' : 'Stockist',
                 maintenance: '6-month active account maintenance',
                 pool: '2% yearly global sales pool',
                 status: 'eligible to monitor'
@@ -1082,8 +1149,12 @@ export function buildOpsOfficeSnapshot(
     },
     metrics: [
       metric('Total Accounts', String(activeMembers.length), 'Hybrid parity seed'),
-      metric('Wallet Exposure', money(activeMembers.reduce((sum, member) => sum + member.walletAvailable + member.walletPending, 0))),
-      metric('Visible Modules', String(visibleModules.length)),
+      metric(
+        'Paid Accounts',
+        String(activeMembers.filter((member) => member.accountStatus === 'active' && member.cdBalance <= 0 && member.packageTier !== 'Business' && member.packageTier !== 'VIP').length)
+      ),
+      metric('Free Slot Accounts', String(activeMembers.filter((member) => member.packageTier === 'Business' || member.packageTier === 'VIP').length)),
+      metric('CD Accounts', String(activeMembers.filter((member) => member.cdBalance > 0).length)),
       metric('Money Writes', currentMoneyMode(), isSandboxMode() ? 'Branch-local mutable runtime' : 'Reports-first safety mode', 'good')
     ],
     modules: visibleModules,

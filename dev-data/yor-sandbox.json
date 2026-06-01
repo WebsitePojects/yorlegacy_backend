@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-05-30T17:21:27.533Z",
-    "lastMutationAt": "2026-05-30T17:21:27.719Z"
+    "lastResetAt": "2026-05-31T12:11:33.559Z",
+    "lastMutationAt": "2026-05-31T14:56:51.340Z"
   },
   "users": [
     {
@@ -79,8 +79,12 @@
       "userId": "yor-member-demo",
       "username": "YOR0001",
       "fullName": "Yor Member",
+      "firstName": "Yor",
+      "lastName": "Member",
+      "middleName": "",
       "email": "member@yor.local",
       "phone": "+63 900 000 0001",
+      "address": "Makati City, Metro Manila",
       "packageTier": "Standard",
       "accountStatus": "active",
       "referralCode": "YOR-MEMBER-001",
@@ -93,13 +97,21 @@
       "walletAvailable": 15200.75,
       "walletPending": 4300,
       "cdBalance": 0,
-      "lastActivity": "2026-05-28"
+      "payoutOption": "GCash",
+      "payoutDetails": "09170000001",
+      "lastActivity": "2026-05-31",
+      "stockist": false
     },
     {
       "userId": "yor-legacy-002",
       "username": "YOR0002",
       "fullName": "Alyssa Cruz",
+      "firstName": "Alyssa",
+      "lastName": "Cruz",
+      "middleName": "",
       "email": "alyssa.cruz@example.test",
+      "phone": "+63 917 100 2002",
+      "address": "Quezon City, Metro Manila",
       "packageTier": "Business",
       "accountStatus": "active",
       "referralCode": "YOR-ALYSSA",
@@ -112,13 +124,21 @@
       "walletAvailable": 8950,
       "walletPending": 1500,
       "cdBalance": 500,
-      "lastActivity": "2026-05-27"
+      "payoutOption": "Bank Deposit",
+      "payoutDetails": "Alyssa Cruz / BDO ****1202",
+      "lastActivity": "2026-05-27",
+      "stockist": false
     },
     {
       "userId": "yor-legacy-003",
       "username": "YOR0003",
-      "fullName": "Marco Reyes",
+      "fullName": "Marco S Reyes",
+      "firstName": "Marco",
+      "lastName": "Reyes",
+      "middleName": "S",
       "email": "marco.reyes@example.test",
+      "phone": "+63 917 100 2003",
+      "address": "Pasig City, Metro Manila",
       "packageTier": "VIP",
       "accountStatus": "active",
       "referralCode": "YOR-MARCO",
@@ -131,15 +151,23 @@
       "walletAvailable": 31420,
       "walletPending": 6100,
       "cdBalance": 0,
-      "lastActivity": "2026-05-26"
+      "payoutOption": "GCash",
+      "payoutDetails": "09171234567",
+      "lastActivity": "2026-05-31",
+      "stockist": false
     },
     {
       "userId": "yor-legacy-004",
       "username": "YOR0004",
       "fullName": "Nica Santos",
+      "firstName": "Nica",
+      "lastName": "Santos",
+      "middleName": "",
       "email": "nica.santos@example.test",
+      "phone": "+63 917 100 2004",
+      "address": "Marikina City, Metro Manila",
       "packageTier": "Classic",
-      "accountStatus": "pending",
+      "accountStatus": "active",
       "referralCode": "YOR-NICA",
       "sponsorCode": "YOR-ALYSSA",
       "placement": "left",
@@ -150,13 +178,21 @@
       "walletAvailable": 700,
       "walletPending": 300,
       "cdBalance": 0,
-      "lastActivity": "2026-05-25"
+      "payoutOption": "Pickup",
+      "payoutDetails": "Cash",
+      "lastActivity": "2026-05-31",
+      "stockist": false
     },
     {
       "userId": "yor-legacy-005",
       "username": "YOR0005",
-      "fullName": "Ramon Dela Cruz",
+      "fullName": "Ramon Dela Dela Cruz",
+      "firstName": "Ramon",
+      "lastName": "Dela Cruz",
+      "middleName": "Dela",
       "email": "ramon.dc@example.test",
+      "phone": "+63 917 100 2005",
+      "address": "Antipolo City, Rizal",
       "packageTier": "Basic",
       "accountStatus": "active",
       "referralCode": "YOR-RAMON",
@@ -169,65 +205,92 @@
       "walletAvailable": 1850,
       "walletPending": 250,
       "cdBalance": 150,
-      "lastActivity": "2026-05-24"
+      "payoutOption": "Remittance Center",
+      "payoutDetails": "Cebuana / Ramon Dela Cruz",
+      "lastActivity": "2026-05-24",
+      "stockist": false
     }
   ],
   "activationRows": [
     {
-      "code": "YOR-ACT-1001",
+      "code": "PDSTYQ8M4K",
+      "accountType": "PD",
       "packageTier": "Standard",
       "assignedTo": "YOR0001",
       "status": "used",
-      "generatedAt": "2026-05-20"
+      "generatedAt": "2026-05-20",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1002",
+      "code": "FSBUP3N9XA",
+      "accountType": "FS",
       "packageTier": "Business",
       "assignedTo": "YOR0002",
       "status": "used",
-      "generatedAt": "2026-05-21"
+      "generatedAt": "2026-05-21",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1003",
+      "code": "PDSTK7V2LC",
+      "accountType": "PD",
       "packageTier": "Standard",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1004",
+      "code": "FSBUZ6Q1RH",
+      "accountType": "FS",
       "packageTier": "Business",
       "assignedTo": "YOR0003",
       "status": "available",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1005",
+      "code": "PDBA5D8WJ2",
+      "accountType": "PD",
       "packageTier": "Basic",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1006",
+      "code": "PDCLV4T9QB",
+      "accountType": "PD",
       "packageTier": "Classic",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1007",
+      "code": "FSBUH7M2KC",
+      "accountType": "FS",
       "packageTier": "Business",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "generatedAt": "2026-05-28"
+      "assignedTo": null,
+      "status": "unreleased",
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     },
     {
-      "code": "YOR-ACT-1008",
+      "code": "FSVI8X4R2M",
+      "accountType": "FS",
       "packageTier": "VIP",
       "assignedTo": "YOR0001",
       "status": "available",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "paymentStatus": "unpaid",
+      "remarks": ""
     }
   ],
   "pairingRows": [
@@ -258,7 +321,9 @@
       "net": "PHP 7,900.00",
       "status": "released Friday",
       "method": "GCash",
-      "createdAt": "2026-05-24T08:00:00Z"
+      "createdAt": "2026-05-24T08:00:00Z",
+      "tax": "PHP 0.00",
+      "remarks": ""
     },
     {
       "reference": "ENC-20260517-002",
@@ -269,7 +334,9 @@
       "net": "PHP 11,900.00",
       "status": "for verification",
       "method": "Bank",
-      "createdAt": "2026-05-17T08:00:00Z"
+      "createdAt": "2026-05-17T08:00:00Z",
+      "tax": "PHP 0.00",
+      "remarks": ""
     }
   ],
   "walletLedgerEntries": [
@@ -315,6 +382,48 @@
   ],
   "auditEvents": [
     {
+      "actor": "Yor Admin",
+      "action": "member_profile_updated",
+      "target": "YOR0003 -> Marco S Reyes",
+      "occurredAt": "2026-05-31T14:56:51.340Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0004 -> active",
+      "occurredAt": "2026-05-31T14:55:54.492Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0004 -> active",
+      "occurredAt": "2026-05-31T14:55:51.356Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0001 -> active",
+      "occurredAt": "2026-05-31T14:55:36.771Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0001 -> suspended",
+      "occurredAt": "2026-05-31T14:55:34.907Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0001 -> active",
+      "occurredAt": "2026-05-31T14:55:32.467Z"
+    },
+    {
+      "actor": "Yor Admin",
+      "action": "member_status_updated",
+      "target": "YOR0001 -> frozen",
+      "occurredAt": "2026-05-31T14:55:29.460Z"
+    },
+    {
       "actor": "Yor Super Admin",
       "action": "login_verified",
       "target": "yoradmin@gmail.com",
@@ -324,7 +433,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-05-30T17:21:27.533Z"
+      "occurredAt": "2026-05-31T12:11:33.559Z"
     }
   ]
 }

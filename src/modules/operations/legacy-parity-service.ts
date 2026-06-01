@@ -1,4 +1,8 @@
-import type { SessionUser } from '../../types/auth.js';
+import type {
+  AdminMemberManagementCenter,
+  MemberAccountStatus,
+  SessionUser
+} from '../../types/auth.js';
 import { buildGatedWriteResponse, getWalletLedger, getMoneyMode } from '../compensation/mvp-service.js';
 import {
   getHybridMemberForUser,
@@ -20,9 +24,16 @@ import {
   getSandboxWalletSummary,
   isSandboxMode,
   approveSandboxEncashment,
+  reviewSandboxActivationCodes,
+  reviewSandboxEncashment,
+  reassignSandboxActivationCodes,
+  releaseSandboxActivationCodes,
+  renameSandboxMember,
   resetSandboxState,
   submitSandboxEncashment,
   transferSandboxActivationCodes,
+  updateSandboxMemberProfile,
+  updateSandboxMemberStatus,
   upgradeSandboxMemberWithCode
 } from '../sandbox/dev-sandbox-store.js';
 
@@ -38,9 +49,12 @@ type GenealogyNode = {
   nodeId: string;
   username: string;
   fullName: string;
+  referralCode: string;
   packageTier: string;
   placement: PlacementSide;
   status: string;
+  depth: number;
+  tracePath: string;
   binaryPoints: number;
   directReferrals: number;
   leftPoints: number;
@@ -77,18 +91,23 @@ function activationInventoryFor(member: MemberRecord) {
   return listHybridActivationRows().map((row, index) => ({
     id: transactionIdFor(index, 'CODE'),
     code: row.code,
+    accountType: row.accountType,
     packageTier: row.packageTier,
-    assignedTo: row.assignedTo,
+    assignedTo: row.assignedTo ?? 'Unassigned',
     status: row.status,
     generatedAt: row.generatedAt,
     transferable: row.assignedTo === member.username && row.status === 'available',
     upgradable: row.assignedTo === member.username && row.status === 'available',
     visibility:
       row.assignedTo === member.username
-        ? 'released-by-sponsor'
-        : row.assignedTo === 'available'
+        ? row.status === 'available'
+          ? 'released-by-sponsor'
+          : 'reserved-awaiting-release'
+        : row.status === 'unreleased'
           ? 'unreleased-admin-pool'
-          : 'used-by-network'
+          : row.status === 'available'
+            ? 'released-to-network'
+            : 'used-by-network'
   }));
 }
 
@@ -141,28 +160,31 @@ function walletTransactionRows(member: MemberRecord) {
 
 function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
   const allMembers = listHybridMembers();
-  const createNode = (member: MemberRecord, placement: PlacementSide): GenealogyNode => {
+  const createNode = (member: MemberRecord, placement: PlacementSide, depth = 0, path: string[] = []): GenealogyNode => {
     const children = allMembers
       .filter((candidate) => candidate.placementParentUsername === member.username)
-      .map((candidate) => createNode(candidate, candidate.placement));
+      .map((candidate) => createNode(candidate, candidate.placement, depth + 1, [...path, member.username]));
 
     return {
-    nodeId: member.username,
-    username: member.username,
-    fullName: member.fullName,
-    packageTier: member.packageTier,
-    placement,
-    status: member.accountStatus,
-    binaryPoints: Math.min(member.leftPoints, member.rightPoints),
-    directReferrals: member.directReferrals,
-    leftPoints: member.leftPoints,
-    rightPoints: member.rightPoints,
-    openSlots: {
-      left: resolveSlotOpen(children, 'left'),
-      right: resolveSlotOpen(children, 'right')
-    },
-    accountStateLabel: accountStateLabel(member),
-    children
+      nodeId: member.username,
+      username: member.username,
+      fullName: member.fullName,
+      referralCode: member.referralCode,
+      packageTier: member.packageTier,
+      placement,
+      status: member.accountStatus,
+      depth,
+      tracePath: [...path, member.username].join(' > '),
+      binaryPoints: Math.min(member.leftPoints, member.rightPoints),
+      directReferrals: member.directReferrals,
+      leftPoints: member.leftPoints,
+      rightPoints: member.rightPoints,
+      openSlots: {
+        left: resolveSlotOpen(children, 'left'),
+        right: resolveSlotOpen(children, 'right')
+      },
+      accountStateLabel: accountStateLabel(member),
+      children
     };
   };
 
@@ -192,19 +214,22 @@ function flattenTree(root: GenealogyNode) {
 function buildSponsorTree(rootMember: MemberRecord): GenealogyNode {
   const allMembers = listHybridMembers();
 
-  const createNode = (member: MemberRecord, placement: PlacementSide): GenealogyNode => {
+  const createNode = (member: MemberRecord, placement: PlacementSide, depth = 0, path: string[] = []): GenealogyNode => {
     const children = allMembers
       .filter((candidate) => candidate.sponsorCode === member.referralCode)
       .slice(0, 6)
-      .map((candidate) => createNode(candidate, candidate.placement));
+      .map((candidate) => createNode(candidate, candidate.placement, depth + 1, [...path, member.username]));
 
     return {
       nodeId: member.username,
       username: member.username,
       fullName: member.fullName,
+      referralCode: member.referralCode,
       packageTier: member.packageTier,
       placement,
       status: member.accountStatus,
+      depth,
+      tracePath: [...path, member.username].join(' > '),
       binaryPoints: Math.min(member.leftPoints, member.rightPoints),
       directReferrals: member.directReferrals,
       leftPoints: member.leftPoints,
@@ -418,6 +443,32 @@ export function buildBinaryGenealogyCenter(user: SessionUser) {
   };
 }
 
+export function buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string) {
+  const member = getHybridMemberForUser(user);
+  const memberRoot = buildMemberBinaryTree(member);
+  const accessibleUsernames = new Set(flattenTree(memberRoot).map((node) => node.username));
+  const requestedRoot = rootUsername ? findMemberByCode(rootUsername) : null;
+  const resolvedRoot =
+    requestedRoot && accessibleUsernames.has(requestedRoot.username) ? requestedRoot : member;
+  const root = resolvedRoot.username === member.username ? memberRoot : buildMemberBinaryTree(resolvedRoot);
+
+  return {
+    moneyMode: currentMoneyMode(),
+    treeType: 'binary-placement',
+    root,
+    nodes: flattenTree(root),
+    notes: [
+      'Direct sponsor genealogy and binary placement remain separate so placement and referral logic do not get mixed.',
+      resolvedRoot.username === member.username
+        ? 'Tree is centered on the signed-in member root.'
+        : `Tree is centered on ${resolvedRoot.username} inside the signed-in member downline scope.`,
+      isSandboxMode()
+        ? 'Open slots are live in the local sandbox so registration writes can be tested end to end.'
+        : 'Open slots are visible for registration planning, but slot-claim writes run in playground mode for Yor MVP demos.'
+    ]
+  };
+}
+
 export function buildSponsorGenealogyCenter(user: SessionUser) {
   const member = getHybridMemberForUser(user);
   const root = buildSponsorTree(member);
@@ -442,9 +493,10 @@ export function buildAdminActivationCodeCenter() {
   const inventory = listHybridActivationRows().map((row, index) => ({
     id: transactionIdFor(index, 'ADMIN-CODE'),
     ...row,
+    assignedTo: row.assignedTo ?? 'Unassigned',
     generatedAt: row.generatedAt,
-    transferable: row.status === 'available',
-    releasable: row.status === 'available'
+    transferable: row.status !== 'used' && row.status !== 'lost',
+    releasable: row.status === 'unreleased'
   }));
 
   return {
@@ -453,14 +505,134 @@ export function buildAdminActivationCodeCenter() {
     metrics: {
       totalCodes: inventory.length,
       availableCodes: inventory.filter((item) => item.status === 'available').length,
-      usedCodes: inventory.filter((item) => item.status === 'used').length
+      unreleasedCodes: inventory.filter((item) => item.status === 'unreleased').length,
+      usedCodes: inventory.filter((item) => item.status === 'used').length,
+      lostCodes: inventory.filter((item) => item.status === 'lost').length,
+      paidCodes: inventory.filter((item) => item.paymentStatus === 'paid' || item.paymentStatus === 'externally-paid').length
     },
     auditTrail: listHybridAuditEvents().filter((event) => event.action.includes('playground') || event.action.includes('sandbox') || event.action.includes('login')),
+    transferTargets: listHybridMembers().map((candidate) => ({
+      username: candidate.username,
+      fullName: candidate.fullName,
+      packageTier: candidate.packageTier
+    })),
     hints: [
-      'Batch generation, release, and reassignment follow the current protected admin code workflow.',
+      'Batch generation, release, settlement review, lost-code tagging, and reassignment follow the current protected admin code workflow.',
       isSandboxMode()
         ? 'Yor sandbox keeps code creation writable in this branch without touching production or reference data.'
         : 'Yor keeps all code-creating actions available in playground while uniqueness and audit tests are accepted.'
+    ]
+  };
+}
+
+function allowedMemberActions(member: MemberRecord): string[] {
+  const actions = ['view-income', 'check-genealogy', 'update-account'];
+
+  if (member.cdBalance > 0) {
+    actions.push('cd-details');
+  }
+
+  if (member.accountStatus !== 'frozen') {
+    actions.push('freeze');
+  }
+
+  if (member.accountStatus !== 'suspended') {
+    actions.push('suspend');
+  }
+
+  if (member.accountStatus !== 'active') {
+    actions.push('activate');
+  }
+
+  return actions;
+}
+
+function paginateRows<T>(rows: T[], page: number, pageSize: number) {
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+
+  return {
+    page: safePage,
+    pageSize,
+    total,
+    totalPages,
+    rows: rows.slice(start, start + pageSize)
+  };
+}
+
+export function buildAdminMemberManagementCenter(input: {
+  query?: string;
+  username?: string;
+  page?: number;
+  pageSize?: number;
+} = {}): AdminMemberManagementCenter {
+  const query = input.query?.trim().toUpperCase() ?? '';
+  const pageSize = Math.min(Math.max(Number(input.pageSize ?? 10), 5), 100);
+  const page = Math.max(Number(input.page ?? 1), 1);
+  const members = listHybridMembers();
+  const filtered = query
+    ? members.filter(
+        (member) =>
+          member.username.toUpperCase().includes(query) ||
+          member.fullName.toUpperCase().includes(query) ||
+          member.referralCode.toUpperCase().includes(query)
+      )
+    : members;
+  const paginated = paginateRows(filtered, page, pageSize);
+  const selectedUsername = input.username?.trim().toUpperCase() || (query && filtered[0]?.username) || '';
+  const selectedMember = members.find((member) => member.username === selectedUsername) ?? null;
+
+  return {
+    moneyMode: currentMoneyMode(),
+    query,
+    page: paginated.page,
+    pageSize: paginated.pageSize,
+    total: paginated.total,
+    totalPages: paginated.totalPages,
+    rows: paginated.rows.map((member) => ({
+      username: member.username,
+      fullName: member.fullName,
+      packageTier: member.packageTier,
+      accountStatus: member.accountStatus as MemberAccountStatus,
+      stockist: member.stockist,
+      sponsorCode: member.sponsorCode,
+      directReferrals: member.directReferrals,
+      walletAvailable: currency(member.walletAvailable),
+      cdBalance: currency(member.cdBalance),
+      lastActivity: member.lastActivity,
+      actions: allowedMemberActions(member)
+    })),
+    selectedMember: selectedMember
+      ? {
+          username: selectedMember.username,
+          fullName: selectedMember.fullName,
+          firstName: selectedMember.firstName,
+          lastName: selectedMember.lastName,
+          middleName: selectedMember.middleName ?? '',
+          packageTier: selectedMember.packageTier,
+          accountStatus: selectedMember.accountStatus as MemberAccountStatus,
+          stockist: selectedMember.stockist,
+          referralCode: selectedMember.referralCode,
+          sponsorCode: selectedMember.sponsorCode,
+          email: selectedMember.email,
+          phone: selectedMember.phone ?? '',
+          address: selectedMember.address ?? '',
+          payoutOption: selectedMember.payoutOption ?? 'GCash',
+          payoutDetails: selectedMember.payoutDetails ?? '',
+          directReferrals: selectedMember.directReferrals,
+          walletAvailable: currency(selectedMember.walletAvailable),
+          walletPending: currency(selectedMember.walletPending),
+          cdBalance: currency(selectedMember.cdBalance),
+          lastActivity: selectedMember.lastActivity,
+          actions: allowedMemberActions(selectedMember)
+        }
+      : null,
+    actionNotes: [
+      'Search is username-first so office operators can work against large member counts without dropdown friction.',
+      'Profile editing mirrors the Nogatu update-account workflow while staying inside the Yor sandbox runtime.',
+      'Freeze and suspend update sandbox access state immediately and can be reset after QA.'
     ]
   };
 }
@@ -476,10 +648,12 @@ export function buildAdminEncashmentCenter() {
     member: row.member,
     gross: row.gross,
     fee: row.fee,
+    tax: row.tax,
     cdDeduction: row.cdDeduction,
     net: row.net,
     method: row.method,
-    status: row.status
+    status: row.status,
+    remarks: row.remarks
   }));
 
   return {
@@ -488,11 +662,11 @@ export function buildAdminEncashmentCenter() {
     totals: {
       gross: encashments.reduce((sum, item) => sum + parseCurrency(item.gross), 0),
       net: encashments.reduce((sum, item) => sum + parseCurrency(item.net), 0),
-      awaitingReview: encashments.filter((item) => /verification|review/i.test(item.status)).length
+      awaitingReview: encashments.filter((item) => /requested|queued|verification|review|pending/i.test(item.status)).length
     },
     processNotes: [
       'Queue follows the Tuesday encashment / Friday release schedule language used in the protected office.',
-      'Approve and reject actions stay accepted until Yor payout rules are fully approved and tested.'
+      'Gross, deductions, remarks, and payout method remain visible so admin and superadmin can edit, cancel, queue, or mark paid with context.'
     ]
   };
 }
@@ -646,17 +820,102 @@ export function runMemberEncashment(user: SessionUser, amount: number) {
 
 export function runAdminGenerateActivationCodes(
   user: SessionUser,
-  payload: { quantity: number; packageTier?: string; assignedTo?: string }
+  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string }
 ) {
   return isSandboxMode()
-    ? generateSandboxActivationCodes(user, payload.quantity, payload.packageTier, payload.assignedTo)
+    ? generateSandboxActivationCodes(user, payload.quantity, payload.packageTier, payload.assignedTo, payload.accountType)
     : buildGatedParityAction('admin-generate-activation-codes');
+}
+
+export function runAdminReleaseActivationCodes(user: SessionUser, payload: { codes: string[] }) {
+  return isSandboxMode()
+    ? releaseSandboxActivationCodes(user, payload.codes)
+    : buildGatedParityAction('admin-release-activation-code');
+}
+
+export function runAdminTransferActivationCodes(
+  user: SessionUser,
+  payload: { targetUsername: string; codes: string[] }
+) {
+  return isSandboxMode()
+    ? reassignSandboxActivationCodes(user, payload.targetUsername, payload.codes)
+    : buildGatedParityAction('admin-transfer-activation-code');
+}
+
+export function runAdminChangeMemberName(
+  user: SessionUser,
+  payload: { username: string; fullName: string }
+) {
+  return isSandboxMode()
+    ? renameSandboxMember(user, payload.username, payload.fullName)
+    : buildGatedParityAction('admin-change-member-name');
+}
+
+export function runAdminUpdateMemberProfile(
+  user: SessionUser,
+  payload: {
+    username: string;
+    firstName: string;
+    lastName: string;
+    middleName?: string;
+    password?: string;
+    payoutOption?: string;
+    payoutDetails?: string;
+    address?: string;
+    contactNumber?: string;
+  }
+) {
+  return isSandboxMode()
+    ? updateSandboxMemberProfile(user, payload.username, payload)
+    : buildGatedParityAction('admin-update-member-profile');
+}
+
+export function runAdminUpdateMemberStatus(
+  user: SessionUser,
+  payload: {
+    username: string;
+    status: MemberAccountStatus;
+  }
+) {
+  return isSandboxMode()
+    ? updateSandboxMemberStatus(user, payload.username, payload.status)
+    : buildGatedParityAction('admin-update-member-status');
 }
 
 export function runAdminApproveEncashment(user: SessionUser, encashmentId: string) {
   return isSandboxMode()
     ? approveSandboxEncashment(user, encashmentId)
     : buildGatedParityAction('admin-approve-encashment');
+}
+
+export function runAdminReviewEncashment(
+  user: SessionUser,
+  encashmentId: string,
+  payload: {
+    action: 'queue' | 'mark-paid' | 'cancel' | 'edit';
+    method?: string;
+    fee?: number;
+    tax?: number;
+    cdDeduction?: number;
+    remarks?: string;
+  }
+) {
+  return isSandboxMode()
+    ? reviewSandboxEncashment(user, encashmentId, payload)
+    : buildGatedParityAction('admin-review-encashment');
+}
+
+export function runAdminReviewActivationCodes(
+  user: SessionUser,
+  payload: {
+    codes: string[];
+    action: 'mark-paid' | 'mark-external-paid' | 'mark-lost' | 'restore';
+    remarks?: string;
+  }
+) {
+  return isSandboxMode()
+    ? reviewSandboxActivationCodes(user, payload)
+    : buildGatedParityAction('admin-review-activation-code');
 }
 
 export function runAdminResetSandbox(user: SessionUser) {

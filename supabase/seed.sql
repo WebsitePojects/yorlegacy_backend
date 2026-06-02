@@ -221,12 +221,12 @@ values
   ('mission', 'legacy', 'A legacy that extends beyond the present', 'The aim is not only business growth, but a durable improvement in lives, communities, and future generations.', 2),
   ('founder', 'story', 'A founder profile rooted in direct-selling credibility', 'The PDF positions the founder through lived business experience, mentoring, and network-building authority rather than abstract brand language.', 1),
   ('perfume-collection', 'catalog', 'Fragrance collection and featured product story', 'The public deck highlights men''s and women''s fragrance entries such as Hugo Boss, Swiss Army, Chanel Bleu, Paris Hilton, Bvlgari Amethyste, and VS Bombshell, while Yor Vision should be presented separately as its own product feature.', 1),
-  ('packages', 'comparison', 'Classic to VIP with visible value progression', 'The public Yor package ladder currently reads Classic, Basic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.', 1),
+  ('packages', 'comparison', 'Basic to VIP with visible value progression', 'The public Yor package ladder currently reads Basic, Classic, Standard, Business, and VIP, paired with public values such as PV-5 through PV-300.', 1),
   ('register', 'details', 'Lead with confidence and low-friction trust', 'The registration screen should keep the Yor visual tone while clearly collecting legal name, email, phone, sponsor details, and selected package.', 1),
   ('thank-you', 'confirmation', 'A calm and elevated confirmation experience', 'The thank-you page should reward commitment with clarity, warmth, and a next-step pathway.', 1),
   ('earn', 'framework', 'The public compensation story at a glance', 'This page should orient the visitor quickly and then let them drill into the details of each public incentive.', 1),
   ('earn/direct-selling', 'mechanics', 'Sell premium perfume with tier-based retail upside', 'The deck presents a 40% lifetime discount and package-based direct selling values, making product movement the first visible income stream.', 1),
-  ('earn/direct-referral', 'mechanics', 'Personally sponsor and earn package-based bonuses', 'The PDF shows public referral values such as Classic: PHP 200, Basic: PHP 1,000, Standard: PHP 5,000, Business: PHP 7,000, and VIP: PHP 15,000.', 1),
+  ('earn/direct-referral', 'mechanics', 'Personally sponsor and earn package-based bonuses', 'The PDF shows public referral values such as Basic: PHP 200, Classic: PHP 1,000, Standard: PHP 5,000, Business: PHP 7,000, and VIP: PHP 15,000.', 1),
   ('earn/salesmatch', 'binary', 'Match both legs without losing the strong side', 'Public salesmatch messaging emphasizes no fifth-pair rule, no two-cycle limit, no side lock, no maintenance, and no daily flush-out.', 1),
   ('earn/salesmatch', 'schedule', 'Public payout rhythm is part of the story', 'Yor presents Tuesday encashment, Friday payout, and a PHP 500 minimum encashment threshold as part of its earnings narrative.', 2),
   ('earn/binary-cycle', 'cycle', 'A second layer beyond direct matching', 'The slide references 2% through 5% public values and frames binary cycle bonus as an added reward stream linked to the broader network.', 1),
@@ -249,8 +249,8 @@ insert into package_catalog (
   notes
 )
 values
-  (10, 'CLASSIC', 'Classic', 1, 1998.00, 5, 250, 200.00, 'Yor compensation PDF public price/PV normalized to the published Yor package ladder.'),
-  (20, 'BASIC', 'Basic', 2, 5998.00, 10, 500, 1000.00, 'Yor compensation PDF public price/PV normalized to the published Yor package ladder.'),
+  (10, 'BASIC', 'Basic', 1, 1998.00, 5, 250, 200.00, 'Yor compensation PDF public price/PV normalized to the published Yor package ladder.'),
+  (20, 'CLASSIC', 'Classic', 2, 5998.00, 10, 500, 1000.00, 'Yor compensation PDF public price/PV normalized to the published Yor package ladder.'),
   (30, 'STANDARD', 'Standard', 3, 25998.00, 50, 2500, 5000.00, 'Yor compensation PDF public price/PV; legacy account code retained only for migration parity.'),
   (40, 'BUSINESS', 'Business', 4, 50998.00, 100, 5000, 7000.00, 'Yor compensation PDF public price/PV; legacy account code retained only for migration parity.'),
   (60, 'VIP', 'VIP', 5, 159998.00, 300, 15000, 15000.00, 'Yor compensation PDF public price/PV; legacy account code retained only for migration parity.')

@@ -141,6 +141,14 @@ describe('Yor MVP compensation APIs', () => {
     expect(binaryTree.body.nodes.length).toBeGreaterThan(1);
     expect(binaryTree.body.root.openSlots.left).toBe(false);
     expect(binaryTree.body.root.openSlots.right).toBe(false);
+    expect(binaryTree.body.root.shadowSlots.left).toMatchObject({
+      label: 'Shadow account',
+      state: 'reserved_shadow',
+      activationStatus: 'inactive',
+      registrationEnabled: true,
+      walletEnabled: false,
+      unilevelEnabled: false
+    });
     expect(sponsorTree.status).toBe(200);
     expect(sponsorTree.body.treeType).toBe('sponsor');
     expect(shadows.status).toBe(200);
@@ -211,6 +219,12 @@ describe('Yor MVP compensation APIs', () => {
     expect(encashments.body.encashments.length).toBeGreaterThan(0);
     expect(genealogyTree.status).toBe(200);
     expect(genealogyTree.body.root.nodeId).toBe('YOR0001');
+    expect(genealogyTree.body.root.shadowSlots.right).toMatchObject({
+      label: 'Shadow account',
+      state: 'reserved_shadow',
+      registrationEnabled: true,
+      binaryCycleEnabled: false
+    });
     expect(sponsorGenealogyTree.status).toBe(200);
     expect(sponsorGenealogyTree.body.treeType).toBe('sponsor');
     expect(gatedWrite.status).toBe(200);

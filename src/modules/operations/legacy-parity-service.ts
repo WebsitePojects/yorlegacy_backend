@@ -44,6 +44,21 @@ const currency = (value: number): string =>
   })}`;
 
 type PlacementSide = 'root' | 'left' | 'right';
+type ShadowSlotState = 'reserved_shadow' | 'activated_shadow';
+
+type GenealogyShadowSlot = {
+  id: string;
+  owner: string;
+  placement: Extract<PlacementSide, 'left' | 'right'>;
+  state: ShadowSlotState;
+  label: string;
+  activationStatus: 'inactive' | 'activated';
+  registrationEnabled: boolean;
+  walletEnabled: boolean;
+  unilevelEnabled: boolean;
+  binaryCycleEnabled: boolean;
+  note: string;
+};
 
 type GenealogyNode = {
   nodeId: string;
@@ -62,6 +77,10 @@ type GenealogyNode = {
   openSlots: {
     left: boolean;
     right: boolean;
+  };
+  shadowSlots: {
+    left: GenealogyShadowSlot;
+    right: GenealogyShadowSlot;
   };
   accountStateLabel: 'PD' | 'FS' | 'CD - Paid';
   children: GenealogyNode[];
@@ -117,6 +136,26 @@ function findMemberByCode(code: string) {
 
 function resolveSlotOpen(children: GenealogyNode[], side: Extract<PlacementSide, 'left' | 'right'>) {
   return !children.some((child) => child.placement === side);
+}
+
+function buildShadowSlot(member: MemberRecord, side: Extract<PlacementSide, 'left' | 'right'>): GenealogyShadowSlot {
+  const isActivatedSupport = member.stockist && side === 'left';
+
+  return {
+    id: `${member.username}-${side.toUpperCase()}-SHADOW`,
+    owner: member.username,
+    placement: side,
+    state: isActivatedSupport ? 'activated_shadow' : 'reserved_shadow',
+    label: 'Shadow account',
+    activationStatus: isActivatedSupport ? 'activated' : 'inactive',
+    registrationEnabled: true,
+    walletEnabled: false,
+    unilevelEnabled: false,
+    binaryCycleEnabled: isActivatedSupport,
+    note: isActivatedSupport
+      ? 'Activated shadow support is visible in the binary tree for placement traceability; final earning rights stay policy-gated.'
+      : 'Inactive shadow account reserved for this open left/right placement. Registering here converts the slot into a normal member account.'
+  };
 }
 
 function walletTransactionRows(member: MemberRecord) {
@@ -183,6 +222,10 @@ function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
         left: resolveSlotOpen(children, 'left'),
         right: resolveSlotOpen(children, 'right')
       },
+      shadowSlots: {
+        left: buildShadowSlot(member, 'left'),
+        right: buildShadowSlot(member, 'right')
+      },
       accountStateLabel: accountStateLabel(member),
       children
     };
@@ -238,6 +281,10 @@ function buildSponsorTree(rootMember: MemberRecord): GenealogyNode {
         left: resolveSlotOpen(children, 'left'),
         right: resolveSlotOpen(children, 'right')
       },
+      shadowSlots: {
+        left: buildShadowSlot(member, 'left'),
+        right: buildShadowSlot(member, 'right')
+      },
       accountStateLabel: accountStateLabel(member),
       children
     };
@@ -256,7 +303,7 @@ function recommendPlacement(root: GenealogyNode) {
       return {
         placementUsername: node.username,
         placementSide: 'left',
-        note: 'Recommended slot uses the first open left position found in the current binary tree preview.'
+        note: 'Recommended slot uses the first open left shadow account found in the current binary tree preview.'
       };
     }
 
@@ -264,7 +311,7 @@ function recommendPlacement(root: GenealogyNode) {
       return {
         placementUsername: node.username,
         placementSide: 'right',
-        note: 'Recommended slot uses the first open right position found in the current binary tree preview.'
+        note: 'Recommended slot uses the first open right shadow account found in the current binary tree preview.'
       };
     }
 

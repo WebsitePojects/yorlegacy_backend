@@ -18,7 +18,9 @@ export async function buildMemberSummary(user: SessionUser) {
       sponsorCode: office.profile.sponsorCode,
       visibleModules: String(office.modules.length),
       walletRulesSource: 'legacy parity report-first layer',
-      payouts: isSandboxMode() ? 'Tuesday encashment / Friday payout, branch sandbox writes' : 'Tuesday encashment / Friday payout, playground writes'
+      payouts: isSandboxMode()
+        ? 'Tuesday encashment / Friday payout, controlled runtime writes'
+        : 'Tuesday encashment / Friday payout, review-mode writes'
     }
   };
 }

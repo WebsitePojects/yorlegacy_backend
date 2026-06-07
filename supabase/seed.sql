@@ -805,7 +805,7 @@ select id, 'salesmatch', 'YOR0001 L/R match', 7500, 0, 10200.75, 'Report-first s
 from app_users
 where email = 'member@yor.local'
 union all
-select id, 'encashment_fee', 'ENC-20260524-001', 0, 100, 2700.75, 'Report-first seed shows fee deduction; write operations remain gated.', 'seed-wallet-003', now() - interval '4 days'
+select id, 'encashment_fee', 'ENC-20260524-001', 0, 50, 2750.75, 'Report-first seed shows fee deduction; write operations remain gated.', 'seed-wallet-003', now() - interval '4 days'
 from app_users
 where email = 'member@yor.local';
 
@@ -840,10 +840,10 @@ select
   2001,
   id,
   15200.75,
-  7300.75,
-  7900,
-  '{"gross":"PHP 8,000.00","net":"PHP 7,900.00"}'::jsonb,
-  100,
+  7250.75,
+  7950,
+  '{"gross":"PHP 8,000.00","net":"PHP 7,950.00"}'::jsonb,
+  50,
   0,
   1,
   'GCash',

@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-01T15:42:25.201Z",
-    "lastMutationAt": "2026-06-01T16:07:35.206Z"
+    "lastResetAt": "2026-06-07T01:16:01.753Z",
+    "lastMutationAt": "2026-06-07T01:16:02.194Z"
   },
   "users": [
     {
@@ -50,6 +50,15 @@
       "passwordHash": "de03724d3e0a945fc1f8a1cb73d69ae16e445f7c92d0710e589de9196e806b433fff0fa683d7e2a1f19bc4373db76366e2fbe9269e6542659b9f55874117050a",
       "passwordSalt": "1ce26b792208c87bc68727308f18d209",
       "status": "active"
+    },
+    {
+      "id": "sandbox-yor0103",
+      "name": "Creditation Flow Prospect",
+      "email": "creditation.flow@example.test",
+      "role": "member",
+      "passwordHash": "8591df06f81b719d797794ac50dc61bfbd31408e36c56287f0987faa8a3c2ac0cf9db8c9ab5d80942c2947833248c54e93ec31db2bb7128ca01fc6d647fa8ec9",
+      "passwordSalt": "1130259f3128226c55455f87f9a488d7",
+      "status": "active"
     }
   ],
   "adminProfiles": [
@@ -91,16 +100,16 @@
       "sponsorCode": "YOR-SPONSOR-001",
       "placement": "root",
       "placementParentUsername": null,
-      "directReferrals": 5,
+      "directReferrals": 6,
       "leftPoints": 24000,
-      "rightPoints": 18000,
-      "walletAvailable": 15200.75,
+      "rightPoints": 23000,
+      "walletAvailable": 20200.75,
       "walletPending": 4300,
       "cdBalance": 0,
       "stockist": false,
       "payoutOption": "GCash",
       "payoutDetails": "09170000001",
-      "lastActivity": "2026-05-28"
+      "lastActivity": "2026-06-07"
     },
     {
       "userId": "yor-legacy-002",
@@ -117,7 +126,7 @@
       "referralCode": "YOR-ALYSSA",
       "sponsorCode": "YOR-MEMBER-001",
       "placement": "left",
-      "placementParentUsername": "YOR0001",
+      "placementParentUsername": "YOR0001-L",
       "directReferrals": 3,
       "leftPoints": 12000,
       "rightPoints": 8000,
@@ -144,9 +153,9 @@
       "referralCode": "YOR-MARCO",
       "sponsorCode": "YOR-MEMBER-001",
       "placement": "right",
-      "placementParentUsername": "YOR0001",
+      "placementParentUsername": "YOR0001-R",
       "directReferrals": 7,
-      "leftPoints": 18000,
+      "leftPoints": 23000,
       "rightPoints": 21000,
       "walletAvailable": 31420,
       "walletPending": 6100,
@@ -171,7 +180,7 @@
       "referralCode": "YOR-NICA",
       "sponsorCode": "YOR-ALYSSA",
       "placement": "left",
-      "placementParentUsername": "YOR0002",
+      "placementParentUsername": "YOR0002-L",
       "directReferrals": 1,
       "leftPoints": 2500,
       "rightPoints": 1500,
@@ -198,7 +207,7 @@
       "referralCode": "YOR-RAMON",
       "sponsorCode": "YOR-MARCO",
       "placement": "right",
-      "placementParentUsername": "YOR0003",
+      "placementParentUsername": "YOR0003-R",
       "directReferrals": 2,
       "leftPoints": 3000,
       "rightPoints": 4000,
@@ -209,59 +218,36 @@
       "payoutOption": "Remittance Center",
       "payoutDetails": "Cebuana / Ramon Dela Cruz",
       "lastActivity": "2026-05-24"
+    },
+    {
+      "userId": "sandbox-yor0103",
+      "username": "YOR0103",
+      "fullName": "Creditation Flow Prospect",
+      "firstName": "Creditation",
+      "lastName": "Prospect",
+      "middleName": "Flow",
+      "email": "creditation.flow@example.test",
+      "phone": "+63 900 111 2202",
+      "address": "",
+      "packageTier": "Standard",
+      "accountStatus": "active",
+      "referralCode": "YOR-MEMBER-0002",
+      "sponsorCode": "YOR-MEMBER-001",
+      "placement": "left",
+      "placementParentUsername": "YOR0003",
+      "directReferrals": 0,
+      "leftPoints": 0,
+      "rightPoints": 0,
+      "walletAvailable": 0,
+      "walletPending": 0,
+      "cdBalance": 0,
+      "stockist": false,
+      "payoutOption": "GCash",
+      "payoutDetails": "+63 900 111 2202",
+      "lastActivity": "2026-06-07"
     }
   ],
   "activationRows": [
-    {
-      "code": "PDSTXRWW9W",
-      "accountType": "PD",
-      "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
-      "generatedAt": "2026-06-01"
-    },
-    {
-      "code": "PDST4YJIBA",
-      "accountType": "PD",
-      "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
-      "generatedAt": "2026-06-01"
-    },
-    {
-      "code": "PDSTQLXDAA",
-      "accountType": "PD",
-      "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
-      "generatedAt": "2026-06-01"
-    },
-    {
-      "code": "PDSTDTXHW",
-      "accountType": "PD",
-      "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
-      "generatedAt": "2026-06-01"
-    },
-    {
-      "code": "PDSTI8GWKA",
-      "accountType": "PD",
-      "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory. Transfer:Yor Admin->YOR0001.",
-      "generatedAt": "2026-06-01"
-    },
     {
       "code": "PDSTYQ8M4K",
       "accountType": "PD",
@@ -270,7 +256,8 @@
       "status": "used",
       "paymentStatus": "paid",
       "remarks": "Consumed in prior registration cycle.",
-      "generatedAt": "2026-05-20"
+      "generatedAt": "2026-05-20",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "FSBUP3N9XA",
@@ -280,17 +267,19 @@
       "status": "used",
       "paymentStatus": "externally-paid",
       "remarks": "Settled member-to-member outside office.",
-      "generatedAt": "2026-05-21"
+      "generatedAt": "2026-05-21",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "PDSTK7V2LC",
       "accountType": "PD",
       "packageTier": "Standard",
-      "assignedTo": "YOR0001",
-      "status": "available",
+      "assignedTo": "YOR0103",
+      "status": "used",
       "paymentStatus": "paid",
-      "remarks": "Paid and ready for release cycle.",
-      "generatedAt": "2026-05-28"
+      "remarks": "Paid and ready for release cycle. Registered YOR0103.",
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "FSBUZ6Q1RH",
@@ -300,7 +289,8 @@
       "status": "available",
       "paymentStatus": "externally-paid",
       "remarks": "Stockist walk-in settlement verified by admin.",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "PDBA5D8WJ2",
@@ -310,7 +300,8 @@
       "status": "available",
       "paymentStatus": "unpaid",
       "remarks": "Awaiting package settlement.",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "PDCLV4T9QB",
@@ -320,7 +311,8 @@
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Ready for direct sponsor release.",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "FSBUH7M2KC",
@@ -330,7 +322,8 @@
       "status": "unreleased",
       "paymentStatus": "unpaid",
       "remarks": "General code pool inventory.",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
     },
     {
       "code": "FSVI8X4R2M",
@@ -340,7 +333,41 @@
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "High-tier stockist sale cleared.",
-      "generatedAt": "2026-05-28"
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR CODES"
+    },
+    {
+      "code": "MNTXP9Q2KL",
+      "accountType": "PD",
+      "packageTier": "Maintenance",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "paid",
+      "remarks": "Monthly maintenance product code.",
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR MAINTENANCE"
+    },
+    {
+      "code": "PERF8M3N2A",
+      "accountType": "PD",
+      "packageTier": "Perfume Pack",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "paid",
+      "remarks": "Yor Perfume variant bundle.",
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR PERFUME"
+    },
+    {
+      "code": "VISI3P9K7X",
+      "accountType": "PD",
+      "packageTier": "Vision Drops",
+      "assignedTo": "YOR0001",
+      "status": "available",
+      "paymentStatus": "paid",
+      "remarks": "Yor Vision wellness drops.",
+      "generatedAt": "2026-05-28",
+      "codeFamily": "YOR VISION"
     }
   ],
   "pairingRows": [
@@ -366,10 +393,12 @@
       "reference": "ENC-20260524-001",
       "member": "YOR0001",
       "gross": "PHP 8,000.00",
-      "fee": "PHP 100.00",
-      "tax": "PHP 0.00",
+      "fee": "PHP 450.00",
+      "maintenanceFee": "PHP 0.00",
+      "systemRetainer": "PHP 400.00",
+      "tax": "PHP 800.00",
       "cdDeduction": "PHP 0.00",
-      "net": "PHP 7,900.00",
+      "net": "PHP 6,750.00",
       "status": "paid",
       "method": "GCash",
       "remarks": "Paid during Friday release batch.",
@@ -379,10 +408,12 @@
       "reference": "ENC-20260517-002",
       "member": "YOR0003",
       "gross": "PHP 12,500.00",
-      "fee": "PHP 100.00",
-      "tax": "PHP 0.00",
+      "fee": "PHP 675.00",
+      "maintenanceFee": "PHP 0.00",
+      "systemRetainer": "PHP 625.00",
+      "tax": "PHP 1,250.00",
       "cdDeduction": "PHP 500.00",
-      "net": "PHP 11,900.00",
+      "net": "PHP 10,075.00",
       "status": "requested",
       "method": "Bank",
       "remarks": "Awaiting operator review and payout note.",
@@ -390,6 +421,19 @@
     }
   ],
   "walletLedgerEntries": [
+    {
+      "id": "WL-004",
+      "memberUsername": "YOR0001",
+      "walletType": "main",
+      "entryType": "direct_referral",
+      "sourceReference": "YOR0103",
+      "creditAmount": 5000,
+      "debitAmount": 0,
+      "balanceAfter": 20200.75,
+      "status": "posted",
+      "occurredAt": "2026-06-07T01:16:02.194Z",
+      "processId": "sandbox-direct_referral-1780794962194"
+    },
     {
       "id": "WL-001",
       "memberUsername": "YOR0001",
@@ -423,8 +467,8 @@
       "entryType": "encashment_fee",
       "sourceReference": "ENC-20260524-001",
       "creditAmount": 0,
-      "debitAmount": 100,
-      "balanceAfter": 7900,
+      "debitAmount": 50,
+      "balanceAfter": 7950,
       "status": "deducted",
       "occurredAt": "2026-05-24T08:00:00Z",
       "processId": "sandbox-wl-003"
@@ -432,22 +476,10 @@
   ],
   "auditEvents": [
     {
-      "actor": "Yor Admin",
-      "action": "admin_activation_code_transfer",
-      "target": "5 code(s) -> YOR0001",
-      "occurredAt": "2026-06-01T16:07:35.206Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "activation_code_release",
-      "target": "5 code(s) released",
-      "occurredAt": "2026-06-01T16:07:19.927Z"
-    },
-    {
-      "actor": "Yor Admin",
-      "action": "activation_batch_generated",
-      "target": "5 x PD Standard -> unassigned pool",
-      "occurredAt": "2026-06-01T16:06:46.424Z"
+      "actor": "Public Registration",
+      "action": "member_registration_committed",
+      "target": "YOR0103 under YOR0001",
+      "occurredAt": "2026-06-07T01:16:02.194Z"
     },
     {
       "actor": "Yor Super Admin",
@@ -459,7 +491,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-01T15:42:25.201Z"
+      "occurredAt": "2026-06-07T01:16:01.753Z"
     }
   ]
 }

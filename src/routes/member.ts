@@ -18,6 +18,7 @@ import {
   buildSponsorGenealogyCenter,
   buildMemberTransactionCenter,
   buildMemberWalletDetail,
+  findMemberProfileByCode,
   runMemberEncashment,
   runMemberMaintenanceCode,
   runMemberTransferActivationCodes,
@@ -86,6 +87,20 @@ memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 
   res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
 });
 
+memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const username = typeof req.query.username === 'string' ? req.query.username.trim() : '';
+  const member = findMemberProfileByCode(username);
+
+  if (!member) {
+    res.status(404).json({
+      message: 'Member not found'
+    });
+    return;
+  }
+
+  res.status(200).json(member);
+});
+
 memberRouter.post('/api/member/activation-codes/transfer', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   res.status(200).json(
     runMemberTransferActivationCodes(req.authUser!, {
@@ -143,11 +158,11 @@ memberRouter.get('/api/member/registration-readiness', requireRole('member', 'ad
 });
 
 memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  const payload = buildMemberWalletDetail(req.authUser!);
+  const payload = buildMemberWalletDetail(req.authUser!, Number(req.body?.amount ?? 0));
   res.status(200).json({
     moneyMode: payload.moneyMode,
     preview: payload.preview,
-    requestedAmount: req.body?.amount ?? payload.preview.requestedAmount
+    requestedAmount: payload.preview.requestedAmount
   });
 });
 

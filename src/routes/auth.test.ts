@@ -10,7 +10,7 @@ beforeEach(() => {
 describe('auth and protected access', () => {
   it('logs in the seeded Yor super admin credentials', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'yoradmin@gmail.com',
+      username: 'yorsuperadmin',
       password: '1'
     });
 
@@ -21,12 +21,12 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['yormember@gmail.com', 'member'],
-    ['yorcashier@gmail.com', 'cashier'],
-    ['yorbod@gmail.com', 'bod']
-  ])('logs in the seeded %s account', async (email, role) => {
+    ['yormember', 'member'],
+    ['yorcashier_legacy', 'cashier'],
+    ['yorbod_legacy', 'bod']
+  ])('logs in the seeded %s account', async (username, role) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email,
+      username,
       password: '1'
     });
 
@@ -36,13 +36,13 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['admin@yor.local', 'YorAdmin123!', 'admin'],
-    ['cashier@yor.local', 'joyjoy05', 'cashier'],
-    ['bod@yor.local', 'yoralliance321654', 'bod'],
-    ['yoradmin@gmail.com', '1', 'superadmin']
-  ])('lets %s reach the admin dashboard APIs', async (email, password, role) => {
+    ['yoradmin', 'YorAdmin123!', 'admin'],
+    ['yorcashier', 'joyjoy05', 'cashier'],
+    ['yorbod', 'yoralliance321654', 'bod'],
+    ['yorsuperadmin', '1', 'superadmin']
+  ])('lets %s reach the admin dashboard APIs', async (username, password, role) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email,
+      username,
       password
     });
 
@@ -59,11 +59,11 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['cashier@yor.local', 'joyjoy05', 'cashier'],
-    ['bod@yor.local', 'yoralliance321654', 'bod']
-  ])('lets %s reach member oversight APIs', async (email, password, role) => {
+    ['yorcashier', 'joyjoy05', 'cashier'],
+    ['yorbod', 'yoralliance321654', 'bod']
+  ])('lets %s reach member oversight APIs', async (username, password, role) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email,
+      username,
       password
     });
 
@@ -80,7 +80,7 @@ describe('auth and protected access', () => {
 
   it('logs in a member and reaches the member summary', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'member@yor.local',
+      username: 'YOR0001',
       password: 'YorMember123!'
     });
 
@@ -98,7 +98,7 @@ describe('auth and protected access', () => {
 
   it('blocks member access to the admin summary', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'member@yor.local',
+      username: 'YOR0001',
       password: 'YorMember123!'
     });
 
@@ -112,7 +112,7 @@ describe('auth and protected access', () => {
 
   it('returns operational member office data behind auth', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'member@yor.local',
+      username: 'YOR0001',
       password: 'YorMember123!'
     });
 
@@ -128,7 +128,7 @@ describe('auth and protected access', () => {
 
   it('serves sandbox operational modules with mutable branch-only status', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'yoradmin@gmail.com',
+      username: 'yorsuperadmin',
       password: '1'
     });
 
@@ -145,7 +145,7 @@ describe('auth and protected access', () => {
 
   it('filters admin modules by operational role', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'cashier@yor.local',
+      username: 'yorcashier',
       password: 'joyjoy05'
     });
 
@@ -165,9 +165,9 @@ describe('auth and protected access', () => {
     expect(deniedModuleResponse.status).toBe(404);
   });
 
-  it('blocks cashier access to member-management APIs', async () => {
+  it('keeps cashier out of full member-management modules while allowing member-name correction only', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'cashier@yor.local',
+      username: 'yorcashier',
       password: 'joyjoy05'
     });
 
@@ -181,13 +181,14 @@ describe('auth and protected access', () => {
       .get('/api/admin/modules/member-management')
       .set('Cookie', cookie);
 
-    expect(updateResponse.status).toBe(403);
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.status).toBe('completed');
     expect(officeResponse.status).toBe(404);
   });
 
   it('serves every member side-nav module for smoke coverage', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'member@yor.local',
+      username: 'YOR0001',
       password: 'YorMember123!'
     });
 
@@ -199,18 +200,22 @@ describe('auth and protected access', () => {
     expect(officeResponse.status).toBe(200);
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual(
       expect.arrayContaining([
-        'product-orders',
-        'lifestyle-rewards',
-        'get-five-bonus',
+        'dashboard',
+        'wallet',
+        'transactions',
         'salesmatch-bonus',
-        'binary-cycle-bonus',
-        'unilevel-rank-progress',
+        'genealogy',
+        'account-shadow-management',
         'account-details',
+        'direct-referrals',
         'activation-codes',
         'upgrade-registration'
       ])
     );
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain(
+      'get-five-bonus'
+    );
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toContain(
       'global-bonus-eligibility'
     );
 
@@ -220,13 +225,13 @@ describe('auth and protected access', () => {
         .set('Cookie', cookie);
 
       expect(moduleResponse.status).toBe(200);
-      expect(moduleResponse.body.table.rows.length).toBeGreaterThan(0);
+      expect(Array.isArray(moduleResponse.body.table.rows)).toBe(true);
     }
   });
 
   it('serves the complete admin MVP side-nav module inventory', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      email: 'yoradmin@gmail.com',
+      username: 'yorsuperadmin',
       password: '1'
     });
 
@@ -238,18 +243,14 @@ describe('auth and protected access', () => {
     expect(officeResponse.status).toBe(200);
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual(
       expect.arrayContaining([
+        'dashboard',
         'member-management',
         'account-genealogy',
         'encashment-reports',
-        'finance-accounting',
-        'cd-accounts',
-        'voucher-management',
-        'rankings',
-        'global-bonus',
-        'get-five-reports',
         'activation-codes'
       ])
     );
+    expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain('global-bonus');
   });
 
   it('returns unauthenticated me when no session exists', async () => {

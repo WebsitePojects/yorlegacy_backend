@@ -3,6 +3,7 @@ import {
   findSandboxAdminProfileByUserId,
   findSandboxMemberProfileByUserId,
   findSandboxUserByEmail,
+  findSandboxUserByUsername,
   isSandboxMode
 } from '../sandbox/dev-sandbox-store.js';
 import type { AppRole, SessionUser } from '../../types/auth';
@@ -99,6 +100,76 @@ export async function findAppUserByEmail(
   }
 
   return toSessionUser(data);
+}
+
+export async function findAppUserByUsername(
+  username: string
+): Promise<PersistedUser | null> {
+  if (isSandboxMode()) {
+    const sandboxUser = findSandboxUserByUsername(username);
+
+    if (!sandboxUser) {
+      return null;
+    }
+
+    return {
+      id: sandboxUser.id,
+      name: sandboxUser.name,
+      email: sandboxUser.email,
+      role: sandboxUser.role,
+      passwordHash: sandboxUser.passwordHash,
+      passwordSalt: sandboxUser.passwordSalt,
+      status: sandboxUser.status
+    };
+  }
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  // 1. Try to find the member profile by username
+  const { data: memberProfile } = await supabase
+    .from('member_profiles')
+    .select('user_id')
+    .eq('username', username.trim())
+    .maybeSingle();
+
+  let targetUserId = memberProfile?.user_id;
+
+  // 2. If not found, check legacy_access_accounts
+  if (!targetUserId) {
+    const { data: legacyAccount } = await supabase
+      .from('legacy_access_accounts')
+      .select('display_name')
+      .eq('username', username.trim())
+      .maybeSingle();
+
+    if (legacyAccount) {
+      const { data: appUser, error: appUserError } = await supabase
+        .from('app_users')
+        .select('id,email,display_name,role,status,password_hash,password_salt')
+        .eq('display_name', legacyAccount.display_name)
+        .maybeSingle<AppUserRow>();
+
+      if (!appUserError && appUser) {
+        return toSessionUser(appUser);
+      }
+    }
+  } else {
+    const { data: appUser, error: appUserError } = await supabase
+      .from('app_users')
+      .select('id,email,display_name,role,status,password_hash,password_salt')
+      .eq('id', targetUserId)
+      .maybeSingle<AppUserRow>();
+
+    if (!appUserError && appUser) {
+      return toSessionUser(appUser);
+    }
+  }
+
+  return null;
 }
 
 export async function findMemberProfileByUserId(

@@ -3,13 +3,13 @@ import type { PageContent } from '../../types/content';
 export const staticPages: Record<string, PageContent> = {
   home: {
     slug: 'home',
-    eyebrow: 'Business Presentation',
+    eyebrow: 'Founder-Led Legacy Brand Hub',
     title: 'Yor International',
     strapline: 'Legacy',
     summary:
-      'A premium fragrance-driven direct selling platform built around legacy, entrepreneurship, and shared success.',
-    ctaLabel: 'Join Now',
-    ctaHref: '/packages',
+      'A premium fragrance, entrepreneur network, and compensation-plan experience built to guide prospects from brand trust into products, packages, and the Ways of Wealth.',
+    ctaLabel: 'View Ways of Wealth',
+    ctaHref: '/#ways-of-wealth',
     stats: [
       { label: 'Official Deck', value: '19 Slides' },
       { label: 'Network Model', value: '8 Ways to Earn' },
@@ -18,13 +18,13 @@ export const staticPages: Record<string, PageContent> = {
     sections: [
       {
         key: 'vision',
-        heading: 'Built to turn aspiration into shared success',
-        body: 'Yor presents its opportunity through dark luxury visuals, premium product storytelling, and a public compensation plan built for ambitious entrepreneurs.'
+        heading: 'One homepage for the public story',
+        body: 'Yor International should present its trust, vision, mission, products, packages, and Ways of Wealth in one premium long-scroll experience.'
       },
       {
         key: 'invitation',
-        heading: 'Products, packages, and opportunity in one polished journey',
-        body: 'The public experience should move visitors from the business presentation into vision, mission, products, packages, and the eight ways to earn without losing brand confidence.'
+        heading: 'A cleaner path from curiosity to commitment',
+        body: 'The public journey should help visitors understand the brand quickly, explore the package ladder confidently, and move naturally toward login or registration.'
       }
     ]
   },
@@ -33,19 +33,19 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Vision',
     title: 'Our Vision',
     summary:
-      'To build a global community of empowered entrepreneurs where every member can create a lasting legacy of financial freedom, personal growth, and positive impact.',
+      'To build a global community of empowered entrepreneurs who create a legacy of financial freedom, personal growth, and shared success.',
     ctaLabel: 'Explore Mission',
     ctaHref: '/mission',
     sections: [
       {
         key: 'north-star',
-        heading: 'A future where success is shared',
-        body: 'Yor positions its growth story around accessible opportunity, mutual support, and a community that scales without losing its sense of purpose.'
+        heading: 'A future where success and growth can be shared',
+        body: 'The approved Yor vision centers on a worldwide community where entrepreneurship creates freedom, maturity, and a lasting sense of purpose.'
       },
       {
         key: 'human-impact',
-        heading: 'Opportunity that reaches beyond the present',
-        body: 'The public vision language emphasizes long-term freedom, personal development, and the idea that business can create a legacy for future generations.'
+        heading: 'Opportunity that extends beyond the present',
+        body: 'The vision should be presented as more than short-term income, with emphasis on legacy, personal development, and durable progress for future generations.'
       }
     ]
   },
@@ -54,7 +54,7 @@ export const staticPages: Record<string, PageContent> = {
     eyebrow: 'Building Foundations',
     title: 'Mission',
     summary:
-      'We connect and equip aspiring entrepreneurs with high-quality products, proven business tools, and a supportive network that foster both individual achievement and collective success.',
+      'Equip aspiring entrepreneurs with quality products, business tools, ethical leadership, and a supportive network.',
     ctaLabel: 'Meet the Founder',
     ctaHref: '/founder',
     highlights: [
@@ -65,13 +65,13 @@ export const staticPages: Record<string, PageContent> = {
     sections: [
       {
         key: 'ethics',
-        heading: 'Ethical practices and transparent leadership',
-        body: 'The mission emphasizes credibility, honest opportunity, and support structures that respect both distributor and customer.'
+        heading: 'Ethical leadership and practical support',
+        body: 'The mission should be framed around product confidence, responsible leadership, and a system that supports people as they build.'
       },
       {
         key: 'legacy',
-        heading: 'A legacy that extends beyond the present',
-        body: 'The aim is not only business growth, but a durable improvement in lives, communities, and future generations.'
+        heading: 'A network that helps people grow together',
+        body: 'Yor’s mission is not only to open access, but to sustain shared success through better tools, better support, and better long-range direction.'
       }
     ]
   },

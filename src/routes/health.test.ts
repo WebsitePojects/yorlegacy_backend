@@ -9,4 +9,23 @@ describe('GET /health', () => {
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('ok');
   });
+
+  it('returns the operational readiness scope snapshot', async () => {
+    const response = await request(app).get('/health/readiness');
+
+    expect(response.status).toBe(200);
+    expect(response.body.releaseLevel).toBe('ready for internal testing');
+    expect(response.body.publicRoutes).toEqual(['/', '/earn', '/packages', '/register', '/login']);
+    expect(response.body.collapsedRoutes).toContain('/vision');
+    expect(response.body.roleSurfaces.admin.map((module: { id: string }) => module.id)).toEqual([
+      'dashboard',
+      'member-management',
+      'encashment-reports',
+      'account-genealogy',
+      'activation-codes'
+    ]);
+    expect(response.body.roleSurfaces.bod).toEqual(response.body.roleSurfaces.admin);
+    expect(response.body.roleSurfaces.member.map((module: { id: string }) => module.id)).not.toContain('product-orders');
+    expect(response.body.workingCriticalFlows).toContain('Admin encashment review and mark paid');
+  });
 });

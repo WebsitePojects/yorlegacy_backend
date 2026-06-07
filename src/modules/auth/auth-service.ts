@@ -1,13 +1,13 @@
-import { findAppUserByEmail } from './app-users.js';
+import { findAppUserByUsername } from './app-users.js';
 import { authenticateDemoUser } from './demo-users.js';
 import { verifyPassword } from './password.js';
 import type { SessionUser } from '../../types/auth';
 
 export async function authenticateUser(
-  email: string,
+  username: string,
   password: string
 ): Promise<SessionUser | null> {
-  const persistedUser = await findAppUserByEmail(email);
+  const persistedUser = await findAppUserByUsername(username);
 
   if (persistedUser) {
     if (persistedUser.status !== 'active') {
@@ -32,5 +32,5 @@ export async function authenticateUser(
     return null;
   }
 
-  return authenticateDemoUser(email, password);
+  return authenticateDemoUser(username, password);
 }

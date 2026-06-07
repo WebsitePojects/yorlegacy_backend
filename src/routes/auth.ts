@@ -9,8 +9,10 @@ import {
 } from '../modules/auth/session.js';
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1)
+  username: z.string().min(1),
+  password: z.string().min(1),
+  rememberMe: z.boolean().optional(),
+  scope: z.enum(['member', 'office']).optional()
 });
 
 export const authRouter = Router();
@@ -40,18 +42,34 @@ authRouter.post('/api/auth/login', async (req, res) => {
     return;
   }
 
-  const user = await authenticateUser(parsed.data.email, parsed.data.password);
+  const { username, password, rememberMe, scope } = parsed.data;
+  const user = await authenticateUser(username, password);
 
   if (!user) {
     res.status(401).json({
-      message: 'Invalid email or password'
+      message: 'Invalid username or password'
     });
     return;
   }
 
-  const token = createSessionToken(user);
+  // Enforce portal-role isolation/scoping
+  if (scope === 'member' && user.role !== 'member') {
+    res.status(403).json({
+      message: 'Access denied: Members-only portal'
+    });
+    return;
+  }
 
-  res.setHeader('Set-Cookie', createSessionCookie(token));
+  if (scope === 'office' && user.role === 'member') {
+    res.status(403).json({
+      message: 'Access denied: Office-only portal'
+    });
+    return;
+  }
+
+  const token = createSessionToken(user, rememberMe);
+
+  res.setHeader('Set-Cookie', createSessionCookie(token, rememberMe));
   res.status(200).json({
     authenticated: true,
     user

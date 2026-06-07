@@ -20,28 +20,34 @@ pagesRouter.get('/api/pages/:slug', async (request, response) => {
 
 pagesRouter.post('/api/registration/preview', (request, response) => {
   response.status(200).json(
-    buildPublicRegistrationPreview({
+    buildPublicRegistrationPreview(request.authUser ?? null, {
+      origin: request.body?.origin,
       fullName: request.body?.fullName,
+      username: request.body?.username,
       email: request.body?.email,
       phone: request.body?.phone,
       password: request.body?.password,
-      sponsorCode: request.body?.sponsorCode,
-      packageTier: request.body?.packageTier,
-      preferredSide: request.body?.preferredSide
+      activationCode: request.body?.activationCode,
+      referralCode: request.body?.referralCode,
+      placementParentUsername: request.body?.placementParentUsername,
+      placementSide: request.body?.placementSide
     })
   );
 });
 
 pagesRouter.post('/api/registration/submit', (request, response) => {
   response.status(200).json(
-    buildPublicRegistrationSubmit({
+    buildPublicRegistrationSubmit(request.authUser ?? null, {
+      origin: request.body?.origin,
       fullName: request.body?.fullName,
+      username: request.body?.username,
       email: request.body?.email,
       phone: request.body?.phone,
       password: request.body?.password,
-      sponsorCode: request.body?.sponsorCode,
-      packageTier: request.body?.packageTier,
-      preferredSide: request.body?.preferredSide
+      activationCode: request.body?.activationCode,
+      referralCode: request.body?.referralCode,
+      placementParentUsername: request.body?.placementParentUsername,
+      placementSide: request.body?.placementSide
     })
   );
 });

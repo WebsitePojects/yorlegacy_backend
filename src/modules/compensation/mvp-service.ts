@@ -19,11 +19,20 @@ import {
 
 export const moneyMode = isSandboxMode() ? getSandboxMoneyMode() : ('playground' as const);
 
+const currency = (value: number): string =>
+  new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+
 export function getMoneyMode() {
   return moneyMode;
 }
 
 const sourceReferences = [
+  'BUSINESSRULE.md',
   'docs/YOR International Compensation Plan.pdf',
   'docs/yor_international.pdf',
   'docs/reference/yor-compensation-and-credit-layer.md',
@@ -106,20 +115,12 @@ export const packagePolicies: PackagePolicy[] = [
 
 export const earningStreams: EarningStreamPolicy[] = [
   {
-    id: 'direct-selling',
-    label: 'Direct Selling',
-    source: 'Product sales and package-based product pricing',
-    basis: 'SRP PHP 500 less member package buying price',
-    writeStatus: moneyMode,
-    unresolved: ['Admin-configurable product pricing and inventory/payment verification remain pending.']
-  },
-  {
     id: 'direct-referral',
     label: 'Direct Referral',
     source: 'Direct sponsor relationship',
-    basis: 'Yor package referral table, with legacy sponsor-reference parity for operational fallback',
+    basis: 'Yor package referral table across new registrations and qualified package upgrades, always tied to direct sponsor truth',
     writeStatus: moneyMode,
-    unresolved: ['Final per-person vs per-account rule for shadow accounts requires approval.']
+    unresolved: []
   },
   {
     id: 'salesmatch',
@@ -127,47 +128,47 @@ export const earningStreams: EarningStreamPolicy[] = [
     source: 'Binary placement left/right volume',
     basis: 'Package match value, strong-leg retention, weekly/monthly caps',
     writeStatus: moneyMode,
-    unresolved: ['Standard cap discrepancy in transcript vs presentation must be signed off.']
+    unresolved: ['Production deployment still requires append-only ledgers, deterministic process keys, and duplicate-prevention guards beyond the current runtime.']
   },
   {
     id: 'binary-cycle',
     label: 'Binary Cycle Bonus',
-    source: 'Salesmatch event movement across placement tree',
-    basis: 'Classic 2%, Standard 3%, Business 4%, VIP 5%',
+    source: 'First direct left/right recruit pairing under the earner’s own salesmatch event',
+    basis: 'VIP 5% launch scope on the earner’s first direct left/right pair salesmatch only; shadow and spillover placements are excluded',
     writeStatus: moneyMode,
-    unresolved: ['Receiver-vs-earner package basis and shadow-account participation require approval.']
+    unresolved: ['Company still needs final launch confirmation on whether Classic, Standard, and Business participate or VIP-only remains active at launch.']
   },
   {
     id: 'get-five',
     label: 'Get Yor Five Bonus',
     source: 'Five same-package direct signups',
-    basis: 'Classic, Standard, Business, and VIP package-price milestone reward',
+    basis: 'Classic PHP 5,998, Standard PHP 25,998, Business PHP 50,998, and VIP PHP 159,998 reward amounts; Basic is excluded',
     writeStatus: moneyMode,
-    unresolved: ['Three-month reset and repeatability need final written rule.']
+    unresolved: ['Finance must still confirm the reward funding source.']
   },
   {
     id: 'lifestyle-rewards',
     label: 'Lifestyle Rewards',
     source: 'Repeat purchase product movement',
-    basis: '3% public rule, separate lifestyle wallet, package caps',
+    basis: 'Repeat-purchase stream with separate lifestyle wallet, package caps, and approved internal payable-credit handling',
     writeStatus: moneyMode,
-    unresolved: ['PDF notes a possible 1% system calculation conflict.']
+    unresolved: ['Internal finance signoff for the approved display-rate vs payable-rate policy is still pending.']
   },
   {
     id: 'unilevel',
     label: 'Unilevel Bonus / Rank',
     source: 'Direct sponsor genealogy',
-    basis: '10 levels: 10%, 8%, 5%, 5%, 3%, 3%, 2%, 1%, 1%, 1%',
+    basis: '10 sponsor levels with 200 PV monthly maintenance from product repurchases and Nogatu-style repeat-purchase rank race logic',
     writeStatus: moneyMode,
-    unresolved: ['Rank basis is unresolved: total income in deck vs accumulated unilevel income in transcript.']
+    unresolved: ['Separate production, staging, and dev ledger environments remain a deployment prerequisite.']
   },
   {
     id: 'global',
     label: 'Global Bonus',
     source: 'Yearly global sales pool',
-    basis: '2% yearly pool, HOF/center qualifiers, six-month maintenance',
+    basis: '2% yearly global sales pool with Nogatu-style annual pool distribution adapted to Yor qualifier tiers and maintenance continuity',
     writeStatus: moneyMode,
-    unresolved: ['Distribution formula, close date, and maintenance continuity require approval.']
+    unresolved: ['Final Yor qualifier-tier mapping still needs full engineering port confirmation from the Nogatu reference logic.']
   }
 ];
 
@@ -196,15 +197,11 @@ type PackageCatalogRow = {
 };
 
 const simulations: Record<string, IncomeSimulationResult> = {
-  'direct-selling': simulation('direct-selling', 1800, 'Product margin preview', [
-    'Member package: Standard',
-    'Assumed three perfume sales at SRP PHP 500',
-    'Standard member price PHP 300 creates PHP 200 gross margin per bottle'
-  ]),
   'direct-referral': simulation('direct-referral', 5000, 'Qualified direct referral preview', [
     'Direct sponsor relation comes from sponsor_code / drefid parity',
     'Source package: Standard',
-    'Yor Standard referral value: PHP 5,000'
+    'Yor Standard referral value: PHP 5,000',
+    'The same sponsor-truth rule also applies to qualified package upgrades'
   ]),
   salesmatch: simulation('salesmatch', 15000, 'Matched binary volume preview', [
     'Left points: 24,000',
@@ -214,28 +211,29 @@ const simulations: Record<string, IncomeSimulationResult> = {
   ]),
   'binary-cycle': simulation('binary-cycle', 750, 'Cycle percentage preview', [
     'Salesmatch event basis: PHP 15,000',
-    'Receiver package: VIP',
+    'Launch scope: first direct left/right pair only',
+    'Earner package: VIP',
     'VIP binary cycle percent: 5%'
   ]),
   'get-five': simulation('get-five', 25998, 'Same-package direct milestone preview', [
     'Direct same-package Standard recruits: 5',
-    'Reward basis uses Standard package price pending final approval',
+    'Approved Standard reward amount: PHP 25,998',
     'Process key prevents reusing the same five recruits'
   ]),
-  'lifestyle-rewards': simulation('lifestyle-rewards', 900, 'Repeat-purchase lifestyle preview', [
+  'lifestyle-rewards': simulation('lifestyle-rewards', 300, 'Repeat-purchase lifestyle preview', [
     'Repeat purchase pool: PHP 30,000',
-    'Public lifestyle rate: 3%',
-    'Separate lifestyle wallet threshold remains PHP 1,000'
+    'Separate lifestyle wallet threshold remains PHP 1,000',
+    'Posted lifestyle credit follows the approved internal payable-credit rule'
   ]),
   unilevel: simulation('unilevel', 4200, 'Ten-level unilevel preview', [
     'Sponsor genealogy is separate from binary placement',
-    'Levels 1-4 contain qualified repeat purchase volume',
-    'Percentages follow Yor public table'
+    'Unilevel requires 200 PV monthly maintenance from product repurchases',
+    'Rank progression follows repeat-purchase accumulation across sponsor depth'
   ]),
   global: simulation('global', 12000, 'Annual pool eligibility preview', [
     'Yearly pool basis: 2% of approved global net sales',
-    'Member has HOF path marker but final qualifier snapshot is pending',
-    'Distribution remains admin-review only'
+    'Global bonus remains visible in the member office as a qualification stream',
+    'Distribution follows the Nogatu annual pool port adjusted to Yor qualifiers'
   ])
 };
 
@@ -251,8 +249,8 @@ function simulation(streamId: string, amount: number, statusLabel: string, trace
     capApplied: false,
     statusLabel,
     explanation: isSandboxMode()
-      ? `${stream.label} remains simulation-first, while operational sandbox writes are available on wallet, registration, code, and approval flows.`
-      : `${stream.label} is available in playground mode so the operating workflow can be tested end to end while policy evidence remains visible.`,
+      ? `${stream.label} follows the approved rulebook in the current runtime while production-grade ledgers and process keys are being finished.`
+      : `${stream.label} is available in review mode so the operating workflow can be tested end to end while production controls are completed.`,
     calculationTrace: trace,
     requiredEvidence: [
       'Final written business rule',
@@ -302,7 +300,9 @@ async function getSupabaseCompensationPolicy(): Promise<CompensationPolicy | nul
   const packages = packagePolicies.map((policy) => ({ ...policy }));
 
   const streamFallbackById = new Map(earningStreams.map((stream) => [stream.id, stream]));
-  const streams = streamRows.map((row) => {
+  const streams = streamRows
+    .filter((row) => row.stream_key !== 'direct-selling')
+    .map((row) => {
     const fallback = streamFallbackById.get(row.stream_key);
 
     return {
@@ -374,8 +374,8 @@ export function buildMemberMvpDashboard(user: SessionUser) {
     incomeStreams: listIncomeSimulations(),
     notices: [
       isSandboxMode()
-        ? 'Income streams stay simulation-first, but wallet, code, registration, and encashment writes now persist in the local sandbox runtime.'
-        : 'All income values are simulated until the final rulebook is approved.',
+        ? 'The seven internal earning streams now follow the approved rulebook in the current runtime.'
+        : 'The earning streams are rule-aligned here while production ledger controls are still being completed.',
       'Sponsor genealogy and binary placement are tracked separately to protect direct referral and salesmatch parity.'
     ]
   };
@@ -406,10 +406,10 @@ export function buildWallets() {
 
   const wallets = [
     { type: 'main', label: 'Main Earnings Wallet', balance: 15200.75, threshold: 500 },
-    { type: 'lifestyle', label: 'Lifestyle Rewards Wallet', balance: 900, threshold: 1000 },
+    { type: 'lifestyle', label: 'Lifestyle Rewards Wallet', balance: 300, threshold: 1000 },
     { type: 'product', label: 'Product Wallet / Purchase Credits', balance: 2500, threshold: 0 },
     { type: 'pending', label: 'Pending Computed Income', balance: 4300, threshold: 0 },
-    { type: 'encashment', label: 'Approved Encashment Queue', balance: 7900, threshold: 500 }
+    { type: 'encashment', label: 'Approved Encashment Queue', balance: 6730, threshold: 500 }
   ];
 
   return {
@@ -421,10 +421,10 @@ export function buildWallets() {
 
 export function getWalletLedger(): WalletLedgerEntry[] {
   return [
-    ledger('WL-001', 'main', 'direct_referral', 'YOR-ALYSSA', 5000, 0, 15200.75, 'simulated-posted'),
+    ledger('WL-001', 'main', 'direct_referral', 'YOR-MEMBER-002', 5000, 0, 15200.75, 'simulated-posted'),
     ledger('WL-002', 'main', 'salesmatch', 'YOR0001 L/R match', 7500, 0, 10200.75, 'simulated-posted'),
-    ledger('WL-003', 'lifestyle', 'lifestyle_rewards', 'Repeat purchase pool', 900, 0, 900, 'threshold-pending'),
-    ledger('WL-004', 'encashment', 'encashment_fee', 'ENC-20260524-001', 0, 100, 7900, 'simulated-deducted')
+    ledger('WL-003', 'lifestyle', 'lifestyle_rewards', 'Repeat purchase pool', 300, 0, 300, 'threshold-pending'),
+    ledger('WL-004', 'encashment', 'encashment_fee', 'ENC-20260524-001', 0, 470, 6730, 'simulated-deducted')
   ];
 }
 
@@ -513,10 +513,10 @@ export function buildShadowAccounts(ownerUsername = 'YOR0001'): { moneyMode: typ
         placement: 'left',
         walletEnabled: false,
         unilevelEnabled: false,
-        binaryCycleEnabled: isStockistOwner,
+        binaryCycleEnabled: false,
         note: isStockistOwner
-          ? 'Visible as activated shadow support in the sandbox transcript flow; payout policy still requires final approval.'
-          : 'Reserved for placement only; no PV, wallet, unilevel, or payout.'
+          ? 'Activated for binary PV and salesmatch support only; still no wallet, direct referral, unilevel, or binary cycle rights.'
+          : 'Reserved for placement only; the shadow node itself is not a registration surface.'
       },
       {
         id: `${normalizedOwner}-R`,
@@ -526,20 +526,8 @@ export function buildShadowAccounts(ownerUsername = 'YOR0001'): { moneyMode: typ
         walletEnabled: false,
         unilevelEnabled: false,
         binaryCycleEnabled: false,
-        note: 'Reserved shadow account. Non-earning until activation policy is finalized.'
-      },
-      ...(isStockistOwner
-        ? [{
-            id: `${normalizedOwner}-FULL`,
-            owner: normalizedOwner,
-            state: 'converted_full' as const,
-            placement: 'left' as const,
-            walletEnabled: true,
-            unilevelEnabled: true,
-            binaryCycleEnabled: true,
-            note: 'Converted full accounts can earn only after explicit qualification and audit evidence.'
-          }]
-        : [])
+        note: 'Reserved shadow account. Child open slots below this node can be filled, but the node itself stays non-earning.'
+      }
     ]
   };
 }
@@ -552,8 +540,8 @@ export function buildAdminMvpDashboard(user: SessionUser) {
     moneyMode,
     queues: [
       { label: 'Rule confirmations pending', count: [...new Set(earningStreams.flatMap((stream) => stream.unresolved))].length, status: 'attention' },
-      { label: isSandboxMode() ? 'Sandbox payout queue' : 'Simulated payout reviews', count: sandboxEncashments?.totals.awaitingReview ?? 2, status: 'watch' },
-      { label: isSandboxMode() ? 'Sandbox write surfaces' : 'Playground write checks', count: 3, status: 'clear' }
+      { label: isSandboxMode() ? 'Runtime payout queue' : 'Payout reviews', count: sandboxEncashments?.totals.awaitingReview ?? 2, status: 'watch' },
+      { label: isSandboxMode() ? 'Runtime write surfaces' : 'Review-mode write checks', count: 3, status: 'clear' }
     ],
     modules: [
       'member-management',
@@ -606,7 +594,11 @@ export function buildAdminPayouts() {
         id: row.id,
         member: row.member,
         gross: row.gross,
-        deductions: row.cdDeduction,
+        deductions: currency(
+          Number(String(row.fee).replace(/[^0-9.-]/g, '')) +
+          Number(String(row.tax).replace(/[^0-9.-]/g, '')) +
+          Number(String(row.cdDeduction).replace(/[^0-9.-]/g, ''))
+        ),
         net: row.net,
         status: row.status
       }))
@@ -628,7 +620,7 @@ export function buildGatedWriteResponse(action: string) {
     action,
     status: 'applied',
     reason: isSandboxMode()
-      ? 'Sandbox mode committed this workflow into the branch-local runtime.'
-      : 'Playground mode accepted this workflow for end-to-end testing. Final production value movement still requires policy sign-off, process keys, ledger tests, and admin approval evidence.'
+      ? 'Current runtime committed this workflow successfully.'
+      : 'Review mode accepted this workflow for end-to-end testing. Final production value movement still requires policy sign-off, process keys, ledger tests, and admin approval evidence.'
   };
 }

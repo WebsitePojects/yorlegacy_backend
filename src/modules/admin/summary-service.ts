@@ -16,7 +16,7 @@ export async function buildAdminSummary(user: SessionUser) {
       accessScope: office.profile.accessScope,
       officeTitle: office.profile.officeTitle,
       visibleModules: String(office.modules.length),
-      moneyActions: isSandboxMode() ? 'branch sandbox writes enabled' : 'playground reports-first',
+      moneyActions: isSandboxMode() ? 'controlled runtime writes enabled' : 'review-mode reports first',
       operationalSource: 'hybrid legacy parity seed'
     }
   };

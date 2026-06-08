@@ -33,9 +33,19 @@ const ALL_OPS_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
   'dashboard',
   'member-management',
-  'encashment-reports',
   'account-genealogy',
-  'activation-codes'
+  'activation-codes',
+  'encashment-reports',
+  'finance-accounting',
+  'cd-accounts',
+  'voucher-management',
+  'rankings',
+  'global-bonus',
+  'get-five-package-claims',
+  'get-five-reports',
+  'contact-messages',
+  'news-posts',
+  'change-password',
 ]);
 const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
   'dashboard',
@@ -530,7 +540,7 @@ function memberMvpModule(
     status: 'read-only',
     legacyReference: 'Yor MVP compensation prototype',
     permissions: ['member', ...STAFF_ROLES],
-    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Value-changing writes remain approval-controlled.', 'good')],
+    metrics: [],
     table: table(label, rows),
     gatedActions: []
   };
@@ -555,7 +565,7 @@ function adminMvpModule(
       : 'read-only',
     legacyReference: 'Yor MVP admin prototype',
     permissions,
-    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Requires evidence before writes.', 'good')],
+    metrics: [],
     table: table(label, rows),
     gatedActions: isSandboxMode()
       ? []
@@ -765,6 +775,45 @@ function adminModules(): OperationalModule[] {
           status: samePackageDirectCount(candidate) >= 5 ? 'qualified' : 'building'
         }))
       ),
+      gatedActions: []
+    },
+    {
+      id: 'contact-messages',
+      label: 'Contact Messages',
+      path: '/admin/contact-messages',
+      group: 'Content',
+      description: 'Review and manage contact form submissions from the public site.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/contact-messages.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [metric('Total Messages', '0'), metric('Unread', '0', undefined, 'warning')],
+      table: table('Contact Messages', []),
+      gatedActions: []
+    },
+    {
+      id: 'news-posts',
+      label: 'News & Posts',
+      path: '/admin/news-posts',
+      group: 'Content',
+      description: 'Manage news, announcements, memos, and promotions visible on the public site.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/news-posts.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [metric('Published Posts', '0'), metric('Drafts', '0')],
+      table: table('Posts', []),
+      gatedActions: []
+    },
+    {
+      id: 'change-password',
+      label: 'Change Password',
+      path: '/admin/change-password',
+      group: 'Settings',
+      description: 'Update administrator account passwords.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/change-password.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [],
+      table: table('Password Changes', []),
       gatedActions: []
     },
     {
@@ -1202,18 +1251,12 @@ export function buildOpsOfficeSnapshot(
       ),
       metric('Free Slot Accounts', String(activeMembers.filter((member) => member.packageTier === 'Business' || member.packageTier === 'VIP').length)),
       metric('CD Accounts', String(activeMembers.filter((member) => member.cdBalance > 0).length)),
-      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: visibleModules,
     queues,
     auditEvents: activeAuditEvents,
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
-    notices: [
-      isSandboxMode()
-        ? 'Reports and value-changing actions are active in the current runtime for end-to-end office testing.'
-        : 'Reports are operationally wired and role-filtered; value-changing actions remain disabled until documented rule tests pass.',
-      'Hybrid data mirrors the legacy operational reference while Yor-specific package names and public compensation surfaces take priority.'
-    ]
+    notices: []
   };
 }
 
@@ -1250,16 +1293,10 @@ export function buildMemberOfficeSnapshot(
       metric('Left Points', String(mergedMember.leftPoints)),
       metric('Right Points', String(mergedMember.rightPoints)),
       metric('Direct Referrals', String(mergedMember.directReferrals)),
-      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: memberModules(mergedMember).filter((module) => canSeeModule(user, module)),
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
-    alerts: [
-      'Wallet, pairing, referral, and encashment reports are visible for verification.',
-      isSandboxMode()
-        ? 'Registration, code, wallet, and approval flows are active in the current runtime for end-to-end office testing.'
-        : 'Requests that release, deduct, or create value remain in review mode while compensation evidence and tests pass.'
-    ]
+    alerts: []
   };
 }
 

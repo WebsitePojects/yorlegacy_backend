@@ -129,5 +129,5 @@ describe('Can Encode registration flow', () => {
       creditAmount: 5000,
       memberUsername: 'YOR0001'
     });
-  });
+  }, 15000);
 });

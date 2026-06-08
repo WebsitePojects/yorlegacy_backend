@@ -34,6 +34,14 @@ DEMO_SUPERADMIN_EMAIL=yoradmin@gmail.com
 DEMO_SUPERADMIN_PASSWORD=1
 ```
 
+For the phase-1 production encoding path, the backend also needs:
+
+```bash
+YOR_RUNTIME_MODE=production
+SUPABASE_URL=your-supabase-url
+SUPABASE_SECRET_KEY=your-supabase-secret-key
+```
+
 `FRONTEND_ORIGIN` accepts a comma-separated allowlist for local dev origins and deployed frontend domains.
 
 If Supabase is not configured yet:
@@ -50,12 +58,20 @@ If Supabase is configured and you apply the schema/seed:
 
 `SUPABASE_SECRET_KEY` is the preferred modern server-side key. `SUPABASE_SERVICE_ROLE_KEY` is kept for compatibility with older projects. `SUPABASE_PUBLISHABLE_KEY` can safely power read-only public routes when server credentials are not present.
 
+Production note:
+
+- `YOR_RUNTIME_MODE=sandbox` keeps the mutable branch-local runtime active.
+- `YOR_RUNTIME_MODE=production` switches registration and activation-code writes to the Supabase-backed encoding service.
+- Do not flip to `production` until the live database has the latest schema and the backend has a real privileged Supabase key.
+
 ## Supabase Setup
 
 Run these SQL files in order:
 
 1. `supabase/schema.sql`
 2. `supabase/seed.sql`
+
+For the production encoding cutover, re-run the updated `supabase/schema.sql` against the real project before switching `YOR_RUNTIME_MODE` to `production`. The schema now includes production sequences, activation-code event history, placement reservations, compensation queue tables, and server-only grants for the new operational tables in the exposed `public` schema.
 
 The seed creates local starter accounts:
 

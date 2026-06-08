@@ -1,7 +1,10 @@
 import { listOperationalCatalog } from '../operations/hybrid-operational-data.js';
+import { env } from '../../config/env.js';
+import { getSupabaseStatus } from '../../lib/supabase.js';
+import { getProductionEncodingService, isProductionMode } from '../production/runtime.js';
 import { getSandboxMoneyMode, isSandboxMode } from '../sandbox/dev-sandbox-store.js';
 
-const publicRoutes = ['/', '/earn', '/packages', '/register', '/login'];
+const publicRoutes = ['/', '/earn', '/packages', '/register', '/login', '/admin/login'];
 const collapsedRoutes = [
   '/vision',
   '/mission',
@@ -26,7 +29,7 @@ const departmentGoals = [
   {
     surface: 'public',
     goal:
-      'Convert prospects into real Yor registrations by showing only the comp-plan summary, package ladder, registration entry point, and protected-office login.'
+      'Convert prospects into real Yor registrations while keeping member login and office login as separate portals.'
   },
   {
     surface: 'member',
@@ -86,7 +89,20 @@ const nationwideBlockers = [
 
 export function buildOperationalReadinessSnapshot() {
   const { memberModules, adminModules } = listOperationalCatalog();
-  const moneyMode = isSandboxMode() ? getSandboxMoneyMode() : 'playground';
+  const moneyMode = isProductionMode() ? 'production' : isSandboxMode() ? getSandboxMoneyMode() : 'playground';
+  const supabase = getSupabaseStatus();
+  const productionEncodingServiceReady = Boolean(getProductionEncodingService());
+  const productionEncodingBlockers = [
+    !isProductionMode() ? 'Runtime is not switched to YOR_RUNTIME_MODE=production.' : null,
+    !supabase.configured ? 'Missing SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY for trusted server writes.' : null,
+    !productionEncodingServiceReady ? 'Production encoding service is not bootable in the current backend process.' : null
+  ].filter((value): value is string => Boolean(value));
+  const releaseLevel = productionEncodingBlockers.length === 0
+    ? 'production encoding configured; live database verification still required'
+    : 'ready for internal testing';
+  const rationale = productionEncodingBlockers.length === 0
+    ? 'The codebase is wired for production-mode encoding, but the platform still needs live database verification, reconciliation, monitoring, and rollout governance before nationwide release.'
+    : 'The system now exposes only the public and office surfaces that map to working operational flows, but financial integrity, production ledgering, and nationwide governance remain incomplete.';
 
   const modulesForRole = (role: 'admin' | 'cashier' | 'bod' | 'superadmin') =>
     adminModules
@@ -95,10 +111,10 @@ export function buildOperationalReadinessSnapshot() {
 
   return {
     status: 'reviewed',
-    releaseLevel: 'ready for internal testing',
-    rationale:
-      'The system now exposes only the public and office surfaces that map to working operational flows, but financial integrity, production ledgering, and nationwide governance remain incomplete.',
+    releaseLevel,
+    rationale,
     moneyMode,
+    runtimeMode: env.YOR_RUNTIME_MODE,
     systemGoal:
       'Operate the Yor lifecycle from sponsor-owned registration code through member placement, wallet request, and office approval using Yor-facing compensation language and Nogatu-verified operational discipline.',
     departmentGoals,
@@ -113,6 +129,13 @@ export function buildOperationalReadinessSnapshot() {
     },
     workingCriticalFlows,
     criticalWriteEndpoints,
+    productionEncoding: {
+      implemented: true,
+      runtimeMode: env.YOR_RUNTIME_MODE,
+      supabase,
+      serviceReady: productionEncodingServiceReady,
+      blockers: productionEncodingBlockers
+    },
     nationwideBlockers
   };
 }

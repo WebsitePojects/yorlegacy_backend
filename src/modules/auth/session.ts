@@ -3,6 +3,7 @@ import { env } from '../../config/env.js';
 import type { SessionPayload, SessionUser } from '../../types/auth';
 
 export const SESSION_COOKIE_NAME = 'yor_session';
+export const CSRF_COOKIE_NAME = 'yor_csrf';
 
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');
@@ -64,6 +65,19 @@ export function createSessionCookie(token: string, rememberMe?: boolean): string
 
 export function createExpiredSessionCookie(): string {
   return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
+export function createCsrfToken(): string {
+  return crypto.randomUUID();
+}
+
+export function createCsrfCookie(token: string, rememberMe?: boolean): string {
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 : env.SESSION_TTL_HOURS * 60 * 60;
+  return `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+export function createExpiredCsrfCookie(): string {
+  return `${CSRF_COOKIE_NAME}=; Path=/; SameSite=Lax; Max-Age=0`;
 }
 
 export function readCookie(headerValue: string | undefined, name: string): string | null {

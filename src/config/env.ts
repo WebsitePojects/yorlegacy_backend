@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(8787),
-  YOR_RUNTIME_MODE: z.enum(['playground', 'sandbox']).default('sandbox'),
+  YOR_RUNTIME_MODE: z.enum(['playground', 'sandbox', 'production']).default('sandbox'),
   YOR_SANDBOX_DATA_FILE: z.string().default('dev-data/yor-sandbox.json'),
   FRONTEND_ORIGIN: z
     .string()

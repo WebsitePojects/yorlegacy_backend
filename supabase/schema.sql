@@ -322,6 +322,97 @@ create table if not exists admin_review_actions (
   created_at timestamptz not null default now()
 );
 
+create sequence if not exists yor_activation_code_seq start 1000;
+create sequence if not exists yor_member_seq start 1000;
+
+create or replace function public.yor_next_activation_code_sequence()
+returns bigint
+language sql
+as $$
+  select nextval('yor_activation_code_seq');
+$$;
+
+create or replace function public.yor_next_member_sequence()
+returns bigint
+language sql
+as $$
+  select nextval('yor_member_seq');
+$$;
+
+alter table if exists member_profiles add column if not exists full_name text;
+alter table if exists member_profiles add column if not exists normalized_full_name text;
+
+alter table if exists activation_codes add column if not exists code_family text not null default 'YOR CODES';
+alter table if exists activation_codes add column if not exists package_tier text;
+alter table if exists activation_codes add column if not exists account_type text;
+alter table if exists activation_codes add column if not exists payment_status text not null default 'unpaid';
+alter table if exists activation_codes add column if not exists released_at timestamptz;
+alter table if exists activation_codes add column if not exists used_at timestamptz;
+alter table if exists activation_codes add column if not exists used_by_user_id uuid references app_users(id) on delete set null;
+alter table if exists activation_codes add column if not exists generated_by_user_id uuid references app_users(id) on delete set null;
+alter table if exists activation_codes add column if not exists registration_eligible boolean not null default false;
+alter table if exists activation_codes add column if not exists locked_direct_referral_bonus numeric(12, 2) not null default 0;
+alter table if exists activation_codes add column if not exists locked_salesmatch_value numeric(12, 2) not null default 0;
+alter table if exists activation_codes add column if not exists locked_binary_points integer not null default 0;
+alter table if exists activation_codes add column if not exists locked_get_five_amount numeric(12, 2) not null default 0;
+alter table if exists activation_codes add column if not exists remarks text not null default '';
+
+alter table if exists network_accounts add column if not exists placement_side text check (placement_side in ('left', 'right'));
+alter table if exists network_accounts add column if not exists current_account_type text;
+alter table if exists network_accounts add column if not exists package_tier text;
+alter table if exists network_accounts add column if not exists left_points integer not null default 0;
+alter table if exists network_accounts add column if not exists right_points integer not null default 0;
+
+alter table if exists wallet_ledger add column if not exists wallet_type text not null default 'main';
+alter table if exists wallet_ledger add column if not exists status text not null default 'posted';
+
+create table if not exists activation_code_events (
+  id uuid primary key default gen_random_uuid(),
+  activation_code_id uuid not null references activation_codes(id) on delete cascade,
+  code text not null,
+  action text not null check (action in ('generated', 'released', 'transferred', 'consumed')),
+  actor_user_id uuid references app_users(id) on delete set null,
+  actor_name text not null,
+  from_user_id uuid references app_users(id) on delete set null,
+  to_user_id uuid references app_users(id) on delete set null,
+  notes text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists placement_reservations (
+  id uuid primary key default gen_random_uuid(),
+  sponsor_user_id uuid not null references app_users(id) on delete cascade,
+  referral_code text not null,
+  placement_parent_user_id uuid not null references app_users(id) on delete cascade,
+  placement_parent_username text not null,
+  placement_side text not null check (placement_side in ('left', 'right')),
+  share_token text not null unique,
+  status text not null default 'active' check (status in ('active', 'consumed', 'expired')),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists compensation_queue (
+  id uuid primary key default gen_random_uuid(),
+  process_id text not null unique,
+  event_type text not null check (event_type in ('placement-sales')),
+  status text not null default 'pending' check (status in ('pending', 'processed')),
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+
+create table if not exists salesmatch_balances (
+  user_id uuid primary key references app_users(id) on delete cascade,
+  left_sales numeric(12, 2) not null default 0,
+  right_sales numeric(12, 2) not null default 0,
+  matched_sales numeric(12, 2) not null default 0,
+  left_points integer not null default 0,
+  right_points integer not null default 0,
+  matched_points integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_member_profiles_legacy_uid on member_profiles (legacy_uid);
 create index if not exists idx_network_accounts_sponsor on network_accounts (sponsor_user_id);
 create index if not exists idx_network_accounts_referrer on network_accounts (direct_referrer_user_id);
@@ -338,6 +429,11 @@ create index if not exists idx_earning_stream_policies_policy_order on earning_s
 create index if not exists idx_income_simulation_runs_user_stream on income_simulation_runs (user_id, stream_key, created_at desc);
 create index if not exists idx_shadow_accounts_owner_state on shadow_accounts (owner_user_id, state);
 create index if not exists idx_admin_review_actions_status_date on admin_review_actions (status, created_at desc);
+create index if not exists idx_member_profiles_normalized_full_name on member_profiles (normalized_full_name);
+create index if not exists idx_activation_code_events_code_date on activation_code_events (code, created_at desc);
+create index if not exists idx_placement_reservations_sponsor_status on placement_reservations (sponsor_user_id, status, expires_at desc);
+create index if not exists idx_compensation_queue_status_date on compensation_queue (status, created_at asc);
+create unique index if not exists uq_wallet_ledger_process_id on wallet_ledger (process_id) where process_id is not null;
 
 drop trigger if exists trg_site_pages_updated_at on site_pages;
 create trigger trg_site_pages_updated_at
@@ -417,8 +513,42 @@ alter table upgrade_events enable row level security;
 alter table pairing_snapshots enable row level security;
 alter table payout_transactions enable row level security;
 alter table wallet_ledger enable row level security;
+alter table activation_code_events enable row level security;
+alter table placement_reservations enable row level security;
+alter table compensation_queue enable row level security;
+alter table salesmatch_balances enable row level security;
 alter table compensation_policies enable row level security;
 alter table earning_stream_policies enable row level security;
 alter table income_simulation_runs enable row level security;
 alter table shadow_accounts enable row level security;
 alter table admin_review_actions enable row level security;
+
+revoke all on table activation_codes from anon, authenticated;
+revoke all on table activation_code_events from anon, authenticated;
+revoke all on table placement_reservations from anon, authenticated;
+revoke all on table compensation_queue from anon, authenticated;
+revoke all on table salesmatch_balances from anon, authenticated;
+revoke all on table wallet_ledger from anon, authenticated;
+revoke all on table network_accounts from anon, authenticated;
+revoke all on table member_profiles from anon, authenticated;
+revoke all on table app_users from anon, authenticated;
+
+grant all on table activation_codes to service_role;
+grant all on table activation_code_events to service_role;
+grant all on table placement_reservations to service_role;
+grant all on table compensation_queue to service_role;
+grant all on table salesmatch_balances to service_role;
+grant all on table wallet_ledger to service_role;
+grant all on table network_accounts to service_role;
+grant all on table member_profiles to service_role;
+grant all on table app_users to service_role;
+
+revoke all on sequence yor_activation_code_seq from anon, authenticated;
+revoke all on sequence yor_member_seq from anon, authenticated;
+grant usage, select, update on sequence yor_activation_code_seq to service_role;
+grant usage, select, update on sequence yor_member_seq to service_role;
+
+revoke execute on function public.yor_next_activation_code_sequence() from anon, authenticated;
+revoke execute on function public.yor_next_member_sequence() from anon, authenticated;
+grant execute on function public.yor_next_activation_code_sequence() to service_role;
+grant execute on function public.yor_next_member_sequence() to service_role;

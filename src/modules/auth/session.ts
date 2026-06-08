@@ -19,10 +19,11 @@ function sign(value: string): string {
     .digest('base64url');
 }
 
-export function createSessionToken(user: SessionUser): string {
+export function createSessionToken(user: SessionUser, rememberMe?: boolean): string {
+  const ttl = rememberMe ? 30 * 24 * 60 * 60 * 1000 : env.SESSION_TTL_HOURS * 60 * 60 * 1000;
   const payload: SessionPayload = {
     ...user,
-    exp: Date.now() + env.SESSION_TTL_HOURS * 60 * 60 * 1000
+    exp: Date.now() + ttl
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = sign(encodedPayload);
@@ -56,8 +57,9 @@ export function verifySessionToken(token: string): SessionPayload | null {
   }
 }
 
-export function createSessionCookie(token: string): string {
-  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${env.SESSION_TTL_HOURS * 60 * 60}`;
+export function createSessionCookie(token: string, rememberMe?: boolean): string {
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 : env.SESSION_TTL_HOURS * 60 * 60;
+  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 export function createExpiredSessionCookie(): string {

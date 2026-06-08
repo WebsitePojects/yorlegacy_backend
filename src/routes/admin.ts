@@ -44,7 +44,7 @@ adminRouter.get('/api/admin/dashboard', requireRole('admin', 'cashier', 'bod', '
   res.status(200).json(await buildAdminMvpDashboard(req.authUser!));
 });
 
-adminRouter.get('/api/admin/members', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const query = typeof req.query.query === 'string' ? req.query.query : '';
   const username = typeof req.query.username === 'string' ? req.query.username : '';
   const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
@@ -80,7 +80,7 @@ adminRouter.get('/api/admin/payouts', requireRole('admin', 'cashier', 'bod', 'su
   res.status(200).json(buildAdminPayouts());
 });
 
-adminRouter.post('/api/admin/payouts/approve', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/payouts/approve', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const payoutId = typeof req.body?.payoutId === 'string'
     ? req.body.payoutId
     : typeof req.body?.encashmentId === 'string'
@@ -101,7 +101,7 @@ adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', '
   res.status(200).json(buildAdminActivationCodeCenter());
 });
 
-adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   res.status(200).json(
     runAdminGenerateActivationCodes(req.authUser!, {
       quantity: Number(req.body?.quantity ?? 1),
@@ -112,7 +112,7 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 's
   );
 });
 
-adminRouter.post('/api/admin/activation-codes/release', requireRole('admin', 'cashier', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/release', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
     : [];
@@ -120,7 +120,7 @@ adminRouter.post('/api/admin/activation-codes/release', requireRole('admin', 'ca
   res.status(200).json(runAdminReleaseActivationCodes(req.authUser!, { codes }));
 });
 
-adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'cashier', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
     : [];
@@ -133,7 +133,7 @@ adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'c
   );
 });
 
-adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
     : [];
@@ -148,15 +148,15 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'sup
 });
 
 adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
-  res.status(200).json(buildAdminEncashmentCenter());
+  res.status(200).json(buildAdminEncashmentCenter(_req.authUser!));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
   res.status(200).json(runAdminApproveEncashment(req.authUser!, encashmentId));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
   res.status(200).json(
     runAdminReviewEncashment(req.authUser!, encashmentId, {
@@ -170,11 +170,11 @@ adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('adm
   );
 });
 
-adminRouter.post('/api/admin/sandbox/reset', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/sandbox/reset', requireRole('superadmin'), (req, res) => {
   res.status(200).json(runAdminResetSandbox(req.authUser!));
 });
 
-adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   res.status(200).json(
     runAdminChangeMemberName(req.authUser!, {
@@ -184,7 +184,7 @@ adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin'
   );
 });
 
-adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   res.status(200).json(
     runAdminUpdateMemberProfile(req.authUser!, {
@@ -201,7 +201,7 @@ adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 's
   );
 });
 
-adminRouter.post('/api/admin/members/:username/status', requireRole('admin', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/status', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   const status = typeof req.body?.status === 'string' ? req.body.status : 'pending';
   res.status(200).json(

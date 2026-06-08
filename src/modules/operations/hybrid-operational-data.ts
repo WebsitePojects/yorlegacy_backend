@@ -25,11 +25,31 @@ import {
 import { packagePolicies } from '../compensation/mvp-service.js';
 
 const STAFF_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
-const ADMIN_AND_SUPERADMIN_ROLES: AppRole[] = ['admin', 'superadmin'];
-const CASHIER_CODE_ROLES: AppRole[] = ['cashier', 'admin', 'superadmin'];
-const FINANCE_ROLES: AppRole[] = ['admin', 'superadmin'];
+const ADMIN_AND_SUPERADMIN_ROLES: AppRole[] = ['admin', 'bod', 'superadmin'];
+const CASHIER_CODE_ROLES: AppRole[] = ['cashier', 'admin', 'bod', 'superadmin'];
+const FINANCE_ROLES: AppRole[] = ['admin', 'bod', 'superadmin'];
 const EXECUTIVE_ROLES: AppRole[] = ['admin', 'bod', 'superadmin'];
 const ALL_OPS_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
+const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
+  'dashboard',
+  'member-management',
+  'encashment-reports',
+  'account-genealogy',
+  'activation-codes'
+]);
+const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
+  'dashboard',
+  'wallet',
+  'account-details',
+  'transactions',
+  'direct-referrals',
+  'salesmatch-bonus',
+  'genealogy',
+  'account-shadow-management',
+  'activation-codes',
+  'upgrade-registration',
+  'global-bonus-eligibility'
+]);
 
 export type { MemberRecord } from '../sandbox/dev-sandbox-store.js';
 
@@ -59,7 +79,7 @@ const members: MemberRecord[] = [
     packageTier: 'Standard',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-001',
-    sponsorCode: 'YOR-SPONSOR-001',
+    sponsorCode: 'YOR-MEMBER-000',
     placement: 'root',
     placementParentUsername: null,
     directReferrals: 5,
@@ -80,7 +100,7 @@ const members: MemberRecord[] = [
     email: 'alyssa.cruz@example.test',
     packageTier: 'Business',
     accountStatus: 'active',
-    referralCode: 'YOR-ALYSSA',
+    referralCode: 'YOR-MEMBER-002',
     sponsorCode: 'YOR-MEMBER-001',
     placement: 'left',
     placementParentUsername: 'YOR0001',
@@ -102,7 +122,7 @@ const members: MemberRecord[] = [
     email: 'marco.reyes@example.test',
     packageTier: 'VIP',
     accountStatus: 'active',
-    referralCode: 'YOR-MARCO',
+    referralCode: 'YOR-MEMBER-003',
     sponsorCode: 'YOR-MEMBER-001',
     placement: 'right',
     placementParentUsername: 'YOR0001',
@@ -124,8 +144,8 @@ const members: MemberRecord[] = [
     email: 'nica.santos@example.test',
     packageTier: 'Classic',
     accountStatus: 'pending',
-    referralCode: 'YOR-NICA',
-    sponsorCode: 'YOR-ALYSSA',
+    referralCode: 'YOR-MEMBER-004',
+    sponsorCode: 'YOR-MEMBER-002',
     placement: 'left',
     placementParentUsername: 'YOR0002',
     directReferrals: 1,
@@ -146,8 +166,8 @@ const members: MemberRecord[] = [
     email: 'ramon.dc@example.test',
     packageTier: 'Basic',
     accountStatus: 'active',
-    referralCode: 'YOR-RAMON',
-    sponsorCode: 'YOR-MARCO',
+    referralCode: 'YOR-MEMBER-005',
+    sponsorCode: 'YOR-MEMBER-003',
     placement: 'right',
     placementParentUsername: 'YOR0003',
     directReferrals: 2,
@@ -165,7 +185,7 @@ const walletRows = [
   {
     date: '2026-05-28',
     type: 'direct_referral',
-    source: 'YOR-ALYSSA',
+    source: 'YOR-MEMBER-002',
     credit: money(5000),
     debit: money(0),
     balance: money(15200.75),
@@ -185,8 +205,8 @@ const walletRows = [
     type: 'encashment_fee',
     source: 'ENC-20260524-001',
     credit: money(0),
-    debit: money(100),
-    balance: money(2700.75),
+    debit: money(470),
+    balance: money(6730),
     status: 'deducted'
   }
 ];
@@ -215,10 +235,12 @@ const payoutRows: PayoutRow[] = [
     reference: 'ENC-20260524-001',
     member: 'YOR0001',
     gross: money(8000),
-    fee: money(100),
-    tax: money(0),
+    fee: money(450),
+    tax: money(800),
+    maintenanceFee: money(0),
+    systemRetainer: money(400),
     cdDeduction: money(0),
-    net: money(7900),
+    net: money(6750),
     status: 'paid',
     method: 'GCash',
     remarks: 'Paid during Friday release batch.',
@@ -228,10 +250,12 @@ const payoutRows: PayoutRow[] = [
     reference: 'ENC-20260517-002',
     member: 'YOR0003',
     gross: money(12500),
-    fee: money(100),
-    tax: money(0),
+    fee: money(675),
+    tax: money(1250),
+    maintenanceFee: money(0),
+    systemRetainer: money(625),
     cdDeduction: money(500),
-    net: money(11900),
+    net: money(10075),
     status: 'requested',
     method: 'Bank',
     remarks: 'Awaiting operator review and payout note.',
@@ -354,12 +378,12 @@ function shadowRowsForMember(member: MemberRecord) {
       owner: member.username,
       placement: 'left',
       state: member.stockist ? 'activated_shadow' : 'reserved_shadow',
-      walletEnabled: member.stockist ? 'no' : 'no',
+      walletEnabled: 'no',
       unilevelEnabled: 'no',
-      binaryCycleEnabled: member.stockist ? 'yes' : 'no',
+      binaryCycleEnabled: 'no',
       note: member.stockist
-        ? 'Shadow slot is visible for binary support only until final earning policy is approved.'
-        : 'Reserved shadow slot only. No earning rights while inactive.'
+        ? 'Shadow slot may carry upgraded PV for salesmatch support only. It is not a registration surface and never earns direct referral, unilevel, or binary cycle.'
+        : 'Reserved shadow slot only. Registration happens in the open child slots below it, not on the shadow node itself.'
     },
     {
       owner: member.username,
@@ -368,7 +392,7 @@ function shadowRowsForMember(member: MemberRecord) {
       walletEnabled: 'no',
       unilevelEnabled: 'no',
       binaryCycleEnabled: 'no',
-      note: 'Inactive shadow slot shown for placement visibility and transcript parity.'
+      note: 'Inactive shadow slot shown for placement visibility. It does not open registration on the node itself.'
     }
   ];
 }
@@ -401,14 +425,14 @@ function subtreeMembers(rootUsername: string, side: 'left' | 'right') {
 
 const branchRuntimeNotes: GatedAction[] = [
   {
-    label: 'Branch-local mutable runtime',
-    reason: 'Writes in this office update the local sandbox store immediately and never touch production or the legacy reference system.',
+    label: 'Controlled runtime',
+    reason: 'Office workflows are active for end-to-end testing in the current runtime without changing production or the legacy reference system.',
     requiredEvidence: 'Production sign-off, append-only ledger hardening, and release-grade approval workflow still remain separate.'
   },
   {
-    label: 'Safe to reset',
-    reason: 'You can break flows, consume codes, queue encashments, and rebuild state because this branch now has its own resettable data file.',
-    requiredEvidence: 'Use the sandbox reset control before a fresh QA pass or when test data becomes noisy.'
+    label: 'Reset available',
+    reason: 'You can re-run registration, code, and encashment workflows because the current runtime data can be restored to a clean seeded state.',
+    requiredEvidence: 'Use the runtime reset control before a fresh QA pass or when test data becomes noisy.'
   }
 ];
 
@@ -506,7 +530,7 @@ function memberMvpModule(
     status: 'read-only',
     legacyReference: 'Yor MVP compensation prototype',
     permissions: ['member', ...STAFF_ROLES],
-    metrics: [metric('Money Mode', currentMoneyMode(), isSandboxMode() ? 'Branch-local sandbox runtime' : 'No value-changing write enabled', 'good')],
+    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Value-changing writes remain approval-controlled.', 'good')],
     table: table(label, rows),
     gatedActions: []
   };
@@ -531,7 +555,7 @@ function adminMvpModule(
       : 'read-only',
     legacyReference: 'Yor MVP admin prototype',
     permissions,
-    metrics: [metric('Money Mode', currentMoneyMode(), isSandboxMode() ? 'Writable in local sandbox runtime' : 'Requires evidence before writes', 'good')],
+    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Requires evidence before writes.', 'good')],
     table: table(label, rows),
     gatedActions: isSandboxMode()
       ? []
@@ -550,15 +574,15 @@ function adminModules(): OperationalModule[] {
   const auditRows = currentAuditEvents();
   const allMembers = currentMembers();
 
-  return [
+  const modules: OperationalModule[] = [
     {
       id: 'dashboard',
       label: 'Operations Dashboard',
       path: '/admin/dashboard',
       group: 'Overview',
       description: isSandboxMode()
-        ? 'Live snapshot for member volume, payout exposure, and branch-local sandbox operations.'
-        : 'Live report snapshot for member volume, payout exposure, and protected playground operations.',
+        ? 'Live snapshot for member volume, payout exposure, and current office operations.'
+        : 'Live report snapshot for member volume, payout exposure, and approval-controlled office operations.',
       status: 'live-report',
       legacyReference: 'adminpanel/admin-dashboard.php',
       permissions: EXECUTIVE_ROLES,
@@ -691,13 +715,13 @@ function adminModules(): OperationalModule[] {
       'global-bonus',
       'Global Bonus',
       'Compensation',
-      'Stockist-only global pool qualifier review; money writes stay evidence-gated until the Yor global-bonus policy is final.',
+      'Global pool qualifier review; money writes stay evidence-gated until the Yor global-bonus policy is fully ported.',
       ADMIN_AND_SUPERADMIN_ROLES,
-      allMembers.filter((member) => member.stockist).map((member) => ({
+      allMembers.map((member) => ({
         username: member.username,
         package: member.packageTier,
-        eligible: member.packageTier === 'VIP' ? 'candidate' : 'stockist review',
-        basis: 'Stockist-only review / Yor 2% annual global sales pool reference'
+        eligible: member.packageTier === 'VIP' ? 'candidate' : 'building qualification',
+        basis: 'Yor 2% annual global sales pool reference / Nogatu qualifier port in progress'
       }))
     ),
     adminMvpModule(
@@ -749,8 +773,8 @@ function adminModules(): OperationalModule[] {
       path: '/admin/activation-codes',
       group: 'Codes',
       description: isSandboxMode()
-        ? 'Generate general codes, release them, review settlement, and transfer sponsor-owned activation codes inside the branch-local sandbox.'
-        : 'Activation code inventory, payment review, and assignment report; generation runs in protected playground mode.',
+        ? 'Generate general codes, release them, review settlement, and transfer sponsor-owned activation codes from one office control surface.'
+        : 'Activation code inventory, payment review, and assignment report with approval-controlled generation.',
       status: isSandboxMode() ? 'sandbox-write' : 'playground-write',
       legacyReference: 'adminpanel/manage-codes.php, adminpanel/generate-codes.php',
       permissions: CASHIER_CODE_ROLES,
@@ -763,6 +787,8 @@ function adminModules(): OperationalModule[] {
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
     }
   ];
+
+  return modules.filter((module) => OPERATIONAL_ADMIN_MODULE_IDS.has(module.id));
 }
 
 function memberModules(member: MemberRecord): OperationalModule[] {
@@ -777,7 +803,7 @@ function memberModules(member: MemberRecord): OperationalModule[] {
   const directsRemaining = directsRemainingToNextGroup(member);
   const lifestyleTarget = memberPolicy?.lifestyleRepeatPurchase ?? 0;
   const lifestyleCurrent = lifestyleTarget ? Math.round(lifestyleTarget * 0.72) : 0;
-  const lifestyleRate = lifestyleCurrent ? lifestyleCurrent * 0.03 : 0;
+  const lifestyleRate = lifestyleCurrent ? lifestyleCurrent * 0.01 : 0;
   const unilevelRows = [
     { level: '01', percent: '10%', requiredPV: '200 PV', potential: 'PHP 10,000', status: 'building' },
     { level: '02', percent: '8%', requiredPV: '200 PV', potential: 'PHP 100,000', status: 'building' },
@@ -787,7 +813,7 @@ function memberModules(member: MemberRecord): OperationalModule[] {
     { level: '06', percent: '3%', requiredPV: '200 PV', potential: 'PHP 1,000,000,000', status: 'locked' },
     { level: '07-10', percent: '2% / 1% / 1% / 1%', requiredPV: '200 PV', potential: 'PHP 10,000,000,000+', status: 'long-range' }
   ];
-  const includeGlobalBonus = member.stockist;
+  const includeGlobalBonus = true;
 
   return ([
     {
@@ -923,7 +949,10 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       status: 'read-only',
       legacyReference: 'yor-shadow-account-transcript',
       permissions: ['member', ...STAFF_ROLES],
-      metrics: [metric('Shadow Slots', String(shadowRowsForMember(member).length)), metric('Stockist', member.stockist ? 'Yes' : 'No')],
+      metrics: [
+        metric('Shadow Slots', String(shadowRowsForMember(member).length)),
+        metric('Activated Shadow PV', member.stockist ? 'Enabled' : 'Not yet')
+      ],
       table: table('Shadow account states', shadowRowsForMember(member)),
       gatedActions: []
     },
@@ -988,8 +1017,8 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       path: '/member/upgrade-registration',
       group: 'Growth',
       description: isSandboxMode()
-        ? 'Upgrade and new registration readiness with branch-local code consumption and account creation.'
-        : 'Upgrade and new registration readiness; writes remain in protected playground mode.',
+        ? 'Upgrade and new registration readiness with active code consumption and account creation in the current runtime.'
+        : 'Upgrade and new registration readiness with approval-controlled writes.',
       status: isSandboxMode() ? 'sandbox-write' : 'playground-write',
       legacyReference: 'ecom/upgrade-account.php, ecom/new-account-registration.php',
       permissions: ['member', ...STAFF_ROLES],
@@ -999,7 +1028,6 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       ]),
       gatedActions: isSandboxMode() ? [] : branchRuntimeNotes
     },
-    memberMvpModule('product-orders', 'Direct Selling / Product Orders', 'Products', 'Product purchases, refill orders, retail margin, and repeat purchase readiness.'),
     {
       id: 'lifestyle-rewards',
       label: 'Lifestyle Rewards',
@@ -1011,7 +1039,7 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       permissions: ['member', ...STAFF_ROLES],
       metrics: [
         metric('Repeat Purchase', lifestyleTarget ? money(lifestyleCurrent) : 'Not eligible'),
-        metric('3% Reward', lifestyleTarget ? money(lifestyleRate) : 'Not eligible')
+        metric('Projected Credit', lifestyleTarget ? money(lifestyleRate) : 'Not eligible')
       ],
       table: table('Lifestyle rewards progress', [
         {
@@ -1047,25 +1075,28 @@ function memberModules(member: MemberRecord): OperationalModule[] {
             label: 'Global Bonus Eligibility',
             path: '/member/global-bonus-eligibility',
             group: 'Compensation',
-            description: 'Annual global bonus qualifier review reserved for stockist accounts and hall-of-fame paths.',
+            description: 'Annual global bonus qualification, maintenance, and pool-basis visibility for every member.',
             status: 'read-only',
             legacyReference: 'yor-global-bonus',
             permissions: ['member', ...STAFF_ROLES],
-            metrics: [metric('Eligibility', member.packageTier === 'VIP' ? 'VIP stockist' : 'Stockist review'), metric('Maintenance Window', '6 months active')],
+            metrics: [
+              metric('Eligibility', member.packageTier === 'VIP' ? 'Hall of Famer review' : 'Building qualification'),
+              metric('Maintenance Window', 'Nogatu continuity port in progress')
+            ],
             table: table('Global bonus eligibility', [
               {
                 package: member.packageTier,
-                qualification: member.packageTier === 'VIP' ? 'VIP stockist' : 'Stockist',
-                maintenance: '6-month active account maintenance',
+                qualification: member.packageTier === 'VIP' ? 'Hall of Famer review' : 'Below Hall of Famer tier',
+                maintenance: 'Progress remains visible while Nogatu continuity rules are being wired',
                 pool: '2% yearly global sales pool',
-                status: 'eligible to monitor'
+                status: member.packageTier === 'VIP' ? 'qualifying path visible' : 'visible but not yet qualified'
               }
             ]),
             gatedActions: []
           }
         ]
       : []
-  );
+  ).filter((module) => OPERATIONAL_MEMBER_MODULE_IDS.has(module.id));
 }
 
 function effectiveOpsRole(user: SessionUser, profile?: AdminScopeProfile | null): AppRole {
@@ -1121,6 +1152,22 @@ export function listHybridAuditEvents(): AuditEvent[] {
   return currentAuditEvents().map((event) => ({ ...event }));
 }
 
+export function listOperationalCatalog() {
+  const summary = ({ id, label, path, group, status, permissions }: OperationalModule) => ({
+    id,
+    label,
+    path,
+    group,
+    status,
+    permissions: [...permissions]
+  });
+
+  return {
+    memberModules: memberModules(currentMembers()[0]).map(summary),
+    adminModules: adminModules().map(summary)
+  };
+}
+
 export function getHybridMemberForUser(user: SessionUser): MemberRecord {
   return { ...currentMemberFor(user) };
 }
@@ -1155,7 +1202,7 @@ export function buildOpsOfficeSnapshot(
       ),
       metric('Free Slot Accounts', String(activeMembers.filter((member) => member.packageTier === 'Business' || member.packageTier === 'VIP').length)),
       metric('CD Accounts', String(activeMembers.filter((member) => member.cdBalance > 0).length)),
-      metric('Money Writes', currentMoneyMode(), isSandboxMode() ? 'Branch-local mutable runtime' : 'Reports-first safety mode', 'good')
+      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: visibleModules,
     queues,
@@ -1163,7 +1210,7 @@ export function buildOpsOfficeSnapshot(
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
     notices: [
       isSandboxMode()
-        ? 'Reports and value-changing actions now write into the local sandbox runtime for branch-only testing.'
+        ? 'Reports and value-changing actions are active in the current runtime for end-to-end office testing.'
         : 'Reports are operationally wired and role-filtered; value-changing actions remain disabled until documented rule tests pass.',
       'Hybrid data mirrors the legacy operational reference while Yor-specific package names and public compensation surfaces take priority.'
     ]
@@ -1203,15 +1250,15 @@ export function buildMemberOfficeSnapshot(
       metric('Left Points', String(mergedMember.leftPoints)),
       metric('Right Points', String(mergedMember.rightPoints)),
       metric('Direct Referrals', String(mergedMember.directReferrals)),
-      metric('Money Writes', currentMoneyMode(), isSandboxMode() ? 'Branch-local mutable runtime' : 'Reports-first safety mode', 'good')
+      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: memberModules(mergedMember).filter((module) => canSeeModule(user, module)),
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
     alerts: [
       'Wallet, pairing, referral, and encashment reports are visible for verification.',
       isSandboxMode()
-        ? 'Sandbox writes are enabled in this branch so registration, code, wallet, and approval flows can be exercised end to end.'
-        : 'Requests that release, deduct, or create value are available in playground while compensation evidence and tests pass.'
+        ? 'Registration, code, wallet, and approval flows are active in the current runtime for end-to-end office testing.'
+        : 'Requests that release, deduct, or create value remain in review mode while compensation evidence and tests pass.'
     ]
   };
 }

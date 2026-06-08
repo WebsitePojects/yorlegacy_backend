@@ -7,16 +7,17 @@ type DemoUserRecord = SessionUser & {
 };
 
 type DemoCredential = {
-  email: string;
+  username: string;
   password: string;
 };
 
-const demoUsers: DemoUserRecord[] = [
+const demoUsers: (DemoUserRecord & { username: string })[] = [
   {
     id: 'yor-member-demo',
     role: 'member',
     name: env.DEMO_MEMBER_NAME,
     email: env.DEMO_MEMBER_EMAIL.toLowerCase(),
+    username: 'YOR0001',
     password: env.DEMO_MEMBER_PASSWORD
   },
   {
@@ -24,6 +25,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'admin',
     name: env.DEMO_ADMIN_NAME,
     email: env.DEMO_ADMIN_EMAIL.toLowerCase(),
+    username: 'yoradmin',
     password: env.DEMO_ADMIN_PASSWORD
   },
   {
@@ -31,6 +33,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'cashier',
     name: env.DEMO_CASHIER_NAME,
     email: env.DEMO_CASHIER_EMAIL.toLowerCase(),
+    username: 'yorcashier',
     password: env.DEMO_CASHIER_PASSWORD
   },
   {
@@ -38,6 +41,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'bod',
     name: env.DEMO_BOD_NAME,
     email: env.DEMO_BOD_EMAIL.toLowerCase(),
+    username: 'yorbod',
     password: env.DEMO_BOD_PASSWORD
   },
   {
@@ -45,6 +49,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'superadmin',
     name: env.DEMO_SUPERADMIN_NAME,
     email: env.DEMO_SUPERADMIN_EMAIL.toLowerCase(),
+    username: 'yorsuperadmin',
     password: env.DEMO_SUPERADMIN_PASSWORD
   },
   {
@@ -52,6 +57,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'member',
     name: 'Yor Member',
     email: 'yormember@gmail.com',
+    username: 'yormember',
     password: '1'
   },
   {
@@ -59,6 +65,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'cashier',
     name: 'Yor Cashier',
     email: 'yorcashier@gmail.com',
+    username: 'yorcashier_legacy',
     password: '1'
   },
   {
@@ -66,6 +73,7 @@ const demoUsers: DemoUserRecord[] = [
     role: 'bod',
     name: 'Yor BOD',
     email: 'yorbod@gmail.com',
+    username: 'yorbod_legacy',
     password: '1'
   }
 ];
@@ -78,11 +86,11 @@ function constantTimeMatches(input: string, expected: string): boolean {
 }
 
 export function authenticateDemoUser(
-  email: string,
+  username: string,
   password: string
 ): SessionUser | null {
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = demoUsers.find((entry) => entry.email === normalizedEmail);
+  const normalizedUsername = username.trim().toLowerCase();
+  const user = demoUsers.find((entry) => entry.username.toLowerCase() === normalizedUsername);
 
   if (!user || !constantTimeMatches(password, user.password)) {
     return null;
@@ -95,23 +103,23 @@ export function authenticateDemoUser(
 export function getDemoCredentials(): Record<AppRole, DemoCredential> {
   return {
     member: {
-      email: env.DEMO_MEMBER_EMAIL,
+      username: 'YOR0001',
       password: env.DEMO_MEMBER_PASSWORD
     },
     admin: {
-      email: env.DEMO_ADMIN_EMAIL,
+      username: 'yoradmin',
       password: env.DEMO_ADMIN_PASSWORD
     },
     cashier: {
-      email: env.DEMO_CASHIER_EMAIL,
+      username: 'yorcashier',
       password: env.DEMO_CASHIER_PASSWORD
     },
     bod: {
-      email: env.DEMO_BOD_EMAIL,
+      username: 'yorbod',
       password: env.DEMO_BOD_PASSWORD
     },
     superadmin: {
-      email: env.DEMO_SUPERADMIN_EMAIL,
+      username: 'yorsuperadmin',
       password: env.DEMO_SUPERADMIN_PASSWORD
     }
   };

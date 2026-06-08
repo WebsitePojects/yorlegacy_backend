@@ -45,6 +45,20 @@ const currency = (value: number): string =>
 
 type PlacementSide = 'root' | 'left' | 'right';
 type ShadowSlotState = 'reserved_shadow' | 'activated_shadow';
+type PublicRegistrationOrigin = 'referral-link' | 'genealogy-slot';
+
+type PublicRegistrationInput = {
+  origin?: PublicRegistrationOrigin;
+  fullName?: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  password?: string;
+  activationCode?: string;
+  referralCode?: string;
+  placementParentUsername?: string;
+  placementSide?: 'left' | 'right';
+};
 
 type GenealogyShadowSlot = {
   id: string;
@@ -82,7 +96,7 @@ type GenealogyNode = {
     left: GenealogyShadowSlot;
     right: GenealogyShadowSlot;
   };
-  accountStateLabel: 'PD' | 'FS' | 'CD - Paid';
+  accountStateLabel: string;
   children: GenealogyNode[];
 };
 
@@ -110,6 +124,7 @@ function activationInventoryFor(member: MemberRecord) {
   return listHybridActivationRows().map((row, index) => ({
     id: transactionIdFor(index, 'CODE'),
     code: row.code,
+    codeFamily: row.codeFamily ?? 'YOR CODES',
     accountType: row.accountType,
     packageTier: row.packageTier,
     assignedTo: row.assignedTo ?? 'Unassigned',
@@ -134,6 +149,18 @@ function findMemberByCode(code: string) {
   return listHybridMembers().find((member) => member.username === code || member.referralCode === code) ?? null;
 }
 
+function isRegistrationReadyCode(row: { packageTier: string; status: string; codeFamily?: string }) {
+  return row.status === 'available' && row.codeFamily !== 'YOR MAINTENANCE' && row.codeFamily !== 'YOR PERFUME' && row.codeFamily !== 'YOR VISION';
+}
+
+function resolveRegistrationSponsor(viewer: SessionUser | null, input: PublicRegistrationInput) {
+  if (input.origin === 'genealogy-slot' && viewer) {
+    return getHybridMemberForUser(viewer);
+  }
+
+  return input.referralCode ? findMemberByCode(input.referralCode.trim()) : null;
+}
+
 function resolveSlotOpen(children: GenealogyNode[], side: Extract<PlacementSide, 'left' | 'right'>) {
   return !children.some((child) => child.placement === side);
 }
@@ -148,7 +175,7 @@ function buildShadowSlot(member: MemberRecord, side: Extract<PlacementSide, 'lef
     state: isActivatedSupport ? 'activated_shadow' : 'reserved_shadow',
     label: 'Shadow account',
     activationStatus: isActivatedSupport ? 'activated' : 'inactive',
-    registrationEnabled: true,
+    registrationEnabled: false,
     walletEnabled: false,
     unilevelEnabled: false,
     binaryCycleEnabled: isActivatedSupport,
@@ -197,15 +224,45 @@ function walletTransactionRows(member: MemberRecord) {
   ];
 }
 
+function buildWalletIncomeBreakdown(transactions: ReturnType<typeof walletTransactionRows>) {
+  const totals = new Map<string, number>();
+
+  for (const transaction of transactions) {
+    if (transaction.type !== 'wallet') {
+      continue;
+    }
+
+    const grossValue = Number(String(transaction.gross).replace(/[^0-9.-]/g, ''));
+    if (!Number.isFinite(grossValue) || grossValue <= 0) {
+      continue;
+    }
+
+    totals.set(transaction.category, (totals.get(transaction.category) ?? 0) + grossValue);
+  }
+
+  return [
+    { streamId: 'direct-referral', label: 'Direct Referral', walletType: 'main', amount: totals.get('direct_referral') ?? 0 },
+    { streamId: 'salesmatch', label: 'Salesmatch Bonus', walletType: 'main', amount: totals.get('salesmatch') ?? 0 },
+    { streamId: 'binary-cycle', label: 'Binary Cycle Bonus', walletType: 'main', amount: totals.get('binary_cycle') ?? 0 },
+    { streamId: 'get-five', label: 'Get Yor Five Bonus', walletType: 'main', amount: totals.get('get_five') ?? 0 },
+    { streamId: 'lifestyle-rewards', label: 'Lifestyle Rewards', walletType: 'lifestyle', amount: totals.get('lifestyle_rewards') ?? 0 },
+    { streamId: 'unilevel', label: 'Unilevel Bonus', walletType: 'main', amount: totals.get('unilevel') ?? 0 },
+    { streamId: 'global', label: 'Global Bonus', walletType: 'main', amount: totals.get('global') ?? 0 }
+  ];
+}
+
 function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
   const allMembers = listHybridMembers();
-  const createNode = (member: MemberRecord, placement: PlacementSide, depth = 0, path: string[] = []): GenealogyNode => {
-    const children = allMembers
-      .filter((candidate) => candidate.placementParentUsername === member.username)
-      .map((candidate) => createNode(candidate, candidate.placement, depth + 1, [...path, member.username]));
+
+  const buildRealNode = (member: MemberRecord, placement: PlacementSide, depth: number, path: string[]): GenealogyNode => {
+    const nodeId = member.username;
+    const pathWithNode = [...path, nodeId];
+
+    const shadowLeft = buildShadowNode(nodeId, 'left', depth + 1, pathWithNode);
+    const shadowRight = buildShadowNode(nodeId, 'right', depth + 1, pathWithNode);
 
     return {
-      nodeId: member.username,
+      nodeId,
       username: member.username,
       fullName: member.fullName,
       referralCode: member.referralCode,
@@ -213,25 +270,78 @@ function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
       placement,
       status: member.accountStatus,
       depth,
-      tracePath: [...path, member.username].join(' > '),
+      tracePath: pathWithNode.join(' > '),
       binaryPoints: Math.min(member.leftPoints, member.rightPoints),
       directReferrals: member.directReferrals,
       leftPoints: member.leftPoints,
       rightPoints: member.rightPoints,
       openSlots: {
-        left: resolveSlotOpen(children, 'left'),
-        right: resolveSlotOpen(children, 'right')
+        left: false,
+        right: false
       },
       shadowSlots: {
         left: buildShadowSlot(member, 'left'),
         right: buildShadowSlot(member, 'right')
       },
       accountStateLabel: accountStateLabel(member),
+      children: [shadowLeft, shadowRight]
+    };
+  };
+
+  const buildShadowNode = (parentUsername: string, placement: 'left' | 'right', depth: number, path: string[]): GenealogyNode => {
+    const nodeId = `${parentUsername}-${placement === 'left' ? 'L' : 'R'}`;
+    const pathWithNode = [...path, nodeId];
+
+    const leftChildMember = allMembers.find(
+      (m) =>
+        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
+        m.placement === 'left' &&
+        placement === 'left'
+    );
+
+    const rightChildMember = allMembers.find(
+      (m) =>
+        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
+        m.placement === 'right' &&
+        placement === 'right'
+    );
+
+    const children: GenealogyNode[] = [];
+    if (leftChildMember) {
+      children.push(buildRealNode(leftChildMember, 'left', depth + 1, pathWithNode));
+    }
+    if (rightChildMember) {
+      children.push(buildRealNode(rightChildMember, 'right', depth + 1, pathWithNode));
+    }
+
+    return {
+      nodeId,
+      username: nodeId,
+      fullName: `Binary Function Only`,
+      referralCode: '',
+      packageTier: 'Binary Function Only',
+      placement,
+      status: 'shadow',
+      depth,
+      tracePath: pathWithNode.join(' > '),
+      binaryPoints: 0,
+      directReferrals: 0,
+      leftPoints: 0,
+      rightPoints: 0,
+      openSlots: {
+        left: !leftChildMember,
+        right: !rightChildMember
+      },
+      shadowSlots: {
+        left: null as any,
+        right: null as any
+      },
+      accountStateLabel: 'Binary Function Only',
       children
     };
   };
 
-  return createNode(rootMember, 'root');
+  return buildRealNode(rootMember, 'root', 0, []);
 }
 
 function flattenTree(root: GenealogyNode) {
@@ -348,33 +458,44 @@ export function buildMemberActivationCodeCenter(user: SessionUser) {
     },
     inventory,
     history,
-    transferTargets: listHybridMembers()
-      .filter((candidate) => candidate.username !== member.username)
-      .map((candidate) => ({
-        username: candidate.username,
-        fullName: candidate.fullName,
-        packageTier: candidate.packageTier
-      })),
+    transferTargets: [],
     hints: [
       isSandboxMode()
-        ? 'Transfer, upgrade, and maintenance flows now commit into the local sandbox inventory immediately.'
-        : 'Transfer, upgrade, and maintenance code flows are available for workflow testing. Yor MVP keeps those write paths in playground mode.',
+        ? 'Transfer, upgrade, and maintenance flows now commit into the current runtime inventory immediately.'
+        : 'Transfer, upgrade, and maintenance code flows are available for workflow testing while write release remains controlled.',
       'Code ownership, uniqueness, transfer history, and upgrade idempotency are required before live enablement.'
     ]
   };
 }
 
-export function buildMemberWalletDetail(user: SessionUser) {
+export function findMemberProfileByCode(code: string) {
+  const m = findMemberByCode(code);
+  if (!m) return null;
+  return {
+    username: m.username,
+    fullName: m.fullName,
+    packageTier: m.packageTier
+  };
+}
+
+export function buildMemberWalletDetail(user: SessionUser, amount?: number) {
   if (isSandboxMode()) {
-    return getSandboxWalletSummary(user);
+    return getSandboxWalletSummary(user, amount);
   }
 
   const member = getHybridMemberForUser(user);
   const transactions = walletTransactionRows(member);
-  const payoutPreviewAmount = Math.min(5000, Math.floor(member.walletAvailable / 100) * 100);
-  const fee = payoutPreviewAmount > 0 ? 100 : 0;
+  const payoutPreviewAmount = amount !== undefined && amount > 0
+    ? Math.min(member.walletAvailable, amount)
+    : 0;
+  const processingFee = payoutPreviewAmount > 0 ? 50 : 0;
+  const maintenanceFee = 0;
+  const systemRetainer = payoutPreviewAmount * 0.05;
+  const tax = payoutPreviewAmount * 0.10;
+  const fee = processingFee + systemRetainer;
   const cdDeduction = Math.min(member.cdBalance, Math.max(0, payoutPreviewAmount * 0.05));
-  const netReceivable = Math.max(0, payoutPreviewAmount - fee - cdDeduction);
+  const totalDeductions = fee + tax + cdDeduction;
+  const netReceivable = Math.max(0, payoutPreviewAmount - totalDeductions);
 
   return {
     moneyMode: currentMoneyMode(),
@@ -385,10 +506,16 @@ export function buildMemberWalletDetail(user: SessionUser) {
       payoutMethod: 'GCash',
       payoutSchedule: 'Tuesday encashment / Friday payout'
     },
+    incomeBreakdown: buildWalletIncomeBreakdown(transactions),
     preview: {
       requestedAmount: payoutPreviewAmount,
+      processingFee,
+      maintenanceFee,
+      systemRetainer,
+      tax,
       fee,
       cdDeduction,
+      totalDeductions,
       netReceivable,
       sufficientBalance: payoutPreviewAmount <= member.walletAvailable,
       note: isSandboxMode()
@@ -449,6 +576,7 @@ export function buildMemberRegistrationReadiness(user: SessionUser) {
   const inventory = activationInventoryFor(member);
   const tree = buildMemberBinaryTree(member);
   const placementRecommendation = recommendPlacement(tree);
+  const referralLink = `https://yor.local/register?ref=${member.referralCode}&origin=referral-link`;
 
   return {
     moneyMode: currentMoneyMode(),
@@ -458,15 +586,16 @@ export function buildMemberRegistrationReadiness(user: SessionUser) {
       referralCode: member.referralCode
     },
     placementPolicy: {
-      mode: 'guided-manual',
+      mode: 'auto-balanced',
       recommendation: placementRecommendation
     },
-    referralLink: `https://yor.local/register?ref=${member.referralCode}`,
-    availableCodes: inventory.filter((item) => item.assignedTo === member.username && item.status === 'available'),
+    referralLink,
+    availableCodes: inventory.filter((item) => item.assignedTo === member.username && isRegistrationReadyCode(item)),
     checklist: [
-      'Validate activation code ownership and package compatibility',
+      'Share the referral link with one activation code at a time.',
+      'Registration package and account type are derived from the consumed activation code.',
       'Check username uniqueness and member identity duplication',
-      'Re-check placement availability before save',
+      'Backend auto-balance and code consumption are rechecked at final save.',
       'Refresh sponsor income simulation after registration'
     ]
   };
@@ -684,7 +813,7 @@ export function buildAdminMemberManagementCenter(input: {
   };
 }
 
-export function buildAdminEncashmentCenter() {
+export function buildAdminEncashmentCenter(_viewer?: SessionUser) {
   if (isSandboxMode()) {
     return buildSandboxAdminEncashments();
   }
@@ -737,54 +866,72 @@ export function buildAdminGenealogyCenter(
     : buildBinaryGenealogyCenter(rootUser);
 }
 
-export function buildPublicRegistrationPreview(input: {
-  sponsorCode?: string;
-  packageTier?: string;
-  preferredSide?: 'left' | 'right';
-  fullName?: string;
-  email?: string;
-  phone?: string;
-  password?: string;
-}) {
+export function buildPublicRegistrationPreview(viewer: SessionUser | null, input: PublicRegistrationInput) {
+  const resolvedSponsor = resolveRegistrationSponsor(viewer, input);
+  const resolvedOrigin: PublicRegistrationOrigin = input.origin === 'genealogy-slot' ? 'genealogy-slot' : 'referral-link';
+
   if (isSandboxMode()) {
-    return buildSandboxRegistrationPreview(input);
+    return buildSandboxRegistrationPreview({
+      origin: resolvedOrigin,
+      fullName: input.fullName,
+      username: input.username,
+      sponsorUsername: resolvedSponsor?.username,
+      activationCode: input.activationCode,
+      placementParentUsername: input.placementParentUsername,
+      placementSide: input.placementSide
+    });
   }
 
-  const sponsor = input.sponsorCode ? findMemberByCode(input.sponsorCode.trim()) : null;
-  const sponsorInventory = sponsor
-    ? activationInventoryFor(sponsor).filter((item) => item.assignedTo === sponsor.username && item.status === 'available')
+  const sponsorInventory = resolvedSponsor
+    ? activationInventoryFor(resolvedSponsor).filter((item) => item.assignedTo === resolvedSponsor.username && isRegistrationReadyCode(item))
     : [];
-  const binaryTree = sponsor
-    ? buildMemberBinaryTree(sponsor)
+  const binaryTree = resolvedSponsor
+    ? buildMemberBinaryTree(resolvedSponsor)
     : null;
-  const placement = binaryTree ? recommendPlacement(binaryTree) : null;
-  const matchingCode = sponsorInventory.find((item) => item.packageTier.toLowerCase() === String(input.packageTier ?? '').toLowerCase()) ?? sponsorInventory[0] ?? null;
+  const placement =
+    resolvedOrigin === 'genealogy-slot' && input.placementParentUsername && input.placementSide
+      ? {
+          placementUsername: input.placementParentUsername,
+          placementSide: input.placementSide,
+          note: 'Placement stays locked to the selected genealogy slot.'
+        }
+      : binaryTree
+        ? recommendPlacement(binaryTree)
+        : null;
+  const requestedCode = input.activationCode?.trim().toUpperCase() ?? '';
+  const matchingCode = requestedCode
+    ? sponsorInventory.find((item) => item.code.toUpperCase() === requestedCode) ?? null
+    : null;
   const issues = [
-    sponsor ? null : 'Sponsor code was not resolved to an active member.',
+    resolvedSponsor ? null : resolvedOrigin === 'genealogy-slot' ? 'Sponsor session was not resolved for genealogy encoding.' : 'Referral link was not resolved to an active sponsor.',
     sponsorInventory.length ? null : 'Sponsor has no released activation code available for this registration preview.',
-    placement ? null : 'No placement recommendation is available.'
+    requestedCode ? null : 'Activation code is required.',
+    matchingCode ? null : 'Activation code is not available for this sponsor.',
+    placement ? null : resolvedOrigin === 'genealogy-slot' ? 'Placement slot is not available.' : 'No placement recommendation is available.'
   ].filter((item): item is string => Boolean(item));
 
   return {
     moneyMode: currentMoneyMode(),
+    origin: resolvedOrigin,
     canProceed: issues.length === 0,
-    sponsor: sponsor
+    sponsor: resolvedSponsor
       ? {
-          username: sponsor.username,
-          fullName: sponsor.fullName,
-          referralCode: sponsor.referralCode,
-          packageTier: sponsor.packageTier
+          username: resolvedSponsor.username,
+          fullName: resolvedSponsor.fullName,
+          referralCode: resolvedSponsor.referralCode,
+          packageTier: resolvedSponsor.packageTier
         }
       : null,
-    selectedPackage: input.packageTier ?? null,
-    preferredSide: input.preferredSide ?? null,
+    selectedPackage: matchingCode?.packageTier ?? null,
+    placementSide: placement?.placementSide ?? input.placementSide ?? null,
+    resolvedAccountType: matchingCode?.accountType ?? null,
     matchingCode,
     placement,
     availableCodes: sponsorInventory,
     issues,
     checklist: [
-      'Use only sponsor-owned released codes for registration.',
-      'Confirm the package tier matches the selected code.',
+      'Use only sponsor-owned released and unused activation codes.',
+      'Package tier and account type come from the selected activation code.',
       'Re-check the placement slot immediately before final save.',
       isSandboxMode()
         ? 'Sandbox registration will consume the sponsor-owned code and create a real branch-only login.'
@@ -793,28 +940,26 @@ export function buildPublicRegistrationPreview(input: {
   };
 }
 
-export function buildPublicRegistrationSubmit(input: {
-  sponsorCode?: string;
-  packageTier?: string;
-  preferredSide?: 'left' | 'right';
-  fullName?: string;
-  email?: string;
-  phone?: string;
-  password?: string;
-}) {
+export function buildPublicRegistrationSubmit(viewer: SessionUser | null, input: PublicRegistrationInput) {
+  const resolvedSponsor = resolveRegistrationSponsor(viewer, input);
+  const resolvedOrigin: PublicRegistrationOrigin = input.origin === 'genealogy-slot' ? 'genealogy-slot' : 'referral-link';
+
   if (isSandboxMode()) {
     return commitSandboxRegistration('Public Registration', {
+      origin: resolvedOrigin,
       fullName: input.fullName ?? '',
+      username: input.username,
       email: input.email ?? '',
       phone: input.phone,
       password: input.password ?? '',
-      sponsorCode: input.sponsorCode,
-      packageTier: input.packageTier,
-      preferredSide: input.preferredSide
+      sponsorUsername: resolvedSponsor?.username,
+      activationCode: input.activationCode,
+      placementParentUsername: input.placementParentUsername,
+      placementSide: input.placementSide
     });
   }
 
-  const preview = buildPublicRegistrationPreview(input);
+  const preview = buildPublicRegistrationPreview(viewer, input);
 
   if (!preview.canProceed) {
     return buildGatedParityAction(
@@ -825,7 +970,7 @@ export function buildPublicRegistrationSubmit(input: {
 
   return buildGatedParityAction(
     'public-registration-submit',
-    `Registration flow validated for sponsor ${preview.sponsor?.username}, package ${preview.selectedPackage}, and code ${preview.matchingCode?.code}. Final code consumption and tree placement run in playground mode in this MVP.`
+    `Registration flow validated for sponsor ${preview.sponsor?.username}, package ${preview.selectedPackage}, account type ${preview.resolvedAccountType}, and code ${preview.matchingCode?.code}. Final code consumption and tree placement run in playground mode in this MVP.`
   );
 }
 

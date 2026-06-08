@@ -3,8 +3,22 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../app';
 import { resetSandboxState } from '../modules/sandbox/dev-sandbox-store.js';
 
+function getUsernameFromEmail(email: string): string {
+  const norm = email.toLowerCase().trim();
+  if (norm === 'yoradmin@gmail.com') return 'yorsuperadmin';
+  if (norm === 'yormember@gmail.com') return 'yormember';
+  if (norm === 'yorcashier@gmail.com') return 'yorcashier_legacy';
+  if (norm === 'yorbod@gmail.com') return 'yorbod_legacy';
+  if (norm === 'admin@yor.local') return 'yoradmin';
+  if (norm === 'cashier@yor.local') return 'yorcashier';
+  if (norm === 'bod@yor.local') return 'yorbod';
+  if (norm === 'member@yor.local') return 'YOR0001';
+  return email.split('@')[0];
+}
+
 async function login(email = 'member@yor.local', password = 'YorMember123!') {
-  const response = await request(app).post('/api/auth/login').send({ email, password });
+  const username = getUsernameFromEmail(email);
+  const response = await request(app).post('/api/auth/login').send({ username, password });
 
   expect(response.status).toBe(200);
   return response.headers['set-cookie'][0];
@@ -45,11 +59,11 @@ describe('Yor MVP compensation APIs', () => {
     expect(response.body.unresolvedDecisions.length).toBeGreaterThan(0);
   });
 
-  it('lists all eight earning streams with sandbox mode surfaced across the policy layer', async () => {
+  it('lists all seven earning streams with sandbox mode surfaced across the policy layer', async () => {
     const response = await request(app).get('/api/compensation/streams');
 
     expect(response.status).toBe(200);
-    expect(response.body.streams).toHaveLength(8);
+    expect(response.body.streams).toHaveLength(7);
     expect(response.body.streams.every((stream: { writeStatus: string }) => stream.writeStatus === 'sandbox')).toBe(true);
     expect(response.body.streams.map((stream: { id: string }) => stream.id)).toContain('salesmatch');
   });
@@ -90,22 +104,24 @@ describe('Yor MVP compensation APIs', () => {
       request(app).get('/api/member/transactions/WALLET-001').set('Cookie', cookie),
       request(app).get('/api/member/registration-readiness').set('Cookie', cookie),
       request(app).post('/api/registration/preview').send({
+        origin: 'referral-link',
         fullName: 'Sandbox Member',
+        username: 'YOR0104',
         email: 'sandbox.member@example.test',
         phone: '+63 900 000 0111',
         password: 'Sandbox123!',
-        sponsorCode: 'YOR-MEMBER-001',
-        packageTier: 'standard',
-        preferredSide: 'left'
+        referralCode: 'YOR-MEMBER-001',
+        activationCode: 'PDSTK7V2LC'
       }),
       request(app).post('/api/registration/submit').send({
+        origin: 'referral-link',
         fullName: 'Sandbox Member',
+        username: 'YOR0104',
         email: 'sandbox.member@example.test',
         phone: '+63 900 000 0111',
         password: 'Sandbox123!',
-        sponsorCode: 'YOR-MEMBER-001',
-        packageTier: 'standard',
-        preferredSide: 'left'
+        referralCode: 'YOR-MEMBER-001',
+        activationCode: 'PDSTK7V2LC'
       }),
       request(app).post('/api/member/wallet/preview-encash').set('Cookie', cookie).send({ amount: 5000 }),
       request(app).post('/api/member/wallet/encash').set('Cookie', cookie).send({ amount: 5000 })
@@ -113,7 +129,7 @@ describe('Yor MVP compensation APIs', () => {
 
     expect(dashboard.status).toBe(200);
     expect(dashboard.body.moneyMode).toBe('sandbox');
-    expect(dashboard.body.incomeStreams).toHaveLength(8);
+    expect(dashboard.body.incomeStreams).toHaveLength(7);
 
     expect(income.status).toBe(200);
     expect(income.body.streamId).toBe('salesmatch');
@@ -130,7 +146,8 @@ describe('Yor MVP compensation APIs', () => {
     ]);
     expect(walletDetail.status).toBe(200);
     expect(walletDetail.body.summary.availableBalance).toBeGreaterThan(0);
-    expect(walletDetail.body.preview.netReceivable).toBeGreaterThan(0);
+    expect(walletDetail.body.preview.requestedAmount).toBe(0);
+    expect(walletDetail.body.preview.netReceivable).toBe(0);
 
     expect(sponsor.status).toBe(200);
     expect(sponsor.body.treeType).toBe('sponsor');
@@ -145,7 +162,7 @@ describe('Yor MVP compensation APIs', () => {
       label: 'Shadow account',
       state: 'reserved_shadow',
       activationStatus: 'inactive',
-      registrationEnabled: true,
+      registrationEnabled: false,
       walletEnabled: false,
       unilevelEnabled: false
     });
@@ -166,6 +183,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(publicRegistrationPreview.body.matchingCode.code).toMatch(/^PDST[A-Z0-9]+$/);
     expect(publicRegistrationSubmit.status).toBe(200);
     expect(publicRegistrationSubmit.body.createdMember.username).toMatch(/^YOR/);
+    expect(publicRegistrationSubmit.body.createdMember.referralCode).toMatch(/^YOR-MEMBER-\d+$/);
     expect(encashPreview.status).toBe(200);
     expect(encashPreview.body.preview.netReceivable).toBeGreaterThan(0);
     expect(gatedEncash.status).toBe(200);
@@ -208,7 +226,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(members.status).toBe(200);
     expect(members.body.members.length).toBeGreaterThan(0);
     expect(simulations.status).toBe(200);
-    expect(simulations.body.simulations).toHaveLength(8);
+    expect(simulations.body.simulations).toHaveLength(7);
     expect(ledger.status).toBe(200);
     expect(ledger.body.entries.length).toBeGreaterThan(0);
     expect(payouts.status).toBe(200);
@@ -222,7 +240,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(genealogyTree.body.root.shadowSlots.right).toMatchObject({
       label: 'Shadow account',
       state: 'reserved_shadow',
-      registrationEnabled: true,
+      registrationEnabled: false,
       binaryCycleEnabled: false
     });
     expect(sponsorGenealogyTree.status).toBe(200);
@@ -310,13 +328,14 @@ describe('Yor MVP compensation APIs', () => {
     ).toBe(true);
 
     const previewResponse = await request(app).post('/api/registration/preview').send({
+      origin: 'referral-link',
       fullName: 'Transferred Code Prospect',
+      username: 'YOR0105',
       email: 'transferred.code.prospect@example.test',
       phone: '+63 900 000 0222',
       password: 'Sandbox123!',
-      sponsorCode: 'YOR-MEMBER-001',
-      packageTier: 'standard',
-      preferredSide: 'left'
+      referralCode: 'YOR-MEMBER-001',
+      activationCode: generatedCode.code
     });
 
     expect(previewResponse.status).toBe(200);
@@ -324,17 +343,19 @@ describe('Yor MVP compensation APIs', () => {
     expect(previewResponse.body.matchingCode.code).toBe(generatedCode.code);
 
     const submitResponse = await request(app).post('/api/registration/submit').send({
+      origin: 'referral-link',
       fullName: 'Transferred Code Prospect',
+      username: 'YOR0105',
       email: 'transferred.code.prospect@example.test',
       phone: '+63 900 000 0222',
       password: 'Sandbox123!',
-      sponsorCode: 'YOR-MEMBER-001',
-      packageTier: 'standard',
-      preferredSide: 'left'
+      referralCode: 'YOR-MEMBER-001',
+      activationCode: generatedCode.code
     });
 
     expect(submitResponse.status).toBe(200);
     expect(submitResponse.body.createdMember.username).toMatch(/^YOR/);
+    expect(submitResponse.body.createdMember.referralCode).toMatch(/^YOR-MEMBER-\d+$/);
 
     const inventoryAfterSubmit = await request(app)
       .get('/api/admin/activation-codes')

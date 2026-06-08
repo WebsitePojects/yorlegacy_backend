@@ -1317,7 +1317,8 @@ export function generateSandboxActivationCodes(
   quantity: number,
   packageTier = 'Standard',
   assignedTo?: string,
-  accountType?: string
+  accountType?: string,
+  remarks?: string
 ) {
   return updateSandboxState((state) => {
     const count = Math.max(1, Math.min(50, Math.floor(quantity)));
@@ -1337,7 +1338,9 @@ export function generateSandboxActivationCodes(
         assignedTo: owner?.username ?? null,
         status: 'unreleased',
         paymentStatus: 'unpaid',
-        remarks: owner ? `Tagged to ${owner.username} at generation.` : 'General code pool inventory.',
+        remarks:
+          remarks?.trim() ||
+          (owner ? `Tagged to ${owner.username} at generation.` : 'General code pool inventory.'),
         generatedAt: todayDate()
       });
     }

@@ -1,5 +1,6 @@
 import express from 'express';
 import { applyCors, applyRequestContext } from './lib/http.js';
+import { enforceOfficeCsrf } from './modules/auth/csrf.js';
 import { attachAuthUser } from './modules/auth/request-auth.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
@@ -14,6 +15,7 @@ app.use(applyRequestContext);
 app.use(applyCors);
 app.use(express.json());
 app.use(attachAuthUser);
+app.use(enforceOfficeCsrf);
 app.use(healthRouter);
 app.use(compensationRouter);
 app.use(authRouter);

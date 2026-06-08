@@ -27,6 +27,7 @@ import {
   runAdminUpdateMemberStatus,
   runAdminTransferActivationCodes
 } from '../modules/operations/legacy-parity-service.js';
+import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
 
 export const adminRouter = Router();
 
@@ -59,6 +60,29 @@ adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'),
   res.status(200).json({
     ...payload,
     members: payload.rows
+  });
+});
+
+adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+  if (query.length < 3) {
+    res.status(200).json({ results: [] });
+    return;
+  }
+
+  const payload = buildAdminMemberManagementCenter({
+    query,
+    page: 1,
+    pageSize: 20
+  });
+
+  res.status(200).json({
+    results: payload.rows.slice(0, 20).map((member) => ({
+      username: member.username,
+      displayName: member.fullName,
+      packageTier: member.packageTier
+    }))
   });
 });
 
@@ -97,40 +121,104 @@ adminRouter.post('/api/admin/payouts/approve', requireRole('admin', 'bod', 'supe
   res.status(200).json(runAdminApproveEncashment(req.authUser!, payoutId));
 });
 
-adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
+adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    res.status(200).json(await service.buildAdminActivationCodeCenter());
+    return;
+  }
+
   res.status(200).json(buildAdminActivationCodeCenter());
 });
 
-adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(
-    runAdminGenerateActivationCodes(req.authUser!, {
-      quantity: Number(req.body?.quantity ?? 1),
-      packageTier: req.body?.packageTier,
-      assignedTo: req.body?.assignedTo,
-      accountType: req.body?.accountType
-    })
-  );
+adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.slice(0, 200) : '';
+
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(
+        await service.generateActivationCodes(req.authUser!, {
+          quantity: Number(req.body?.quantity ?? 1),
+          packageTier: req.body?.packageTier,
+          assignedTo: req.body?.assignedTo,
+          accountType: req.body?.accountType,
+          codeFamily: req.body?.codeFamily,
+          remarks
+        })
+      );
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to generate activation codes.' });
+    }
+    return;
+  }
+
+  res.status(200).json(runAdminGenerateActivationCodes(req.authUser!, {
+    quantity: Number(req.body?.quantity ?? 1),
+    packageTier: req.body?.packageTier,
+    assignedTo: req.body?.assignedTo,
+    accountType: req.body?.accountType,
+    remarks
+  }));
 });
 
-adminRouter.post('/api/admin/activation-codes/release', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/release', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
     : [];
+
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.releaseActivationCodes(req.authUser!, codes));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to release activation codes.' });
+    }
+    return;
+  }
 
   res.status(200).json(runAdminReleaseActivationCodes(req.authUser!, { codes }));
 });
 
-adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
     : [];
 
-  res.status(200).json(
-    runAdminTransferActivationCodes(req.authUser!, {
-      targetUsername: typeof req.body?.targetUsername === 'string' ? req.body.targetUsername : '',
-      codes
-    })
-  );
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.transferActivationCodes(
+        req.authUser!,
+        typeof req.body?.targetUsername === 'string' ? req.body.targetUsername : '',
+        codes
+      ));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to transfer activation codes.' });
+    }
+    return;
+  }
+
+  res.status(200).json(runAdminTransferActivationCodes(req.authUser!, {
+    targetUsername: typeof req.body?.targetUsername === 'string' ? req.body.targetUsername : '',
+    codes
+  }));
 });
 
 adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {

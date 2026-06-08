@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-07T01:16:01.753Z",
-    "lastMutationAt": "2026-06-07T01:16:02.194Z"
+    "lastResetAt": "2026-06-08T16:58:09.742Z",
+    "lastMutationAt": "2026-06-08T16:58:10.439Z"
   },
   "users": [
     {
@@ -56,8 +56,8 @@
       "name": "Creditation Flow Prospect",
       "email": "creditation.flow@example.test",
       "role": "member",
-      "passwordHash": "8591df06f81b719d797794ac50dc61bfbd31408e36c56287f0987faa8a3c2ac0cf9db8c9ab5d80942c2947833248c54e93ec31db2bb7128ca01fc6d647fa8ec9",
-      "passwordSalt": "1130259f3128226c55455f87f9a488d7",
+      "passwordHash": "ed7c34913a8bd7c9848efb4cc3b352f4949c9e9de6f82060ce3b062b355faea81fe42b1cdadb52ceb790964b99e54f3ed00a6ad8054324ee4fb5a38a0c94c2a6",
+      "passwordSalt": "8f0d729478278483de9c2ff77cdeafc4",
       "status": "active"
     }
   ],
@@ -109,7 +109,7 @@
       "stockist": false,
       "payoutOption": "GCash",
       "payoutDetails": "09170000001",
-      "lastActivity": "2026-06-07"
+      "lastActivity": "2026-06-08"
     },
     {
       "userId": "yor-legacy-002",
@@ -244,7 +244,7 @@
       "stockist": false,
       "payoutOption": "GCash",
       "payoutDetails": "+63 900 111 2202",
-      "lastActivity": "2026-06-07"
+      "lastActivity": "2026-06-08"
     }
   ],
   "activationRows": [
@@ -431,8 +431,8 @@
       "debitAmount": 0,
       "balanceAfter": 20200.75,
       "status": "posted",
-      "occurredAt": "2026-06-07T01:16:02.194Z",
-      "processId": "sandbox-direct_referral-1780794962194"
+      "occurredAt": "2026-06-08T16:58:10.439Z",
+      "processId": "sandbox-direct_referral-1780937890439"
     },
     {
       "id": "WL-001",
@@ -479,7 +479,7 @@
       "actor": "Public Registration",
       "action": "member_registration_committed",
       "target": "YOR0103 under YOR0001",
-      "occurredAt": "2026-06-07T01:16:02.194Z"
+      "occurredAt": "2026-06-08T16:58:10.439Z"
     },
     {
       "actor": "Yor Super Admin",
@@ -491,7 +491,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-07T01:16:01.753Z"
+      "occurredAt": "2026-06-08T16:58:09.742Z"
     }
   ]
 }

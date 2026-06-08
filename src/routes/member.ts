@@ -16,6 +16,7 @@ import {
   buildMemberRegistrationReadiness,
   buildScopedBinaryGenealogyCenter,
   buildSponsorGenealogyCenter,
+  buildAdminMemberManagementCenter,
   buildMemberTransactionCenter,
   buildMemberWalletDetail,
   findMemberProfileByCode,
@@ -24,6 +25,7 @@ import {
   runMemberTransferActivationCodes,
   runMemberUpgradeActivationCode
 } from '../modules/operations/legacy-parity-service.js';
+import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
 
 export const memberRouter = Router();
 
@@ -83,7 +85,17 @@ memberRouter.get('/api/member/shadow-accounts', requireRole('member', 'admin', '
   res.status(200).json(buildShadowAccounts(ownerUsername));
 });
 
-memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    res.status(200).json(await service.buildMemberActivationCodeCenter(req.authUser!));
+    return;
+  }
+
   res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
 });
 
@@ -101,13 +113,52 @@ memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'c
   res.status(200).json(member);
 });
 
-memberRouter.post('/api/member/activation-codes/transfer', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(
-    runMemberTransferActivationCodes(req.authUser!, {
-      targetUsername: req.body?.targetUsername ?? '',
-      codes: Array.isArray(req.body?.codes) ? req.body.codes : []
-    })
-  );
+memberRouter.get('/api/member/members/search', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+  if (query.length < 3) {
+    res.status(200).json({ results: [] });
+    return;
+  }
+
+  const payload = buildAdminMemberManagementCenter({
+    query,
+    page: 1,
+    pageSize: 20
+  });
+
+  res.status(200).json({
+    results: payload.rows.slice(0, 20).map((member) => ({
+      username: member.username,
+      displayName: member.fullName,
+      packageTier: member.packageTier
+    }))
+  });
+});
+
+memberRouter.post('/api/member/activation-codes/transfer', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.transferActivationCodes(
+        req.authUser!,
+        req.body?.targetUsername ?? '',
+        Array.isArray(req.body?.codes) ? req.body.codes : []
+      ));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to transfer codes.' });
+    }
+    return;
+  }
+
+  res.status(200).json(runMemberTransferActivationCodes(req.authUser!, {
+    targetUsername: req.body?.targetUsername ?? '',
+    codes: Array.isArray(req.body?.codes) ? req.body.codes : []
+  }));
 });
 
 memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
@@ -153,8 +204,47 @@ memberRouter.get('/api/member/transactions/:transactionId', requireRole('member'
   });
 });
 
-memberRouter.get('/api/member/registration-readiness', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/registration-readiness', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    res.status(200).json(await service.buildMemberRegistrationReadiness(req.authUser!));
+    return;
+  }
+
   res.status(200).json(buildMemberRegistrationReadiness(req.authUser!));
+});
+
+memberRouter.post('/api/member/placement-reservations', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({
+      moneyMode: 'sandbox',
+      status: 'completed',
+      reason: 'Placement reservations are production-mode only.'
+    });
+    return;
+  }
+
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+
+  try {
+    res.status(200).json(
+      await service.createPlacementReservation(req.authUser!, {
+        placementParentUsername: String(req.body?.placementParentUsername ?? ''),
+        placementSide: req.body?.placementSide === 'right' ? 'right' : 'left',
+        expiresInHours: Number(req.body?.expiresInHours ?? 24)
+      })
+    );
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to create placement reservation.' });
+  }
 });
 
 memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {

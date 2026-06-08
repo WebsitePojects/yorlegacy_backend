@@ -3,6 +3,28 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../app';
 import { resetSandboxState } from '../modules/sandbox/dev-sandbox-store.js';
 
+function buildCookieHeader(setCookie: string[] | string | undefined): string[] {
+  const values = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  return values.map((value) => value.split(';')[0]);
+}
+
+function getCookieValue(cookies: string[], name: string): string | null {
+  for (const cookie of cookies) {
+    const [key, ...rest] = cookie.split('=');
+    if (key === name) {
+      return rest.join('=');
+    }
+  }
+
+  return null;
+}
+
+function withCsrf(test: request.Test, cookies: string[]): request.Test {
+  return test
+    .set('Cookie', cookies)
+    .set('x-yor-csrf-token', getCookieValue(cookies, 'yor_csrf') ?? '');
+}
+
 function getUsernameFromEmail(email: string): string {
   const norm = email.toLowerCase().trim();
   if (norm === 'yoradmin@gmail.com') return 'yorsuperadmin';
@@ -21,7 +43,7 @@ async function login(email = 'member@yor.local', password = 'YorMember123!') {
   const response = await request(app).post('/api/auth/login').send({ username, password });
 
   expect(response.status).toBe(200);
-  return response.headers['set-cookie'][0];
+  return buildCookieHeader(response.headers['set-cookie']);
 }
 
 describe('Yor MVP compensation APIs', () => {
@@ -123,8 +145,8 @@ describe('Yor MVP compensation APIs', () => {
         referralCode: 'YOR-MEMBER-001',
         activationCode: 'PDSTK7V2LC'
       }),
-      request(app).post('/api/member/wallet/preview-encash').set('Cookie', cookie).send({ amount: 5000 }),
-      request(app).post('/api/member/wallet/encash').set('Cookie', cookie).send({ amount: 5000 })
+      withCsrf(request(app).post('/api/member/wallet/preview-encash'), cookie).send({ amount: 5000 }),
+      withCsrf(request(app).post('/api/member/wallet/encash'), cookie).send({ amount: 5000 })
     ]);
 
     expect(dashboard.status).toBe(200);
@@ -216,9 +238,9 @@ describe('Yor MVP compensation APIs', () => {
       request(app).get('/api/admin/encashments').set('Cookie', cookie),
       request(app).get('/api/admin/genealogy/binary-tree').set('Cookie', cookie),
       request(app).get('/api/admin/genealogy/sponsor-tree?rootUsername=YOR-MEMBER-001').set('Cookie', cookie),
-      request(app).post('/api/admin/payouts/approve').set('Cookie', cookie).send({ payoutId: 'ENC-20260524-001' }),
-      request(app).post('/api/admin/activation-codes/generate').set('Cookie', cookie).send({ quantity: 5 }),
-      request(app).post('/api/admin/encashments/ENC-20260524-001/approve').set('Cookie', cookie)
+      withCsrf(request(app).post('/api/admin/payouts/approve'), cookie).send({ payoutId: 'ENC-20260524-001' }),
+      withCsrf(request(app).post('/api/admin/activation-codes/generate'), cookie).send({ quantity: 5 }),
+      withCsrf(request(app).post('/api/admin/encashments/ENC-20260524-001/approve'), cookie)
     ]);
 
     expect(dashboard.status).toBe(200);
@@ -266,6 +288,7 @@ describe('Yor MVP compensation APIs', () => {
     const generateResponse = await request(app)
       .post('/api/admin/activation-codes/generate')
       .set('Cookie', adminCookie)
+      .set('x-yor-csrf-token', getCookieValue(adminCookie, 'yor_csrf') ?? '')
       .send({
         quantity: 1,
         packageTier: 'Standard',
@@ -298,6 +321,7 @@ describe('Yor MVP compensation APIs', () => {
     const releaseResponse = await request(app)
       .post('/api/admin/activation-codes/release')
       .set('Cookie', adminCookie)
+      .set('x-yor-csrf-token', getCookieValue(adminCookie, 'yor_csrf') ?? '')
       .send({ codes: [generatedCode.code] });
 
     expect(releaseResponse.status).toBe(200);
@@ -306,6 +330,7 @@ describe('Yor MVP compensation APIs', () => {
     const transferResponse = await request(app)
       .post('/api/admin/activation-codes/transfer')
       .set('Cookie', adminCookie)
+      .set('x-yor-csrf-token', getCookieValue(adminCookie, 'yor_csrf') ?? '')
       .send({
         targetUsername: 'YOR0001',
         codes: [generatedCode.code]
@@ -379,14 +404,17 @@ describe('Yor MVP compensation APIs', () => {
       request(app)
         .post('/api/admin/activation-codes/generate')
         .set('Cookie', cashierCookie)
+        .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
         .send({ quantity: 1, packageTier: 'Classic', assignedTo: 'YOR0001' }),
       request(app)
         .post('/api/admin/payouts/approve')
         .set('Cookie', cashierCookie)
+        .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
         .send({ payoutId: 'ENC-20260524-001' }),
       request(app)
         .post('/api/admin/encashments/ENC-20260524-001/approve')
         .set('Cookie', cashierCookie)
+        .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
     ]);
 
     expect(generateResponse.status).toBe(403);
@@ -396,6 +424,7 @@ describe('Yor MVP compensation APIs', () => {
     const releaseResponse = await request(app)
       .post('/api/admin/activation-codes/release')
       .set('Cookie', cashierCookie)
+      .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
       .send({ codes: ['FSBUH7M2KC'] });
 
     expect(releaseResponse.status).toBe(200);
@@ -404,6 +433,7 @@ describe('Yor MVP compensation APIs', () => {
     const transferResponse = await request(app)
       .post('/api/admin/activation-codes/transfer')
       .set('Cookie', cashierCookie)
+      .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
       .send({
         targetUsername: 'YOR0002',
         codes: ['FSBUH7M2KC']
@@ -429,12 +459,17 @@ describe('Yor MVP compensation APIs', () => {
 
   it('resets the branch-local sandbox runtime for a fresh destructive test pass', async () => {
     const memberCookie = await login();
-    await request(app).post('/api/member/wallet/encash').set('Cookie', memberCookie).send({ amount: 5000 });
+    await request(app)
+      .post('/api/member/wallet/encash')
+      .set('Cookie', memberCookie)
+      .set('x-yor-csrf-token', getCookieValue(memberCookie, 'yor_csrf') ?? '')
+      .send({ amount: 5000 });
 
     const superadminCookie = await login('yoradmin@gmail.com', '1');
     const resetResponse = await request(app)
       .post('/api/admin/sandbox/reset')
-      .set('Cookie', superadminCookie);
+      .set('Cookie', superadminCookie)
+      .set('x-yor-csrf-token', getCookieValue(superadminCookie, 'yor_csrf') ?? '');
 
     expect(resetResponse.status).toBe(200);
     expect(resetResponse.body.moneyMode).toBe('sandbox');

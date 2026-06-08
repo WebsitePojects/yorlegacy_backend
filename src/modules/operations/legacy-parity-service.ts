@@ -1012,10 +1012,17 @@ export function runMemberEncashment(user: SessionUser, amount: number) {
 
 export function runAdminGenerateActivationCodes(
   user: SessionUser,
-  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string }
+  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string; remarks?: string }
 ) {
   return isSandboxMode()
-    ? generateSandboxActivationCodes(user, payload.quantity, payload.packageTier, payload.assignedTo, payload.accountType)
+    ? generateSandboxActivationCodes(
+        user,
+        payload.quantity,
+        payload.packageTier,
+        payload.assignedTo,
+        payload.accountType,
+        payload.remarks
+      )
     : buildGatedParityAction('admin-generate-activation-codes');
 }
 

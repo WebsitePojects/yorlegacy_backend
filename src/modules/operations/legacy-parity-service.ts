@@ -876,7 +876,7 @@ export function buildAdminGenealogyCenter(
   treeType: 'binary-placement' | 'sponsor' = 'binary-placement',
   rootUsername?: string
 ) {
-  const rootMember = rootUsername ? findMemberByCode(rootUsername) : findMemberByCode('YOR0001');
+  const rootMember = rootUsername ? findMemberByCode(rootUsername) : findMemberByCode('yor01');
   const fallbackRoot = listHybridMembers()[0];
   const resolvedRoot = rootMember ?? fallbackRoot;
   const rootUser: SessionUser = {

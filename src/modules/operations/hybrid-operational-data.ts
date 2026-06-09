@@ -80,11 +80,11 @@ function packagePolicyForTier(packageTier: string) {
 const members: MemberRecord[] = [
   {
     userId: 'yor-member-demo',
-    username: 'YOR0001',
-    fullName: 'Yor Member',
+    username: 'yor01',
+    fullName: 'Yor Company01',
     firstName: 'Yor',
-    lastName: 'Member',
-    email: 'member@yor.local',
+    lastName: 'Company01',
+    email: 'yor01@yor.local',
     packageTier: 'Standard',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-001',
@@ -110,9 +110,9 @@ const members: MemberRecord[] = [
     packageTier: 'Business',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-002',
-    sponsorCode: 'YOR-MEMBER-001',
+    sponsorCode: 'yor01-ref',
     placement: 'left',
-    placementParentUsername: 'YOR0001',
+    placementParentUsername: 'yor01',
     placementParentShadowSide: 'left',
     directReferrals: 3,
     leftPoints: 12000,
@@ -133,9 +133,9 @@ const members: MemberRecord[] = [
     packageTier: 'VIP',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-003',
-    sponsorCode: 'YOR-MEMBER-001',
+    sponsorCode: 'yor01-ref',
     placement: 'right',
-    placementParentUsername: 'YOR0001',
+    placementParentUsername: 'yor01',
     placementParentShadowSide: 'right',
     directReferrals: 7,
     leftPoints: 18000,
@@ -207,7 +207,7 @@ const walletRows = [
   {
     date: '2026-05-27',
     type: 'salesmatch',
-    source: 'YOR0001 L/R match',
+    source: 'yor01 L/R match',
     credit: money(7500),
     debit: money(0),
     balance: money(10200.75),
@@ -246,7 +246,7 @@ const pairingRows: PairingRow[] = [
 const payoutRows: PayoutRow[] = [
   {
     reference: 'ENC-20260524-001',
-    member: 'YOR0001',
+    member: 'yor01',
     gross: money(8000),
     fee: money(450),
     tax: money(800),
@@ -281,7 +281,7 @@ const activationRows: ActivationRow[] = [
     code: 'PDSTYQ8M4K',
     accountType: 'PD',
     packageTier: 'Standard',
-    assignedTo: 'YOR0001',
+    assignedTo: 'yor01',
     status: 'used',
     paymentStatus: 'paid',
     remarks: 'Consumed in prior registration cycle.',
@@ -301,7 +301,7 @@ const activationRows: ActivationRow[] = [
     code: 'PDSTK7V2LC',
     accountType: 'PD',
     packageTier: 'Standard',
-    assignedTo: 'YOR0001',
+    assignedTo: 'yor01',
     status: 'available',
     paymentStatus: 'paid',
     remarks: 'Paid and ready for release cycle.',
@@ -1265,15 +1265,26 @@ export function buildOpsOfficeSnapshot(
 
 export function buildMemberOfficeSnapshot(
   user: SessionUser,
-  profile: { referralCode?: string; sponsorCode?: string; packageTier?: string; accountStatus?: string } | null
+  profile: {
+    referralCode?: string;
+    sponsorCode?: string;
+    packageTier?: string;
+    accountStatus?: string;
+    username?: string;
+    fullName?: string;
+    payoutMethod?: string;
+  } | null
 ) {
   const member = currentMemberFor(user);
+  const pick = <T>(value: T | undefined, fallback: T) => (value !== undefined ? value : fallback);
   const mergedMember = {
     ...member,
-    referralCode: profile?.referralCode ?? member.referralCode,
-    sponsorCode: profile?.sponsorCode ?? member.sponsorCode,
-    packageTier: profile?.packageTier ?? member.packageTier,
-    accountStatus: profile?.accountStatus ?? member.accountStatus
+    referralCode: pick(profile?.referralCode, member.referralCode),
+    sponsorCode: pick(profile?.sponsorCode, member.sponsorCode),
+    packageTier: pick(profile?.packageTier, member.packageTier),
+    accountStatus: pick(profile?.accountStatus, member.accountStatus),
+    username: pick(profile?.username, member.username),
+    fullName: pick(profile?.fullName, member.fullName)
   };
 
   return {
@@ -1285,7 +1296,7 @@ export function buildMemberOfficeSnapshot(
       accountStatus: mergedMember.accountStatus,
       username: mergedMember.username,
       fullName: mergedMember.fullName,
-      payoutMethod: 'GCash'
+      payoutMethod: profile?.payoutMethod ?? 'GCash'
     },
     wallet: {
       availableBalance: money(mergedMember.walletAvailable),

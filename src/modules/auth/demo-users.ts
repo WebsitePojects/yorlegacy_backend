@@ -17,7 +17,7 @@ const demoUsers: (DemoUserRecord & { username: string })[] = [
     role: 'member',
     name: env.DEMO_MEMBER_NAME,
     email: env.DEMO_MEMBER_EMAIL.toLowerCase(),
-    username: 'YOR0001',
+    username: 'yor01',
     password: env.DEMO_MEMBER_PASSWORD
   },
   {
@@ -55,25 +55,9 @@ const demoUsers: (DemoUserRecord & { username: string })[] = [
   {
     id: 'yor-member-legacy-demo',
     role: 'member',
-    name: 'Yor Member',
-    email: 'yormember@gmail.com',
-    username: 'yormember',
-    password: '1'
-  },
-  {
-    id: 'yor-cashier-legacy-demo',
-    role: 'cashier',
-    name: 'Yor Cashier',
-    email: 'yorcashier@gmail.com',
-    username: 'yorcashier_legacy',
-    password: '1'
-  },
-  {
-    id: 'yor-bod-legacy-demo',
-    role: 'bod',
-    name: 'Yor BOD',
-    email: 'yorbod@gmail.com',
-    username: 'yorbod_legacy',
+    name: 'Yor Company01',
+    email: 'yor01@gmail.com',
+    username: 'yor01',
     password: '1'
   }
 ];
@@ -103,7 +87,7 @@ export function authenticateDemoUser(
 export function getDemoCredentials(): Record<AppRole, DemoCredential> {
   return {
     member: {
-      username: 'YOR0001',
+      username: 'yor01',
       password: env.DEMO_MEMBER_PASSWORD
     },
     admin: {

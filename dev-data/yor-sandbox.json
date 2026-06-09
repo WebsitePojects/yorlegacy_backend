@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-09T11:44:07.206Z",
-    "lastMutationAt": "2026-06-09T11:44:07.522Z"
+    "lastResetAt": "2026-06-09T15:33:13.681Z",
+    "lastMutationAt": "2026-06-09T15:33:15.086Z"
   },
   "users": [
     {
@@ -50,15 +50,6 @@
       "passwordHash": "de03724d3e0a945fc1f8a1cb73d69ae16e445f7c92d0710e589de9196e806b433fff0fa683d7e2a1f19bc4373db76366e2fbe9269e6542659b9f55874117050a",
       "passwordSalt": "1ce26b792208c87bc68727308f18d209",
       "status": "active"
-    },
-    {
-      "id": "yor-company-root",
-      "role": "member",
-      "name": "Yor International Company",
-      "email": "yorinternational@yor.local",
-      "passwordHash": "c67c0f2dda824a601ea36033b01da41299ce5836e4d65fbc0fa162913846d830001f6d7e74a9b27ed09d54a6a77889ca7f425d401d286123d7f30afc6c5ae5d6",
-      "passwordSalt": "yor-company-root-seed-salt",
-      "status": "active"
     }
   ],
   "adminProfiles": [
@@ -86,18 +77,18 @@
   "members": [
     {
       "userId": "yor-member-demo",
-      "username": "YOR0001",
-      "fullName": "Yor Member",
+      "username": "yor01",
+      "fullName": "Yor Company01",
       "firstName": "Yor",
-      "lastName": "Member",
+      "lastName": "Company01",
       "middleName": "",
       "email": "member@yor.local",
       "phone": "+63 900 000 0001",
       "address": "Makati City, Metro Manila",
       "packageTier": "Standard",
       "accountStatus": "active",
-      "referralCode": "YOR-MEMBER-001",
-      "sponsorCode": "YOR-SPONSOR-001",
+      "referralCode": "7QK2EPYN",
+      "sponsorCode": "",
       "placement": "root",
       "placementParentUsername": null,
       "directReferrals": 5,
@@ -127,9 +118,9 @@
       "packageTier": "Business",
       "accountStatus": "active",
       "referralCode": "YOR-ALYSSA",
-      "sponsorCode": "YOR-MEMBER-001",
+      "sponsorCode": "7QK2EPYN",
       "placement": "left",
-      "placementParentUsername": "YOR0001-L",
+      "placementParentUsername": "yor01-L",
       "placementParentShadowSide": "left",
       "directReferrals": 3,
       "leftPoints": 12000,
@@ -158,9 +149,9 @@
       "packageTier": "VIP",
       "accountStatus": "active",
       "referralCode": "YOR-MARCO",
-      "sponsorCode": "YOR-MEMBER-001",
+      "sponsorCode": "7QK2EPYN",
       "placement": "right",
-      "placementParentUsername": "YOR0001-R",
+      "placementParentUsername": "yor01-R",
       "placementParentShadowSide": "right",
       "directReferrals": 7,
       "leftPoints": 18000,
@@ -274,7 +265,7 @@
       "code": "PDSTYQ8M4K",
       "accountType": "PD",
       "packageTier": "Standard",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "used",
       "paymentStatus": "paid",
       "remarks": "Consumed in prior registration cycle.",
@@ -296,7 +287,7 @@
       "code": "PDSTK7V2LC",
       "accountType": "PD",
       "packageTier": "Standard",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Paid and ready for release cycle.",
@@ -318,7 +309,7 @@
       "code": "PDBA5D8WJ2",
       "accountType": "PD",
       "packageTier": "Basic",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "unpaid",
       "remarks": "Awaiting package settlement.",
@@ -329,7 +320,7 @@
       "code": "PDCLV4T9QB",
       "accountType": "PD",
       "packageTier": "Classic",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Ready for direct sponsor release.",
@@ -343,7 +334,7 @@
       "assignedTo": null,
       "status": "unreleased",
       "paymentStatus": "unpaid",
-      "remarks": "General code pool inventory.",
+      "remarks": "General code pool inventory — loose.",
       "generatedAt": "2026-05-28",
       "codeFamily": "YOR CODES"
     },
@@ -351,7 +342,7 @@
       "code": "FSVI8X4R2M",
       "accountType": "FS",
       "packageTier": "VIP",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "High-tier stockist sale cleared.",
@@ -362,7 +353,7 @@
       "code": "MNTXP9Q2KL",
       "accountType": "PD",
       "packageTier": "Maintenance",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Monthly maintenance product code.",
@@ -373,7 +364,7 @@
       "code": "PERF8M3N2A",
       "accountType": "PD",
       "packageTier": "Perfume Pack",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Yor Perfume variant bundle.",
@@ -384,7 +375,7 @@
       "code": "VISI3P9K7X",
       "accountType": "PD",
       "packageTier": "Vision Drops",
-      "assignedTo": "YOR0001",
+      "assignedTo": "yor01",
       "status": "available",
       "paymentStatus": "paid",
       "remarks": "Yor Vision wellness drops.",
@@ -413,7 +404,7 @@
   "payoutRows": [
     {
       "reference": "ENC-20260524-001",
-      "member": "YOR0001",
+      "member": "yor01",
       "gross": "PHP 8,000.00",
       "fee": "PHP 450.00",
       "maintenanceFee": "PHP 0.00",
@@ -445,7 +436,7 @@
   "walletLedgerEntries": [
     {
       "id": "WL-001",
-      "memberUsername": "YOR0001",
+      "memberUsername": "yor01",
       "walletType": "main",
       "entryType": "direct_referral",
       "sourceReference": "YOR-ALYSSA",
@@ -458,10 +449,10 @@
     },
     {
       "id": "WL-002",
-      "memberUsername": "YOR0001",
+      "memberUsername": "yor01",
       "walletType": "main",
       "entryType": "salesmatch",
-      "sourceReference": "YOR0001 L/R match",
+      "sourceReference": "yor01 L/R match",
       "creditAmount": 7500,
       "debitAmount": 0,
       "balanceAfter": 10200.75,
@@ -471,7 +462,7 @@
     },
     {
       "id": "WL-003",
-      "memberUsername": "YOR0001",
+      "memberUsername": "yor01",
       "walletType": "encashment",
       "entryType": "encashment_fee",
       "sourceReference": "ENC-20260524-001",
@@ -494,7 +485,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-09T11:44:07.206Z"
+      "occurredAt": "2026-06-09T15:33:13.681Z"
     }
   ]
 }

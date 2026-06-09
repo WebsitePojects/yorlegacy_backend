@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticateUser } from '../modules/auth/auth-service.js';
 import { getDemoCredentials } from '../modules/auth/demo-users.js';
+import { isProductionMode } from '../modules/production/runtime.js';
 import {
   createCsrfCookie,
   createCsrfToken,
@@ -98,5 +99,10 @@ authRouter.post('/api/auth/logout', (_req, res) => {
 });
 
 authRouter.get('/api/auth/demo-credentials', (_req, res) => {
+  if (isProductionMode()) {
+    res.status(404).json({ message: 'Demo credentials are disabled in production mode.' });
+    return;
+  }
+
   res.status(200).json(getDemoCredentials());
 });

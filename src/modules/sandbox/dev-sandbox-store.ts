@@ -225,8 +225,6 @@ function buildSeedUsers(): SandboxUserRecord[] {
     env.DEMO_SUPERADMIN_PASSWORD,
     seededUserSalts.superadmin
   );
-  const companyRootPassword = createSeedPasswordHashSync('1', 'yor-company-root-seed-salt');
-
   return [
     {
       id: 'yor-member-demo',
@@ -273,15 +271,6 @@ function buildSeedUsers(): SandboxUserRecord[] {
       passwordSalt: superadminPassword.salt,
       status: 'active'
     },
-    {
-      id: 'yor-company-root',
-      role: 'member',
-      name: 'Yor International Company',
-      email: 'yorinternational@yor.local',
-      passwordHash: companyRootPassword.hash,
-      passwordSalt: companyRootPassword.salt,
-      status: 'active'
-    }
   ];
 }
 
@@ -308,18 +297,18 @@ function buildSeedState(): SandboxState {
     members: [
       {
         userId: 'yor-member-demo',
-        username: 'YOR0001',
-        fullName: 'Yor Member',
+        username: 'yor01',
+        fullName: env.DEMO_MEMBER_NAME,
         firstName: 'Yor',
-        lastName: 'Member',
+        lastName: 'Company01',
         middleName: '',
-        email: 'member@yor.local',
+        email: env.DEMO_MEMBER_EMAIL.toLowerCase(),
         phone: '+63 900 000 0001',
         address: 'Makati City, Metro Manila',
         packageTier: 'Standard',
         accountStatus: 'active',
-        referralCode: 'YOR-MEMBER-001',
-        sponsorCode: 'YOR-SPONSOR-001',
+        referralCode: encodeReferralCode('YOR01'),
+        sponsorCode: '',
         placement: 'root',
         placementParentUsername: null,
         directReferrals: 5,
@@ -349,9 +338,9 @@ function buildSeedState(): SandboxState {
         packageTier: 'Business',
         accountStatus: 'active',
         referralCode: 'YOR-ALYSSA',
-        sponsorCode: 'YOR-MEMBER-001',
+        sponsorCode: encodeReferralCode('YOR01'),
         placement: 'left',
-        placementParentUsername: 'YOR0001-L',
+        placementParentUsername: 'yor01-L',
         placementParentShadowSide: 'left',
         directReferrals: 3,
         leftPoints: 12000,
@@ -380,9 +369,9 @@ function buildSeedState(): SandboxState {
         packageTier: 'VIP',
         accountStatus: 'active',
         referralCode: 'YOR-MARCO',
-        sponsorCode: 'YOR-MEMBER-001',
+        sponsorCode: encodeReferralCode('YOR01'),
         placement: 'right',
-        placementParentUsername: 'YOR0001-R',
+        placementParentUsername: 'yor01-R',
         placementParentShadowSide: 'right',
         directReferrals: 7,
         leftPoints: 18000,
@@ -492,17 +481,17 @@ function buildSeedState(): SandboxState {
       }
     ],
     activationRows: [
-      { code: 'PDSTYQ8M4K', accountType: 'PD', packageTier: 'Standard', assignedTo: 'YOR0001', status: 'used', paymentStatus: 'paid', remarks: 'Consumed in prior registration cycle.', generatedAt: '2026-05-20', codeFamily: 'YOR CODES' },
+      { code: 'PDSTYQ8M4K', accountType: 'PD', packageTier: 'Standard', assignedTo: 'yor01', status: 'used', paymentStatus: 'paid', remarks: 'Consumed in prior registration cycle.', generatedAt: '2026-05-20', codeFamily: 'YOR CODES' },
       { code: 'FSBUP3N9XA', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0002', status: 'used', paymentStatus: 'externally-paid', remarks: 'Settled member-to-member outside office.', generatedAt: '2026-05-21', codeFamily: 'YOR CODES' },
-      { code: 'PDSTK7V2LC', accountType: 'PD', packageTier: 'Standard', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Paid and ready for release cycle.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'PDSTK7V2LC', accountType: 'PD', packageTier: 'Standard', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Paid and ready for release cycle.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'FSBUZ6Q1RH', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0003', status: 'available', paymentStatus: 'externally-paid', remarks: 'Stockist walk-in settlement verified by admin.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'unpaid', remarks: 'Awaiting package settlement.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'PDCLV4T9QB', accountType: 'PD', packageTier: 'Classic', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Ready for direct sponsor release.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'FSBUH7M2KC', accountType: 'FS', packageTier: 'Business', assignedTo: null, status: 'unreleased', paymentStatus: 'unpaid', remarks: 'General code pool inventory.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'FSVI8X4R2M', accountType: 'FS', packageTier: 'VIP', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'High-tier stockist sale cleared.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'MNTXP9Q2KL', accountType: 'PD', packageTier: 'Maintenance', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Monthly maintenance product code.', generatedAt: '2026-05-28', codeFamily: 'YOR MAINTENANCE' },
-      { code: 'PERF8M3N2A', accountType: 'PD', packageTier: 'Perfume Pack', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Yor Perfume variant bundle.', generatedAt: '2026-05-28', codeFamily: 'YOR PERFUME' },
-      { code: 'VISI3P9K7X', accountType: 'PD', packageTier: 'Vision Drops', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Yor Vision wellness drops.', generatedAt: '2026-05-28', codeFamily: 'YOR VISION' }
+      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'yor01', status: 'available', paymentStatus: 'unpaid', remarks: 'Awaiting package settlement.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'PDCLV4T9QB', accountType: 'PD', packageTier: 'Classic', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Ready for direct sponsor release.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'FSBUH7M2KC', accountType: 'FS', packageTier: 'Business', assignedTo: null, status: 'unreleased', paymentStatus: 'unpaid', remarks: 'General code pool inventory — loose.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'FSVI8X4R2M', accountType: 'FS', packageTier: 'VIP', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'High-tier stockist sale cleared.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'MNTXP9Q2KL', accountType: 'PD', packageTier: 'Maintenance', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Monthly maintenance product code.', generatedAt: '2026-05-28', codeFamily: 'YOR MAINTENANCE' },
+      { code: 'PERF8M3N2A', accountType: 'PD', packageTier: 'Perfume Pack', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Yor Perfume variant bundle.', generatedAt: '2026-05-28', codeFamily: 'YOR PERFUME' },
+      { code: 'VISI3P9K7X', accountType: 'PD', packageTier: 'Vision Drops', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Yor Vision wellness drops.', generatedAt: '2026-05-28', codeFamily: 'YOR VISION' }
     ],
     pairingRows: [
       {
@@ -525,7 +514,7 @@ function buildSeedState(): SandboxState {
     payoutRows: [
       {
         reference: 'ENC-20260524-001',
-        member: 'YOR0001',
+        member: 'yor01',
         gross: currency(8000),
         fee: currency(450),
         maintenanceFee: currency(0),
@@ -557,7 +546,7 @@ function buildSeedState(): SandboxState {
     walletLedgerEntries: [
       {
         id: 'WL-001',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'main',
         entryType: 'direct_referral',
         sourceReference: 'YOR-ALYSSA',
@@ -570,10 +559,10 @@ function buildSeedState(): SandboxState {
       },
       {
         id: 'WL-002',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'main',
         entryType: 'salesmatch',
-        sourceReference: 'YOR0001 L/R match',
+        sourceReference: 'yor01 L/R match',
         creditAmount: 7500,
         debitAmount: 0,
         balanceAfter: 10200.75,
@@ -583,7 +572,7 @@ function buildSeedState(): SandboxState {
       },
       {
         id: 'WL-003',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'encashment',
         entryType: 'encashment_fee',
         sourceReference: 'ENC-20260524-001',
@@ -806,14 +795,8 @@ export function findSandboxUserByUsername(username: string): SandboxUserRecord |
   if (normalized === 'yorsuperadmin' || normalized === 'superadmin') {
     return readState().users.find((u) => u.id === 'yor-superadmin-demo') ?? null;
   }
-  if (normalized === 'yorcashier_legacy') {
-    return readState().users.find((u) => u.id === 'yor-cashier-legacy-demo') ?? null;
-  }
-  if (normalized === 'yorbod_legacy') {
-    return readState().users.find((u) => u.id === 'yor-bod-legacy-demo') ?? null;
-  }
-  if (normalized === 'yormember') {
-    return readState().users.find((u) => u.id === 'yor-member-legacy-demo') ?? null;
+  if (normalized === 'yor01') {
+    return readState().users.find((u) => u.id === 'yor-member-demo') ?? null;
   }
 
   const member = readState().members.find(
@@ -887,6 +870,17 @@ function accountTypePrefix(value?: string): ActivationRow['accountType'] {
   return normalized === 'CD' || normalized === 'FS' ? normalized : 'PD';
 }
 
+function normalizeSandboxUsernameAlias(value: string): string | null {
+  const compact = value.trim().toUpperCase().replace(/[\s-]+/g, '');
+  const match = compact.match(/^YOR0*(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return `YOR${match[1].padStart(4, '0')}`;
+}
+
 function resolveSandboxAssignedMember(
   members: MemberRecord[],
   assignedTo?: string
@@ -907,6 +901,14 @@ function resolveSandboxAssignedMember(
 
   if (directMatch) {
     return directMatch;
+  }
+
+  const normalizedAlias = normalizeSandboxUsernameAlias(rawValue);
+  if (normalizedAlias) {
+    const aliasMatch = members.find((member) => member.username.trim().toUpperCase() === normalizedAlias);
+    if (aliasMatch) {
+      return aliasMatch;
+    }
   }
 
   try {

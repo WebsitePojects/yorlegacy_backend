@@ -121,14 +121,14 @@ adminRouter.post('/api/admin/payouts/approve', requireRole('admin', 'bod', 'supe
   res.status(200).json(runAdminApproveEncashment(req.authUser!, payoutId));
 });
 
-adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
+adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
     if (!service) {
       res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
       return;
     }
-    res.status(200).json(await service.buildAdminActivationCodeCenter());
+    res.status(200).json(await service.buildAdminActivationCodeCenter(req.authUser!.role));
     return;
   }
 
@@ -259,6 +259,25 @@ adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('adm
   );
 });
 
+adminRouter.post('/api/admin/compensation/process-queue', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({ moneyMode: 'sandbox', processed: [] });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service unavailable.' });
+    return;
+  }
+  try {
+    const limit = Math.max(1, Math.min(500, Number(req.body?.limit ?? 100)));
+    const result = await service.processCompensationQueue(limit);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Queue processing failed.' });
+  }
+});
+
 adminRouter.post('/api/admin/sandbox/reset', requireRole('superadmin'), (req, res) => {
   res.status(200).json(runAdminResetSandbox(req.authUser!));
 });
@@ -273,7 +292,7 @@ adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin'
   );
 });
 
-adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
   res.status(200).json(
     runAdminUpdateMemberProfile(req.authUser!, {

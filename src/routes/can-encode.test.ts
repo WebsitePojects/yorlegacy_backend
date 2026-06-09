@@ -27,8 +27,8 @@ function buildCookieHeader(setCookie: string[] | string | undefined): string[] {
 
 async function loginAsMember() {
   const response = await request(app).post('/api/auth/login').send({
-    username: 'YOR0001',
-    password: 'YorMember123!'
+    username: 'yor01',
+    password: '1'
   });
 
   expect(response.status).toBe(200);
@@ -49,7 +49,7 @@ describe('Can Encode registration flow', () => {
     expect(response.status).toBe(200);
     expect(response.body.referralLink).toContain('http://localhost:5173/register?');
     expect(response.body.referralLink).toContain('origin=referral-link');
-    expect(response.body.referralLink).toContain('ref=' + encodeReferralCode('YOR0001'));
+    expect(response.body.referralLink).toContain('ref=' + encodeReferralCode('yor01'));
     expect(response.body.referralLink).not.toContain('packageTier=');
     expect(response.body.referralLink).not.toContain('preferredSide=');
     expect(response.body.placementPolicy.mode).toBe('auto-balanced');
@@ -71,7 +71,7 @@ describe('Can Encode registration flow', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.canProceed).toBe(true);
-    expect(response.body.sponsor.username).toBe('YOR0001');
+    expect(response.body.sponsor.username).toBe('yor01');
     expect(response.body.placement).toMatchObject({
       placementUsername: 'YOR0003',
       placementSide: 'left'
@@ -99,7 +99,7 @@ describe('Can Encode registration flow', () => {
 
   it('credits the sponsor and propagates binary points from the actual manual placement parent on submit', async () => {
     const cookie = await loginAsMember();
-    const sponsorBefore = findSandboxMemberByUsername('YOR0001');
+    const sponsorBefore = findSandboxMemberByUsername('yor01');
     const placementParentBefore = findSandboxMemberByUsername('YOR0003');
 
     expect(sponsorBefore).not.toBeNull();
@@ -123,12 +123,12 @@ describe('Can Encode registration flow', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.createdMember).toBeDefined();
-    expect(response.body.createdMember.sponsorUsername).toBe('YOR0001');
+    expect(response.body.createdMember.sponsorUsername).toBe('yor01');
 
     const createdMember = findSandboxMemberByUsername(response.body.createdMember.username);
-    const sponsorAfter = findSandboxMemberByUsername('YOR0001');
+    const sponsorAfter = findSandboxMemberByUsername('yor01');
     const placementParentAfter = findSandboxMemberByUsername('YOR0003');
-    const sponsorLedger = listSandboxWalletLedger('YOR0001').find(
+    const sponsorLedger = listSandboxWalletLedger('yor01').find(
       (entry) =>
         entry.entryType === 'direct_referral' &&
         entry.sourceReference === response.body.createdMember.username
@@ -136,7 +136,7 @@ describe('Can Encode registration flow', () => {
 
     expect(createdMember).not.toBeNull();
     expect(createdMember).toMatchObject({
-      sponsorCode: encodeReferralCode('YOR0001'),
+      sponsorCode: encodeReferralCode('yor01'),
       placementParentUsername: 'YOR0003',
       placement: 'left'
     });
@@ -145,7 +145,7 @@ describe('Can Encode registration flow', () => {
     expect(sponsorAfter!.rightPoints).toBe(sponsorRightPointsBefore + 50);
     expect(sponsorLedger).toMatchObject({
       creditAmount: 5000,
-      memberUsername: 'YOR0001'
+      memberUsername: 'yor01'
     });
   }, 15000);
 
@@ -216,7 +216,7 @@ describe('Can Encode registration flow', () => {
 
     const superadminLogin = await request(app).post('/api/auth/login').send({
       username: 'yoradmin',
-      password: 'YorAdmin123!'
+      password: '1'
     });
     expect(superadminLogin.status).toBe(200);
     const superadminCookies = buildCookieHeader(superadminLogin.headers['set-cookie']);
@@ -237,7 +237,7 @@ describe('Can Encode registration flow', () => {
         quantity: 1,
         packageTier: 'Standard',
         accountType: 'PD',
-        assignedTo: 'YOR0001'
+        assignedTo: 'yor01'
       });
 
     expect(generateResponse.status).toBe(200);
@@ -249,7 +249,7 @@ describe('Can Encode registration flow', () => {
     const generatedCode = inventoryAfter.body.inventory.find(
       (item: { code: string; assignedTo: string; packageTier: string; status: string }) =>
         !existingCodes.has(item.code) &&
-        item.assignedTo === 'YOR0001' &&
+        item.assignedTo === 'yor01' &&
         item.packageTier === 'Standard' &&
         item.status === 'available'
     );

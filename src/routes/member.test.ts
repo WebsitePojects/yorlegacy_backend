@@ -15,8 +15,8 @@ beforeEach(() => {
 describe('member code search', () => {
   it('returns username search results for transfer lookup', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!',
+      username: 'yor01',
+      password: '1',
       scope: 'member'
     });
 
@@ -34,8 +34,8 @@ describe('member code search', () => {
 
   it('returns no results for short queries', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!',
+      username: 'yor01',
+      password: '1',
       scope: 'member'
     });
 

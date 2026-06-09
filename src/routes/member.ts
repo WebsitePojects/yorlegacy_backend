@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { buildMemberOffice } from '../modules/member/office-service.js';
 import { buildMemberSummary } from '../modules/member/summary-service.js';
 import { requireRole } from '../modules/auth/request-auth.js';
-import { getMemberModule } from '../modules/operations/hybrid-operational-data.js';
+import { getMemberModule, getHybridMemberForUser } from '../modules/operations/hybrid-operational-data.js';
 import {
   buildGenealogy,
   buildMemberMvpDashboard,
@@ -11,6 +11,7 @@ import {
   getIncomeSimulation
 } from '../modules/compensation/mvp-service.js';
 import {
+  buildAdminActivationCodeCenter,
   buildBinaryGenealogyCenter,
   buildMemberActivationCodeCenter,
   buildMemberRegistrationReadiness,
@@ -40,7 +41,26 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
   res.status(200).json(office);
 });
 
-memberRouter.get('/api/member/dashboard', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/dashboard', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id);
+        res.status(200).json({
+          user: req.authUser,
+          moneyMode: 'production',
+          packageTier: data.packageTier,
+          payoutSchedule: 'Tuesday encashment / Friday payout',
+          incomeStreams: data.incomeStreams,
+          notices: ['Live production ledger data. Income shown reflects actual credited transactions.']
+        });
+        return;
+      } catch (err) {
+        console.error('[dashboard] Production wallet data error:', err);
+      }
+    }
+  }
   res.status(200).json(buildMemberMvpDashboard(req.authUser!));
 });
 
@@ -56,11 +76,35 @@ memberRouter.get('/api/member/income/:streamId', requireRole('member', 'admin', 
   res.status(200).json(simulation);
 });
 
-memberRouter.get('/api/member/wallets', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
+memberRouter.get('/api/member/wallets', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id);
+        res.status(200).json({ moneyMode: data.moneyMode, wallets: data.wallets, entries: data.entries });
+        return;
+      } catch (err) {
+        console.error('[wallets] Production wallet data error:', err);
+      }
+    }
+  }
   res.status(200).json(buildWallets());
 });
 
-memberRouter.get('/api/member/wallet-detail', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/wallet-detail', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id);
+        res.status(200).json(data);
+        return;
+      } catch (err) {
+        console.error('[wallet-detail] Production wallet data error:', err);
+      }
+    }
+  }
   res.status(200).json(buildMemberWalletDetail(req.authUser!));
 });
 
@@ -108,11 +152,26 @@ memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 
       res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
       return;
     }
-    res.status(200).json(await service.buildMemberActivationCodeCenter(req.authUser!));
+
+    // Root company account YOR0001 sees the full code inventory (same as admin view).
+    const isCompanyRoot = await service.isCompanyRootAccount(req.authUser!);
+    if (isCompanyRoot) {
+      res.status(200).json(await service.buildAdminActivationCodeCenter());
+    } else {
+      res.status(200).json(await service.buildMemberActivationCodeCenter(req.authUser!));
+    }
     return;
   }
 
-  res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
+  // Non-production (sandbox) path: resolve the member record and check for the root company username.
+  const sandboxMember = getHybridMemberForUser(req.authUser!);
+  const companyRootUsernames = ['YOR0001', 'YOR01', 'YOR-COMPANY-ROOT'];
+  const isCompanyRootSandbox = companyRootUsernames.includes(sandboxMember?.username?.toUpperCase() ?? '');
+  if (isCompanyRootSandbox) {
+    res.status(200).json(buildAdminActivationCodeCenter());
+  } else {
+    res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
+  }
 });
 
 memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {

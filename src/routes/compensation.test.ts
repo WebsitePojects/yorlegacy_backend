@@ -35,11 +35,11 @@ function getUsernameFromEmail(email: string): string {
   if (norm === 'admin@yor.local') return 'yoradmin';
   if (norm === 'cashier@yor.local') return 'yorcashier';
   if (norm === 'bod@yor.local') return 'yorbod';
-  if (norm === 'member@yor.local') return 'YOR0001';
+  if (norm === 'member@yor.local') return 'yor01';
   return email.split('@')[0];
 }
 
-async function login(email = 'member@yor.local', password = 'YorMember123!') {
+async function login(email = 'member@yor.local', password = '1') {
   const username = getUsernameFromEmail(email);
   const response = await request(app).post('/api/auth/login').send({ username, password });
 
@@ -133,7 +133,7 @@ describe('Yor MVP compensation APIs', () => {
         email: 'sandbox.member@example.test',
         phone: '+63 900 000 0111',
         password: 'Sandbox123!',
-        referralCode: encodeReferralCode('YOR0001'),
+        referralCode: encodeReferralCode('yor01'),
         activationCode: 'PDSTK7V2LC'
       }),
       request(app).post('/api/registration/submit').send({
@@ -143,7 +143,7 @@ describe('Yor MVP compensation APIs', () => {
         email: 'sandbox.member@example.test',
         phone: '+63 900 000 0111',
         password: 'Sandbox123!',
-        referralCode: encodeReferralCode('YOR0001'),
+        referralCode: encodeReferralCode('yor01'),
         activationCode: 'PDSTK7V2LC'
       }),
       withCsrf(request(app).post('/api/member/wallet/preview-encash'), cookie).send({ amount: 5000 }),
@@ -177,7 +177,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(binary.status).toBe(200);
     expect(binary.body.treeType).toBe('binary-placement');
     expect(binaryTree.status).toBe(200);
-    expect(binaryTree.body.root.nodeId).toBe('YOR0001');
+    expect(binaryTree.body.root.nodeId).toBe('yor01');
     expect(binaryTree.body.nodes.length).toBeGreaterThan(1);
     expect(binaryTree.body.root.openSlots.left).toBe(false);
     expect(binaryTree.body.root.openSlots.right).toBe(false);
@@ -238,7 +238,7 @@ describe('Yor MVP compensation APIs', () => {
       request(app).get('/api/admin/activation-codes').set('Cookie', cookie),
       request(app).get('/api/admin/encashments').set('Cookie', cookie),
       request(app).get('/api/admin/genealogy/binary-tree').set('Cookie', cookie),
-      request(app).get('/api/admin/genealogy/sponsor-tree?rootUsername=' + encodeReferralCode('YOR0001')).set('Cookie', cookie),
+      request(app).get('/api/admin/genealogy/sponsor-tree?rootUsername=' + encodeReferralCode('yor01')).set('Cookie', cookie),
       withCsrf(request(app).post('/api/admin/payouts/approve'), cookie).send({ payoutId: 'ENC-20260524-001' }),
       withCsrf(request(app).post('/api/admin/activation-codes/generate'), cookie).send({ quantity: 5 }),
       withCsrf(request(app).post('/api/admin/encashments/ENC-20260524-001/approve'), cookie)
@@ -259,7 +259,7 @@ describe('Yor MVP compensation APIs', () => {
     expect(encashments.status).toBe(200);
     expect(encashments.body.encashments.length).toBeGreaterThan(0);
     expect(genealogyTree.status).toBe(200);
-    expect(genealogyTree.body.root.nodeId).toBe('YOR0001');
+    expect(genealogyTree.body.root.nodeId).toBe('yor01');
     expect(genealogyTree.body.root.shadowSlots.right).toMatchObject({
       label: 'Shadow account',
       state: 'reserved_shadow',
@@ -275,7 +275,7 @@ describe('Yor MVP compensation APIs', () => {
   });
 
   it('runs the admin release-transfer-registration lifecycle through the sandbox code inventory', async () => {
-    const adminCookie = await login('admin@yor.local', 'YorAdmin123!');
+    const adminCookie = await login('admin@yor.local', '1');
     const inventoryBefore = await request(app)
       .get('/api/admin/activation-codes')
       .set('Cookie', adminCookie);
@@ -332,7 +332,7 @@ describe('Yor MVP compensation APIs', () => {
       .set('Cookie', adminCookie)
       .set('x-yor-csrf-token', getCookieValue(adminCookie, 'yor_csrf') ?? '')
       .send({
-        targetUsername: 'YOR0001',
+        targetUsername: 'yor01',
         codes: [generatedCode.code]
       });
 
@@ -359,7 +359,7 @@ describe('Yor MVP compensation APIs', () => {
       email: 'transferred.code.prospect@example.test',
       phone: '+63 900 000 0222',
       password: 'Sandbox123!',
-      referralCode: encodeReferralCode('YOR0001'),
+      referralCode: encodeReferralCode('yor01'),
       activationCode: generatedCode.code
     });
 
@@ -374,7 +374,7 @@ describe('Yor MVP compensation APIs', () => {
       email: 'transferred.code.prospect@example.test',
       phone: '+63 900 000 0222',
       password: 'Sandbox123!',
-      referralCode: encodeReferralCode('YOR0001'),
+      referralCode: encodeReferralCode('yor01'),
       activationCode: generatedCode.code
     });
 
@@ -431,8 +431,39 @@ describe('Yor MVP compensation APIs', () => {
     ).toBe(true);
   });
 
+  it('resolves shorthand tagged usernames like yor01 to the real member username during generation', async () => {
+    const adminCookie = await login('admin@yor.local', '1');
+
+    const generateResponse = await request(app)
+      .post('/api/admin/activation-codes/generate')
+      .set('Cookie', adminCookie)
+      .set('x-yor-csrf-token', getCookieValue(adminCookie, 'yor_csrf') ?? '')
+      .send({
+        quantity: 1,
+        packageTier: 'Standard',
+        assignedTo: 'yor01'
+      });
+
+    expect(generateResponse.status).toBe(200);
+    expect(generateResponse.body.status).toBe('completed');
+
+    const inventory = await request(app)
+      .get('/api/admin/activation-codes')
+      .set('Cookie', adminCookie);
+
+    expect(inventory.status).toBe(200);
+    expect(
+      inventory.body.inventory.some(
+        (item: { assignedTo: string; packageTier: string; status: string }) =>
+          item.assignedTo === 'yor01' &&
+          item.packageTier === 'Standard' &&
+          item.status === 'available'
+      )
+    ).toBe(true);
+  });
+
   it('falls back to pool generation when the optional tagged member does not resolve', async () => {
-    const adminCookie = await login('admin@yor.local', 'YorAdmin123!');
+    const adminCookie = await login('admin@yor.local', '1');
 
     const generateResponse = await request(app)
       .post('/api/admin/activation-codes/generate')
@@ -466,14 +497,14 @@ describe('Yor MVP compensation APIs', () => {
   });
 
   it('keeps cashier limited to release and transfer actions while blocking generation and approvals', async () => {
-    const cashierCookie = await login('cashier@yor.local', 'joyjoy05');
+    const cashierCookie = await login('cashier@yor.local', '1');
 
     const [generateResponse, payoutApprovalResponse, encashmentApprovalResponse] = await Promise.all([
       request(app)
         .post('/api/admin/activation-codes/generate')
         .set('Cookie', cashierCookie)
         .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
-        .send({ quantity: 1, packageTier: 'Classic', assignedTo: 'YOR0001' }),
+        .send({ quantity: 1, packageTier: 'Classic', assignedTo: 'yor01' }),
       request(app)
         .post('/api/admin/payouts/approve')
         .set('Cookie', cashierCookie)

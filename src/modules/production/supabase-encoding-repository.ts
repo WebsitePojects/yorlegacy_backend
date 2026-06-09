@@ -169,6 +169,12 @@ function mapQueueRow(row: any): ProductionCompensationQueueItem {
   };
 }
 
+function assertNoError(error: any, context: string): void {
+  if (error) {
+    throw Object.assign(new Error(`Supabase error in ${context}: ${error.message ?? JSON.stringify(error)}`), { cause: error });
+  }
+}
+
 async function singleNumberRpc(client: SupabaseClient, fn: string): Promise<number> {
   const { data, error } = await client.rpc(fn);
   if (error) {
@@ -192,7 +198,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return data ? mapMemberRow(data) : null;
     },
     findMemberByUsername: async (username) => {
-      const { data } = await client.from('member_profiles').select('*').eq('username', username).maybeSingle();
+      const { data } = await client.from('member_profiles').select('*').ilike('username', username).maybeSingle();
       return data ? mapMemberRow(data) : null;
     },
     findMemberByReferralCode: async (referralCode) => {
@@ -200,7 +206,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return data ? mapMemberRow(data) : null;
     },
     findUserByUsername: async (username) => {
-      const member = await client.from('member_profiles').select('user_id').eq('username', username).maybeSingle();
+      const member = await client.from('member_profiles').select('user_id').ilike('username', username).maybeSingle();
       if (!member.data?.user_id) {
         return null;
       }
@@ -235,7 +241,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return (data ?? []).map(mapCodeRow);
     },
     saveActivationCodes: async (rows) => {
-      await client.from('activation_codes').upsert(
+      const { error } = await client.from('activation_codes').upsert(
         rows.map((row) => ({
           id: row.id,
           code: row.code,
@@ -261,9 +267,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         })),
         { onConflict: 'id' }
       );
+      assertNoError(error, 'saveActivationCodes');
     },
     appendActivationCodeEvents: async (events) => {
-      await client.from('activation_code_events').insert(
+      const { error } = await client.from('activation_code_events').insert(
         events.map((event) => ({
           id: event.id,
           activation_code_id: event.activationCodeId,
@@ -277,6 +284,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           created_at: event.createdAt
         }))
       );
+      assertNoError(error, 'appendActivationCodeEvents');
     },
     listActivationCodeEvents: async () => {
       const { data } = await client.from('activation_code_events').select('*').order('created_at', { ascending: false });
@@ -295,7 +303,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return (data ?? []).map(mapWalletRow);
     },
     appendWalletLedgerEntry: async (entry) => {
-      await client.from('wallet_ledger').insert({
+      const { error } = await client.from('wallet_ledger').insert({
         id: entry.id,
         user_id: entry.userId,
         wallet_type: entry.walletType,
@@ -309,13 +317,14 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         occurred_at: entry.occurredAt,
         status: entry.status
       });
+      assertNoError(error, 'appendWalletLedgerEntry');
     },
     hasWalletLedgerProcess: async (processId) => {
       const { count } = await client.from('wallet_ledger').select('id', { count: 'exact', head: true }).eq('process_id', processId);
       return (count ?? 0) > 0;
     },
     saveUser: async (user) => {
-      await client.from('app_users').upsert(
+      const { error } = await client.from('app_users').upsert(
         {
           id: user.id,
           email: user.email,
@@ -328,9 +337,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'id' }
       );
+      assertNoError(error, 'saveUser');
     },
     saveMemberProfile: async (profile) => {
-      await client.from('member_profiles').upsert(
+      const { error } = await client.from('member_profiles').upsert(
         {
           user_id: profile.userId,
           username: profile.username,
@@ -350,9 +360,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'user_id' }
       );
+      assertNoError(error, 'saveMemberProfile');
     },
     saveNetworkAccount: async (account) => {
-      await client.from('network_accounts').upsert(
+      const { error } = await client.from('network_accounts').upsert(
         {
           user_id: account.userId,
           sponsor_user_id: account.sponsorUserId,
@@ -371,6 +382,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'user_id' }
       );
+      assertNoError(error, 'saveNetworkAccount');
     },
     findNetworkAccountByUserId: async (userId) => {
       const { data } = await client.from('network_accounts').select('*').eq('user_id', userId).maybeSingle();
@@ -392,7 +404,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return data ? mapNetworkRow(data) : null;
     },
     saveSalesmatchBalance: async (balance) => {
-      await client.from('salesmatch_balances').upsert(
+      const { error } = await client.from('salesmatch_balances').upsert(
         {
           user_id: balance.userId,
           left_sales: balance.leftSales,
@@ -405,13 +417,14 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'user_id' }
       );
+      assertNoError(error, 'saveSalesmatchBalance');
     },
     getSalesmatchBalance: async (userId) => {
       const { data } = await client.from('salesmatch_balances').select('*').eq('user_id', userId).maybeSingle();
       return data ? mapSalesmatchRow(data) : null;
     },
     enqueueCompensation: async (item) => {
-      await client.from('compensation_queue').upsert(
+      const { error } = await client.from('compensation_queue').upsert(
         {
           id: item.id,
           process_id: item.processId,
@@ -423,6 +436,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'process_id' }
       );
+      assertNoError(error, 'enqueueCompensation');
     },
     listPendingCompensation: async (limit) => {
       const { data } = await client
@@ -434,10 +448,11 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return (data ?? []).map(mapQueueRow);
     },
     markCompensationProcessed: async (queueId, processedAt) => {
-      await client.from('compensation_queue').update({ status: 'processed', processed_at: processedAt }).eq('id', queueId);
+      const { error } = await client.from('compensation_queue').update({ status: 'processed', processed_at: processedAt }).eq('id', queueId);
+      assertNoError(error, 'markCompensationProcessed');
     },
     savePlacementReservation: async (reservation) => {
-      await client.from('placement_reservations').upsert(
+      const { error } = await client.from('placement_reservations').upsert(
         {
           id: reservation.id,
           sponsor_user_id: reservation.sponsorUserId,
@@ -453,6 +468,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         },
         { onConflict: 'id' }
       );
+      assertNoError(error, 'savePlacementReservation');
     },
     listPlacementReservationsForSponsor: async (sponsorUserId) => {
       const { data } = await client.from('placement_reservations').select('*').eq('sponsor_user_id', sponsorUserId);

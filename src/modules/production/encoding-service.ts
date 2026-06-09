@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
+import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { MoneyMode, SessionUser } from '../../types/auth.js';
 import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
@@ -14,6 +15,14 @@ export type PlacementSide = 'left' | 'right';
 export type RegistrationOrigin = 'referral-link' | 'genealogy-slot';
 export type SponsorResolutionMode = 'referral-link' | 'manual-sponsor' | 'signed-in-member';
 export type QueueEventType = 'placement-sales';
+
+// Unilevel percentages per sponsor-tree depth (index = depth, index 0 = root earns nothing).
+// Unilevel is triggered by monthly product repurchases (NOT registration encoding).
+// Sponsor-tree levels map 1:1 to unilevel levels — shadow accounts never appear in the
+// sponsor chain so no skipping is needed there. In the binary tree visual, real members
+// appear at even depths (0, 2, 4 … 20), which correspond to logical levels 0-10 in the UI.
+export const UNILEVEL_PERCENTAGES: readonly number[] = [0, 10, 8, 5, 5, 3, 3, 2, 1, 1, 1];
+export const UNILEVEL_MAX_LEVELS = 10;
 
 export type PackageConfig = {
   packageTier: PackageTier;
@@ -95,7 +104,7 @@ export type ProductionActivationCode = {
   id: string;
   code: string;
   codeFamily: CodeFamily;
-  packageTier: PackageTier;
+  packageTier: string;
   accountType: AccountType;
   status: ActivationCodeStatus;
   paymentStatus: PaymentStatus;
@@ -233,7 +242,7 @@ export type ProductionRegistrationPreview = {
     code: string;
     codeFamily: CodeFamily;
     accountType: AccountType;
-    packageTier: PackageTier;
+      packageTier: string;
     assignedTo: string;
     status: ActivationCodeStatus;
     paymentStatus: PaymentStatus;
@@ -252,7 +261,7 @@ export type ProductionRegistrationPreview = {
     code: string;
     codeFamily: CodeFamily;
     accountType: AccountType;
-    packageTier: PackageTier;
+      packageTier: string;
     assignedTo: string;
     status: ActivationCodeStatus;
     paymentStatus: PaymentStatus;
@@ -406,6 +415,52 @@ function getPackageConfig(packageTier: string): PackageConfig {
     throw new Error(`Unsupported package tier: ${packageTier}`);
   }
   return config;
+}
+
+function normalizeProductionUsernameAlias(value: string): string | null {
+  const compact = value.trim().toUpperCase().replace(/[\s-]+/g, '');
+  const match = compact.match(/^YOR0*(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return `YOR${match[1].padStart(4, '0')}`;
+}
+
+function resolveActivationCodeTemplate(packageTier: string, codeFamily: CodeFamily): {
+  packageTier: string;
+  accountType: AccountType;
+  directReferralBonus: number;
+  salesmatchValue: number;
+  salesmatchBinaryPoints: number;
+  binaryCyclePercent: number;
+  getFiveAmount: number;
+  binaryPoints: number;
+} {
+  if (codeFamily === 'YOR CODES') {
+    return getPackageConfig(packageTier);
+  }
+
+  const normalizedPackageTier = packageTier.trim().toUpperCase();
+  const product = repeatPurchaseProductCatalog.find(
+    (item) => item.label.trim().toUpperCase() === normalizedPackageTier || item.sku.trim().toUpperCase() === normalizedPackageTier
+  );
+
+  if (!product) {
+    throw new Error(`Unsupported product tier: ${packageTier}`);
+  }
+
+  return {
+    packageTier: product.label,
+    accountType: 'PD' as const,
+    directReferralBonus: 0,
+    salesmatchValue: 0,
+    salesmatchBinaryPoints: 0,
+    binaryCyclePercent: 0,
+    getFiveAmount: 0,
+    binaryPoints: 0
+  };
 }
 
 function visibilityForCode(code: ProductionActivationCode, assignedUsername: string | null): string {
@@ -668,6 +723,12 @@ export class ProductionEncodingService {
     };
   }
 
+  async isCompanyRootAccount(user: SessionUser): Promise<boolean> {
+    const member = await this.repo.findMemberByUserId(user.id);
+    const upper = member?.username?.toUpperCase() ?? '';
+    return upper === 'YOR0001' || upper === 'YOR01';
+  }
+
   async buildMemberActivationCodeCenter(user: SessionUser) {
     const member = await this.requireMemberByUserId(user.id);
     const codes = await this.repo.listActivationCodesForUser(user.id);
@@ -726,10 +787,12 @@ export class ProductionEncodingService {
     };
   }
 
-  async buildAdminActivationCodeCenter() {
+  async buildAdminActivationCodeCenter(actorRole?: string) {
     const [codes, members] = await Promise.all([this.repo.listActivationCodes(), this.repo.listMembers()]);
     const memberByUserId = new Map(members.map((item) => [item.userId, item]));
-    const inventory = codes
+    const isLooseCode = (code: ProductionActivationCode) => code.status === 'unreleased' && !code.assignedUserId;
+    const filteredCodes = (actorRole === 'cashier') ? codes : codes.filter(code => !isLooseCode(code));
+    const inventory = filteredCodes
       .map((code) => {
         const assigned = code.assignedUserId ? memberByUserId.get(code.assignedUserId)?.username ?? 'Unassigned' : 'Unassigned';
         return {
@@ -949,7 +1012,7 @@ export class ProductionEncodingService {
             packageTier: sponsor.packageTier
           }
         : null,
-      selectedPackage: matchingCodeRecord?.packageTier ?? null,
+      selectedPackage: matchingCodeRecord ? getPackageConfig(matchingCodeRecord.packageTier).packageTier : null,
       placementSide: placement.context?.placementSide ?? null,
       resolvedAccountType: matchingCodeRecord?.accountType ?? null,
       placementReservationId: placement.reservation?.id ?? input.placementReservationId ?? null,
@@ -977,6 +1040,7 @@ export class ProductionEncodingService {
     const previewCode = preview.matchingCode;
     const sponsor = await this.requireMemberByUsername(preview.sponsor.username);
     const placementParent = await this.requireMemberByUsername(preview.placement.placementUsername);
+    const selectedPackageTier = getPackageConfig(previewCode.packageTier).packageTier;
     const occupied = await this.repo.findPlacementChild(
       placementParent.userId,
       preview.placement.placementSide,
@@ -1029,7 +1093,7 @@ export class ProductionEncodingService {
       username: finalUsername,
       referralCode,
       sponsorCode: sponsor.referralCode,
-      packageTier: matchingCode.packageTier,
+      packageTier: selectedPackageTier,
       accountStatus: 'active',
       fullName,
       firstName: parsedName.firstName,
@@ -1050,7 +1114,7 @@ export class ProductionEncodingService {
       placementSide: preview.placement.placementSide,
       currentAccountTypeCode: matchingCode.accountType === 'FS' ? 2 : 1,
       currentAccountType: matchingCode.accountType,
-      packageTier: matchingCode.packageTier,
+      packageTier: selectedPackageTier,
       activationCode: matchingCode.code,
       registrationStatus: 'active',
       leftPoints: 0,
@@ -1083,7 +1147,7 @@ export class ProductionEncodingService {
     ]);
 
     const directProcessId = buildProcessId('registration-direct', sponsor.userId, userId, matchingCode.code);
-    const getFiveProcessId = buildProcessId('registration-get-five', sponsor.userId, matchingCode.packageTier.toUpperCase());
+    const getFiveProcessId = buildProcessId('registration-get-five', sponsor.userId, selectedPackageTier.toUpperCase());
     await this.postLedgerIfNeeded({
       userId: sponsor.userId,
       entryType: 'direct_referral',
@@ -1093,7 +1157,7 @@ export class ProductionEncodingService {
       notes: `Direct referral bonus from ${finalUsername}.`
     });
 
-    const qualifiedSamePackageDirects = await this.countQualifiedDirectsBySponsorAndPackage(sponsor.userId, matchingCode.packageTier);
+    const qualifiedSamePackageDirects = await this.countQualifiedDirectsBySponsorAndPackage(sponsor.userId, selectedPackageTier);
     if (matchingCode.lockedGetFiveAmount > 0 && qualifiedSamePackageDirects % 5 === 0) {
       await this.postLedgerIfNeeded({
         userId: sponsor.userId,
@@ -1147,7 +1211,7 @@ export class ProductionEncodingService {
         email: loginEmail,
         referralCode,
         sponsorUsername: sponsor.username,
-        packageTier: matchingCode.packageTier,
+        packageTier: selectedPackageTier,
         accountType: matchingCode.accountType,
         loginEmail
       }
@@ -1260,7 +1324,8 @@ export class ProductionEncodingService {
       remarks?: string;
     }
   ) {
-    const packageConfig = getPackageConfig(input.packageTier ?? 'Standard');
+    const codeFamily = (input.codeFamily ?? 'YOR CODES') as CodeFamily;
+    const packageConfig = resolveActivationCodeTemplate(input.packageTier ?? 'Standard', codeFamily);
     const assignedMember = input.assignedTo ? await this.requireMemberByUsername(input.assignedTo) : null;
     const quantity = Math.max(1, Math.min(100, Math.trunc(input.quantity || 1)));
     const createdAt = this.repo.now();
@@ -1273,7 +1338,7 @@ export class ProductionEncodingService {
       const row: ProductionActivationCode = {
         id: crypto.randomUUID(),
         code,
-        codeFamily: input.codeFamily ?? 'YOR CODES',
+        codeFamily,
         packageTier: packageConfig.packageTier,
         accountType: input.accountType ?? packageConfig.accountType,
         status: 'unreleased',
@@ -1316,7 +1381,7 @@ export class ProductionEncodingService {
       action: 'admin-generate-activation-codes',
       status: 'completed' as const,
       reason: `Generated ${rows.length} activation code(s).`,
-      detail: `Generated ${rows.length} ${packageConfig.packageTier} code(s) in ${input.codeFamily ?? 'YOR CODES'}.`
+      detail: `Generated ${rows.length} ${packageConfig.packageTier} code(s) in ${codeFamily}.`
     };
   }
 
@@ -1397,6 +1462,142 @@ export class ProductionEncodingService {
       action: 'admin-transfer-activation-code',
       status: 'completed' as const,
       reason: `Transferred ${selected.length} activation code(s) to ${target.username}.`
+    };
+  }
+
+  async buildMemberWalletData(userId: string, encashAmount?: number) {
+    const [member, ledgerEntries] = await Promise.all([
+      this.repo.findMemberByUserId(userId),
+      this.repo.listWalletLedgerEntriesForUser(userId)
+    ]);
+
+    if (!member) {
+      throw new Error('Member profile not found.');
+    }
+
+    // Sum balances per wallet type
+    const mainBalance = ledgerEntries
+      .filter(e => e.walletType === 'main')
+      .reduce((sum, e) => sum + e.creditAmount - e.debitAmount, 0);
+    const lifestyleBalance = ledgerEntries
+      .filter(e => e.walletType === 'lifestyle')
+      .reduce((sum, e) => sum + e.creditAmount - e.debitAmount, 0);
+
+    // Sum credits per income type
+    const incomeTotals = new Map<string, number>();
+    for (const entry of ledgerEntries) {
+      if (entry.creditAmount > 0) {
+        incomeTotals.set(entry.entryType, (incomeTotals.get(entry.entryType) ?? 0) + entry.creditAmount);
+      }
+    }
+
+    const INCOME_STREAM_META: Array<{ streamId: string; label: string; walletType: string; entryType: string }> = [
+      { streamId: 'direct-referral', label: 'Direct Referral', walletType: 'main', entryType: 'direct_referral' },
+      { streamId: 'salesmatch', label: 'Salesmatch Bonus', walletType: 'main', entryType: 'salesmatch' },
+      { streamId: 'binary-cycle', label: 'Binary Cycle Bonus', walletType: 'main', entryType: 'binary_cycle' },
+      { streamId: 'get-five', label: 'Get Yor Five Bonus', walletType: 'main', entryType: 'get_five' },
+      { streamId: 'lifestyle-rewards', label: 'Lifestyle Rewards', walletType: 'lifestyle', entryType: 'lifestyle_rewards' },
+      { streamId: 'unilevel', label: 'Unilevel Bonus', walletType: 'main', entryType: 'unilevel' },
+      { streamId: 'global', label: 'Global Bonus', walletType: 'main', entryType: 'global_bonus' }
+    ];
+
+    const incomeBreakdown = INCOME_STREAM_META.map(m => ({
+      streamId: m.streamId,
+      label: m.label,
+      walletType: m.walletType,
+      amount: incomeTotals.get(m.entryType) ?? 0
+    }));
+
+    const incomeStreams = INCOME_STREAM_META.map(m => {
+      const amount = incomeTotals.get(m.entryType) ?? 0;
+      return {
+        streamId: m.streamId,
+        label: m.label,
+        writeStatus: 'production' as const,
+        simulatedGross: amount,
+        simulatedNet: amount,
+        capApplied: false,
+        statusLabel: amount > 0 ? 'posted' : 'no activity',
+        explanation: amount > 0
+          ? `Production ledger: PHP ${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credited across ${ledgerEntries.filter(e => e.entryType === m.entryType).length} transaction(s).`
+          : 'No transactions recorded yet for this income stream.'
+      };
+    });
+
+    const wallets = [
+      { type: 'main', label: 'Main Earnings Wallet', balance: mainBalance, threshold: 500 },
+      { type: 'lifestyle', label: 'Lifestyle Rewards Wallet', balance: lifestyleBalance, threshold: 1000 },
+      { type: 'product', label: 'Product Wallet / Purchase Credits', balance: 0, threshold: 0 },
+      { type: 'pending', label: 'Pending Computed Income', balance: 0, threshold: 0 },
+      { type: 'encashment', label: 'Approved Encashment Queue', balance: 0, threshold: 500 }
+    ];
+
+    const payoutPreviewAmount = encashAmount !== undefined && encashAmount > 0
+      ? Math.min(mainBalance, encashAmount)
+      : 0;
+    const processingFee = payoutPreviewAmount > 0 ? 50 : 0;
+    const maintenanceFee = 0;
+    const systemRetainer = payoutPreviewAmount * 0.05;
+    const tax = payoutPreviewAmount * 0.10;
+    const fee = processingFee + systemRetainer;
+    const cdDeduction = 0;
+    const totalDeductions = fee + tax + cdDeduction;
+    const netReceivable = Math.max(0, payoutPreviewAmount - totalDeductions);
+
+    const ENTRY_TYPE_LABELS: Record<string, string> = {
+      direct_referral: 'Direct Referral',
+      salesmatch: 'Salesmatch Bonus',
+      binary_cycle: 'Binary Cycle Bonus',
+      get_five: 'Get Yor Five Bonus',
+      lifestyle_rewards: 'Lifestyle Rewards',
+      unilevel: 'Unilevel Bonus',
+      global_bonus: 'Global Bonus'
+    };
+
+    const formatPhp = (v: number) =>
+      `PHP ${Math.abs(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const transactions = ledgerEntries.map(entry => ({
+      id: entry.id,
+      date: entry.occurredAt,
+      category: entry.entryType,
+      label: ENTRY_TYPE_LABELS[entry.entryType] ?? entry.entryType,
+      source: entry.sourceReference,
+      gross: entry.creditAmount > 0 ? formatPhp(entry.creditAmount) : `-${formatPhp(entry.debitAmount)}`,
+      net: entry.creditAmount > 0 ? formatPhp(entry.creditAmount) : `-${formatPhp(entry.debitAmount)}`,
+      status: entry.status,
+      type: 'wallet' as const
+    }));
+
+    return {
+      moneyMode: 'production' as const,
+      packageTier: member.packageTier,
+      wallets,
+      entries: ledgerEntries,
+      summary: {
+        availableBalance: mainBalance,
+        pendingBalance: 0,
+        cdBalance: 0,
+        payoutMethod: member.payoutMethod ?? 'GCash',
+        payoutSchedule: 'Tuesday encashment / Friday payout'
+      },
+      incomeBreakdown,
+      incomeStreams,
+      preview: {
+        requestedAmount: payoutPreviewAmount,
+        processingFee,
+        maintenanceFee,
+        systemRetainer,
+        tax,
+        fee,
+        cdDeduction,
+        totalDeductions,
+        netReceivable,
+        sufficientBalance: payoutPreviewAmount <= mainBalance,
+        note: 'Preview mirrors the protected encashment breakdown; final submit applies deterministic process keys in the production ledger.'
+      },
+      ledger: ledgerEntries,
+      transactions
     };
   }
 
@@ -1607,7 +1808,14 @@ export class ProductionEncodingService {
   }
 
   private async requireMemberByUsername(username: string) {
-    const member = await this.repo.findMemberByUsername(username.trim());
+    const trimmed = username.trim();
+    let member = await this.repo.findMemberByUsername(trimmed);
+    if (!member) {
+      const normalizedAlias = normalizeProductionUsernameAlias(trimmed);
+      if (normalizedAlias) {
+        member = await this.repo.findMemberByUsername(normalizedAlias);
+      }
+    }
     if (!member) {
       throw new Error(`Member ${username} was not found.`);
     }

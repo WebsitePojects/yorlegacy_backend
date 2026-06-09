@@ -55,9 +55,9 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['yoradmin', 'YorAdmin123!', 'admin'],
-    ['yorcashier', 'joyjoy05', 'cashier'],
-    ['yorbod', 'yoralliance321654', 'bod'],
+    ['yoradmin', '1', 'admin'],
+    ['yorcashier', '1', 'cashier'],
+    ['yorbod', '1', 'bod'],
     ['yorsuperadmin', '1', 'superadmin']
   ])('lets %s reach the admin dashboard APIs', async (username, password, role) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
@@ -78,8 +78,8 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['yorcashier', 'joyjoy05', 'cashier'],
-    ['yorbod', 'yoralliance321654', 'bod']
+    ['yorcashier', '1', 'cashier'],
+    ['yorbod', '1', 'bod']
   ])('lets %s reach member oversight APIs', async (username, password, role) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       username,
@@ -99,8 +99,8 @@ describe('auth and protected access', () => {
 
   it('logs in a member and reaches the member summary', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!'
+      username: 'yor01',
+      password: '1'
     });
 
     expect(loginResponse.status).toBe(200);
@@ -117,8 +117,8 @@ describe('auth and protected access', () => {
 
   it('allows member credentials through the member portal scope', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!',
+      username: 'yor01',
+      password: '1',
       scope: 'member'
     });
 
@@ -131,9 +131,9 @@ describe('auth and protected access', () => {
   });
 
   it.each([
-    ['yoradmin', 'YorAdmin123!'],
-    ['yorcashier', 'joyjoy05'],
-    ['yorbod', 'yoralliance321654'],
+    ['yoradmin', '1'],
+    ['yorcashier', '1'],
+    ['yorbod', '1'],
     ['yorsuperadmin', '1']
   ])('blocks %s credentials from the member portal scope', async (username, password) => {
     const loginResponse = await request(app).post('/api/auth/login').send({
@@ -149,7 +149,7 @@ describe('auth and protected access', () => {
   it('allows office credentials through the office portal scope', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       username: 'yoradmin',
-      password: 'YorAdmin123!',
+      password: '1',
       scope: 'office'
     });
 
@@ -160,8 +160,8 @@ describe('auth and protected access', () => {
 
   it('blocks member credentials from the office portal scope', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!',
+      username: 'yor01',
+      password: '1',
       scope: 'office'
     });
 
@@ -171,8 +171,8 @@ describe('auth and protected access', () => {
 
   it('uses a longer session cookie for remember-me login', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!',
+      username: 'yor01',
+      password: '1',
       rememberMe: true,
       scope: 'member'
     });
@@ -198,7 +198,7 @@ describe('auth and protected access', () => {
 
   it('rejects missing login fields', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001'
+      username: 'yor01'
     });
 
     expect(loginResponse.status).toBe(400);
@@ -207,8 +207,8 @@ describe('auth and protected access', () => {
 
   it('blocks member access to the admin summary', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!'
+      username: 'yor01',
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);
@@ -221,8 +221,8 @@ describe('auth and protected access', () => {
 
   it('returns operational member office data behind auth', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!'
+      username: 'yor01',
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);
@@ -255,7 +255,7 @@ describe('auth and protected access', () => {
   it('filters admin modules by operational role', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       username: 'yorcashier',
-      password: 'joyjoy05'
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);
@@ -277,7 +277,7 @@ describe('auth and protected access', () => {
   it('keeps cashier out of full member-management modules while allowing member-name correction only', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       username: 'yorcashier',
-      password: 'joyjoy05'
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);
@@ -299,8 +299,8 @@ describe('auth and protected access', () => {
 
   it('serves every member side-nav module for smoke coverage', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
-      username: 'YOR0001',
-      password: 'YorMember123!'
+      username: 'yor01',
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);
@@ -374,7 +374,7 @@ describe('auth and protected access', () => {
   it('blocks authenticated office writes without a matching csrf token', async () => {
     const loginResponse = await request(app).post('/api/auth/login').send({
       username: 'yorcashier',
-      password: 'joyjoy05'
+      password: '1'
     });
 
     const cookie = buildCookieHeader(loginResponse.headers['set-cookie']);

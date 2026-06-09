@@ -104,7 +104,15 @@ pagesRouter.post('/api/registration/submit', async (request, response) => {
     }
 
     try {
-      response.status(200).json(await service.submitRegistration(request.authUser ?? null, payload));
+      const result = await service.submitRegistration(request.authUser ?? null, payload);
+      // Process the compensation queue inline so binary points, SMB, and binary cycle
+      // are credited immediately rather than sitting in the queue indefinitely.
+      try {
+        await service.processCompensationQueue(50);
+      } catch (queueError) {
+        console.error('[compensation-queue] Processing error after registration:', queueError);
+      }
+      response.status(200).json(result);
     } catch (error) {
       response.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit registration.' });
     }

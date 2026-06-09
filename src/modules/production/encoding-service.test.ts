@@ -149,6 +149,44 @@ describe('ProductionEncodingService', () => {
     );
   });
 
+  it('accepts maintenance-family product labels when generating activation codes', async () => {
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const generated = await service.generateActivationCodes(
+      { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' },
+      {
+        quantity: 1,
+        packageTier: 'Yor Perfume - Hugo Boss',
+        codeFamily: 'YOR MAINTENANCE'
+      }
+    );
+
+    expect(generated.status).toBe('completed');
+
+    const storedCode = (await repo.listActivationCodes())[0];
+    expect(storedCode).toMatchObject({
+      codeFamily: 'YOR MAINTENANCE',
+      packageTier: 'Yor Perfume - Hugo Boss',
+      registrationEligible: false,
+      lockedDirectReferralBonus: 0,
+      lockedSalesmatchValue: 0,
+      lockedBinaryPoints: 0,
+      lockedGetFiveAmount: 0
+    });
+
+    const codeCenter = await service.buildAdminActivationCodeCenter();
+    const generatedCode = codeCenter.inventory[0];
+
+    expect(generatedCode).toMatchObject({
+      codeFamily: 'YOR MAINTENANCE',
+      packageTier: 'Yor Perfume - Hugo Boss',
+      registrationEligible: false
+    });
+  });
+
   it('requires a placement reservation for public registration and processes direct, salesmatch, and binary-cycle deltas', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');

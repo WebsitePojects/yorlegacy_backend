@@ -73,15 +73,25 @@ Run these SQL files in order:
 1. `supabase/schema.sql`
 2. `supabase/seed.sql`
 
+For the live `Yorinternationalprod` project, use the lean production bootstrap instead of the broader demo seed:
+
+1. `supabase/schema.sql`
+2. `supabase/prod-bootstrap.sql`
+
 For the production encoding cutover, re-run the updated `supabase/schema.sql` against the real project before switching `YOR_RUNTIME_MODE` to `production`. The schema now includes production sequences, activation-code event history, placement reservations, compensation queue tables, and server-only grants for the new operational tables in the exposed `public` schema.
 
-The seed creates local starter accounts:
+The demo seed creates local starter accounts:
 
 - `member@yor.local`
 - `admin@yor.local`
 - `cashier@yor.local`
 - `bod@yor.local`
 - `yoradmin@gmail.com`
+
+The production bootstrap creates only:
+
+- admin username `yoradmin` / password `1`
+- root member username `yor01` / password `1`
 
 ## Verify
 

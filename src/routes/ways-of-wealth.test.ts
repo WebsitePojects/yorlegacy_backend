@@ -28,7 +28,7 @@ function getUsernameFromEmail(email: string): string {
   if (norm === 'admin@yor.local') return 'yoradmin';
   if (norm === 'cashier@yor.local') return 'yorcashier';
   if (norm === 'bod@yor.local') return 'yorbod';
-  if (norm === 'member@yor.local') return 'YOR0001';
+  if (norm === 'member@yor.local') return 'yor01';
   return email.split('@')[0];
 }
 
@@ -39,8 +39,8 @@ async function loginAs(email: string, password: string) {
   return buildCookieHeader(res.headers['set-cookie']);
 }
 
-const MEMBER = () => loginAs('member@yor.local', 'YorMember123!');
-const ADMIN  = () => loginAs('admin@yor.local',  'YorAdmin123!');
+const MEMBER = () => loginAs('member@yor.local', '1');
+const ADMIN  = () => loginAs('admin@yor.local',  '1');
 const SUPER  = () => loginAs('yoradmin@gmail.com', '1');
 
 function containsMatch(arr: string[], pattern: RegExp) {
@@ -180,7 +180,7 @@ describe('Way 3 – Salesmatch Bonus', () => {
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.root.nodeId).toBe('YOR0001');
+    expect(res.body.root.nodeId).toBe('yor01');
     // Root must have left child (Alyssa, placed left) and right child (Marco, placed right)
     expect(res.body.nodes.length).toBeGreaterThan(1);
   });

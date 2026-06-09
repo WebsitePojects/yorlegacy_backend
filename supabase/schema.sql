@@ -545,6 +545,11 @@ grant all on table wallet_ledger to service_role;
 grant all on table network_accounts to service_role;
 grant all on table member_profiles to service_role;
 grant all on table app_users to service_role;
+grant select on table site_pages to anon, authenticated;
+grant select on table page_sections to anon, authenticated;
+grant select on table package_catalog to anon, authenticated;
+grant select on table compensation_policies to anon, authenticated;
+grant select on table earning_stream_policies to anon, authenticated;
 
 revoke all on sequence yor_activation_code_seq from anon, authenticated;
 revoke all on sequence yor_member_seq from anon, authenticated;
@@ -555,3 +560,38 @@ revoke execute on function public.yor_next_activation_code_sequence() from anon,
 revoke execute on function public.yor_next_member_sequence() from anon, authenticated;
 grant execute on function public.yor_next_activation_code_sequence() to service_role;
 grant execute on function public.yor_next_member_sequence() to service_role;
+
+drop policy if exists "public can read site pages" on site_pages;
+create policy "public can read site pages"
+on site_pages
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "public can read page sections" on page_sections;
+create policy "public can read page sections"
+on page_sections
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "public can read package catalog" on package_catalog;
+create policy "public can read package catalog"
+on package_catalog
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "public can read compensation policies" on compensation_policies;
+create policy "public can read compensation policies"
+on compensation_policies
+for select
+to anon, authenticated
+using (is_active = true);
+
+drop policy if exists "public can read earning stream policies" on earning_stream_policies;
+create policy "public can read earning stream policies"
+on earning_stream_policies
+for select
+to anon, authenticated
+using (true);

@@ -1,6 +1,7 @@
 import { findAppUserByUsername } from './app-users.js';
 import { authenticateDemoUser } from './demo-users.js';
 import { verifyPassword } from './password.js';
+import { isProductionMode } from '../production/runtime.js';
 import type { SessionUser } from '../../types/auth';
 
 export async function authenticateUser(
@@ -29,6 +30,10 @@ export async function authenticateUser(
       };
     }
 
+    return null;
+  }
+
+  if (isProductionMode()) {
     return null;
   }
 

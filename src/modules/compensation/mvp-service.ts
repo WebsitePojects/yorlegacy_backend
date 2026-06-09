@@ -432,7 +432,7 @@ export function buildWallets() {
 export function getWalletLedger(): WalletLedgerEntry[] {
   return [
     ledger('WL-001', 'main', 'direct_referral', 'YOR-MEMBER-002', 5000, 0, 15200.75, 'simulated-posted'),
-    ledger('WL-002', 'main', 'salesmatch', 'YOR0001 L/R match', 7500, 0, 10200.75, 'simulated-posted'),
+    ledger('WL-002', 'main', 'salesmatch', 'yor01 L/R match', 7500, 0, 10200.75, 'simulated-posted'),
     ledger('WL-003', 'lifestyle', 'lifestyle_rewards', 'Repeat purchase pool', 300, 0, 300, 'threshold-pending'),
     ledger('WL-004', 'encashment', 'encashment_fee', 'ENC-20260524-001', 0, 470, 6730, 'simulated-deducted')
   ];
@@ -463,7 +463,7 @@ function ledger(
 
 export function buildGenealogy(kind: 'sponsor' | 'binary-placement') {
   const sponsorTree: TreeNode = {
-    id: 'YOR0001',
+    id: 'yor01',
     label: 'Yor Member',
     packageTier: 'Standard',
     status: 'active',
@@ -475,7 +475,7 @@ export function buildGenealogy(kind: 'sponsor' | 'binary-placement') {
   };
 
   const binaryTree: TreeNode = {
-    id: 'YOR0001',
+    id: 'yor01',
     label: 'Yor Member',
     packageTier: 'Standard',
     status: 'active',
@@ -507,8 +507,8 @@ export function buildGenealogy(kind: 'sponsor' | 'binary-placement') {
   };
 }
 
-export function buildShadowAccounts(ownerUsername = 'YOR0001'): { moneyMode: typeof moneyMode; owner: string; accounts: ShadowAccount[] } {
-  const normalizedOwner = ownerUsername.trim().toUpperCase() || 'YOR0001';
+export function buildShadowAccounts(ownerUsername = 'yor01'): { moneyMode: typeof moneyMode; owner: string; accounts: ShadowAccount[] } {
+  const normalizedOwner = ownerUsername.trim().toUpperCase() || 'YOR01';
   const stockistOwners = new Set(['YOR0003', 'YOR0005']);
   const isStockistOwner = stockistOwners.has(normalizedOwner);
 
@@ -588,7 +588,7 @@ export function buildAdminMembers() {
   return {
     moneyMode,
     members: [
-      { username: 'YOR0001', name: 'Yor Member', packageTier: 'Standard', status: 'active', shadowAccounts: 2 },
+      { username: 'yor01', name: 'Yor Company01', packageTier: 'Standard', status: 'active', shadowAccounts: 2 },
       { username: 'YOR0002', name: 'Alyssa Cruz', packageTier: 'Business', status: 'active', shadowAccounts: 0 },
       { username: 'YOR0003', name: 'Marco Reyes', packageTier: 'VIP', status: 'active', shadowAccounts: 0 },
       { username: 'YOR0004', name: 'Nica Santos', packageTier: 'Classic', status: 'pending', shadowAccounts: 0 }
@@ -618,7 +618,7 @@ export function buildAdminPayouts() {
   return {
     moneyMode,
     payouts: [
-      { id: 'ENC-20260524-001', member: 'YOR0001', gross: 8000, deductions: 100, net: 7900, status: isSandboxMode() ? 'sandbox approved' : 'playground approved' },
+      { id: 'ENC-20260524-001', member: 'yor01', gross: 8000, deductions: 100, net: 7900, status: isSandboxMode() ? 'sandbox approved' : 'playground approved' },
       { id: 'ENC-20260517-002', member: 'YOR0003', gross: 12500, deductions: 600, net: 11900, status: 'finance review' }
     ]
   };

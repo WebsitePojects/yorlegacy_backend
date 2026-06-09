@@ -136,11 +136,15 @@ export async function findAppUserByUsername(
   }
 
   // 1. Try to find the member profile by username
-  const { data: memberProfile } = await supabase
+  const { data: memberProfile, error: memberProfileError } = await supabase
     .from('member_profiles')
     .select('user_id')
     .ilike('username', username.trim())
     .maybeSingle();
+
+  if (memberProfileError) {
+    console.error('findAppUserByUsername: member_profiles query error', memberProfileError);
+  }
 
   let targetUserId = memberProfile?.user_id;
 

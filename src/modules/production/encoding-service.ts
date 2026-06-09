@@ -1268,9 +1268,19 @@ export class ProductionEncodingService {
         const matchedPointsAfter = Math.min(balance.leftPoints, balance.rightPoints);
         const salesmatchDelta = Math.max(0, matchedSalesAfter - matchedSalesBefore);
         const pointsDelta = Math.max(0, matchedPointsAfter - matchedPointsBefore);
-        balance.matchedSales = matchedSalesAfter;
-        balance.matchedPoints = matchedPointsAfter;
+        balance.matchedSales += salesmatchDelta;
+        balance.matchedPoints += pointsDelta;
         balance.updatedAt = this.repo.now();
+
+        // Reduce both legs by the matched amount — weak leg zeroes out, strong leg carries forward residual.
+        if (salesmatchDelta > 0) {
+          balance.leftSales -= salesmatchDelta;
+          balance.rightSales -= salesmatchDelta;
+          balance.leftPoints -= pointsDelta;
+          balance.rightPoints -= pointsDelta;
+          network.leftPoints = Math.max(0, network.leftPoints - pointsDelta);
+          network.rightPoints = Math.max(0, network.rightPoints - pointsDelta);
+        }
 
         await this.repo.saveNetworkAccount(network);
         await this.repo.saveSalesmatchBalance(balance);

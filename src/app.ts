@@ -23,7 +23,8 @@ app.use(memberRouter);
 app.use(adminRouter);
 app.use(pagesRouter);
 
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('EXPRESS ERROR:', err);
-  res.status(500).json({ error: err.message, stack: err.stack });
+  const message = typeof err?.message === 'string' ? err.message : String(err ?? 'Internal server error');
+  res.status(500).json({ message });
 });

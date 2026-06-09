@@ -54,7 +54,17 @@ authRouter.post('/api/auth/login', async (req, res) => {
   }
 
   const { username, password, rememberMe, scope } = parsed.data;
-  const user = await authenticateUser(username, password);
+
+  let user;
+  try {
+    user = await authenticateUser(username, password);
+  } catch (err) {
+    console.error('Login authentication error:', err);
+    res.status(503).json({
+      message: 'Sign-in service temporarily unavailable. Please try again.'
+    });
+    return;
+  }
 
   if (!user) {
     res.status(401).json({

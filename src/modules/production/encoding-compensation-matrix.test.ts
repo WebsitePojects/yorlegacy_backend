@@ -75,11 +75,11 @@ function seedNetwork(
 describe('Production encoding compensation matrix', () => {
   it('keeps package source-of-truth aligned to BUSINESSRULE values and phase-1 PV/BP handling', async () => {
     const expected = [
-      { code: 'BASIC', price: 1998, pv: 5, directReferralBonus: 200, salesmatchValue: 250, weeklyCap: 5000, monthlyCap: 20000, binaryCyclePercent: null },
-      { code: 'CLASSIC', price: 5998, pv: 10, directReferralBonus: 1000, salesmatchValue: 500, weeklyCap: 20000, monthlyCap: 80000, binaryCyclePercent: 2 },
-      { code: 'STANDARD', price: 25998, pv: 50, directReferralBonus: 5000, salesmatchValue: 2500, weeklyCap: 60000, monthlyCap: 240000, binaryCyclePercent: 3 },
-      { code: 'BUSINESS', price: 50998, pv: 100, directReferralBonus: 7000, salesmatchValue: 5000, weeklyCap: 120000, monthlyCap: 480000, binaryCyclePercent: 4 },
-      { code: 'VIP', price: 159998, pv: 300, directReferralBonus: 15000, salesmatchValue: 15000, weeklyCap: 300000, monthlyCap: 1200000, binaryCyclePercent: 5 }
+      { code: 'BASIC', price: 1998, pv: 1, directReferralBonus: 200, salesmatchValue: 250, weeklyCap: 5000, monthlyCap: 20000, binaryCyclePercent: null },
+      { code: 'CLASSIC', price: 5998, pv: 2, directReferralBonus: 1000, salesmatchValue: 500, weeklyCap: 20000, monthlyCap: 80000, binaryCyclePercent: 2 },
+      { code: 'STANDARD', price: 25998, pv: 10, directReferralBonus: 5000, salesmatchValue: 2500, weeklyCap: 60000, monthlyCap: 240000, binaryCyclePercent: 3 },
+      { code: 'BUSINESS', price: 50998, pv: 20, directReferralBonus: 7000, salesmatchValue: 5000, weeklyCap: 120000, monthlyCap: 480000, binaryCyclePercent: 4 },
+      { code: 'VIP', price: 159998, pv: 60, directReferralBonus: 15000, salesmatchValue: 15000, weeklyCap: 300000, monthlyCap: 1200000, binaryCyclePercent: 5 }
     ] as const;
 
     for (const row of expected) {
@@ -100,11 +100,11 @@ describe('Production encoding compensation matrix', () => {
   });
 
   it.each([
-    { packageTier: 'Basic' as const, expectedDr: 200, expectedSalesmatch: 250, expectedPoints: 5, expectedBinaryCycle: 0, expectedGetFive: 0 },
-    { packageTier: 'Classic' as const, expectedDr: 1000, expectedSalesmatch: 500, expectedPoints: 10, expectedBinaryCycle: 10, expectedGetFive: 5998 },
-    { packageTier: 'Standard' as const, expectedDr: 5000, expectedSalesmatch: 2500, expectedPoints: 50, expectedBinaryCycle: 75, expectedGetFive: 25998 },
-    { packageTier: 'Business' as const, expectedDr: 7000, expectedSalesmatch: 5000, expectedPoints: 100, expectedBinaryCycle: 200, expectedGetFive: 50998 },
-    { packageTier: 'VIP' as const, expectedDr: 15000, expectedSalesmatch: 15000, expectedPoints: 300, expectedBinaryCycle: 750, expectedGetFive: 159998 }
+    { packageTier: 'Basic' as const, expectedDr: 200, expectedSalesmatch: 250, expectedPoints: 1, expectedBinaryCycle: 0, expectedGetFive: 0 },
+    { packageTier: 'Classic' as const, expectedDr: 1000, expectedSalesmatch: 500, expectedPoints: 2, expectedBinaryCycle: 10, expectedGetFive: 5998 },
+    { packageTier: 'Standard' as const, expectedDr: 5000, expectedSalesmatch: 2500, expectedPoints: 10, expectedBinaryCycle: 75, expectedGetFive: 25998 },
+    { packageTier: 'Business' as const, expectedDr: 7000, expectedSalesmatch: 5000, expectedPoints: 20, expectedBinaryCycle: 200, expectedGetFive: 50998 },
+    { packageTier: 'VIP' as const, expectedDr: 15000, expectedSalesmatch: 15000, expectedPoints: 60, expectedBinaryCycle: 750, expectedGetFive: 159998 }
   ])(
     'posts the expected phase-1 compensation basis for $packageTier registration',
     async ({ packageTier, expectedDr, expectedSalesmatch, expectedPoints, expectedBinaryCycle, expectedGetFive }) => {

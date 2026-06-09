@@ -1219,6 +1219,7 @@ function settleSandboxPlacementCompensation(
     const leftSalesBefore = parent.leftSales ?? 0;
     const rightSalesBefore = parent.rightSales ?? 0;
     const matchedSalesBefore = Math.min(leftSalesBefore, rightSalesBefore);
+    const matchedPointsBefore = Math.min(parent.leftPoints, parent.rightPoints);
 
     if (sideToAdd === 'left') {
       parent.leftPoints += points;
@@ -1229,10 +1230,17 @@ function settleSandboxPlacementCompensation(
     }
 
     const matchedSalesAfter = Math.min(parent.leftSales ?? 0, parent.rightSales ?? 0);
+    const matchedPointsAfter = Math.min(parent.leftPoints, parent.rightPoints);
     const salesmatchDelta = Math.max(0, matchedSalesAfter - matchedSalesBefore);
-    parent.matchedSales = matchedSalesAfter;
+    const pointsDelta = Math.max(0, matchedPointsAfter - matchedPointsBefore);
+    parent.matchedSales = (parent.matchedSales ?? 0) + salesmatchDelta;
 
     if (salesmatchDelta > 0) {
+      // Reduce both legs by matched amount — weak leg zeroes out, strong leg carries forward residual.
+      parent.leftSales = (parent.leftSales ?? 0) - salesmatchDelta;
+      parent.rightSales = (parent.rightSales ?? 0) - salesmatchDelta;
+      parent.leftPoints = Math.max(0, parent.leftPoints - pointsDelta);
+      parent.rightPoints = Math.max(0, parent.rightPoints - pointsDelta);
       parent.walletAvailable += salesmatchDelta;
       const salesmatchLedger = createLedgerEntry(
         state,

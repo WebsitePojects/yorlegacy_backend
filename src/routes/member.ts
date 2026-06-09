@@ -253,30 +253,53 @@ memberRouter.post('/api/member/activation-codes/maintenance', requireRole('membe
   );
 });
 
-memberRouter.get('/api/member/transactions', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/transactions', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id);
+        res.status(200).json({ moneyMode: data.moneyMode, transactions: data.transactions });
+        return;
+      } catch (err) {
+        console.error('[transactions] Production wallet data error:', err);
+      }
+    }
+  }
   const payload = buildMemberTransactionCenter(req.authUser!);
-  res.status(200).json({
-    moneyMode: payload.moneyMode,
-    transactions: payload.transactions
-  });
+  res.status(200).json({ moneyMode: payload.moneyMode, transactions: payload.transactions });
 });
 
-memberRouter.get('/api/member/transactions/:transactionId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/transactions/:transactionId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const transactionId = Array.isArray(req.params.transactionId)
     ? req.params.transactionId[0]
     : req.params.transactionId;
+
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id);
+        const tx = data.transactions.find(t => t.id === transactionId);
+        if (!tx) {
+          res.status(404).json({ message: 'Transaction not found' });
+          return;
+        }
+        res.status(200).json({ moneyMode: data.moneyMode, transaction: tx });
+        return;
+      } catch (err) {
+        console.error('[transactions/:id] Production wallet data error:', err);
+      }
+    }
+  }
+
   const payload = buildMemberTransactionCenter(req.authUser!);
   const detail = payload.detailById[transactionId];
-
   if (!detail) {
     res.status(404).json({ message: 'Transaction not found' });
     return;
   }
-
-  res.status(200).json({
-    moneyMode: payload.moneyMode,
-    transaction: detail
-  });
+  res.status(200).json({ moneyMode: payload.moneyMode, transaction: detail });
 });
 
 memberRouter.get('/api/member/registration-readiness', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
@@ -322,13 +345,22 @@ memberRouter.post('/api/member/placement-reservations', requireRole('member', 'a
   }
 });
 
-memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  const payload = buildMemberWalletDetail(req.authUser!, Number(req.body?.amount ?? 0));
-  res.status(200).json({
-    moneyMode: payload.moneyMode,
-    preview: payload.preview,
-    requestedAmount: payload.preview.requestedAmount
-  });
+memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  const amount = Number(req.body?.amount ?? 0);
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.buildMemberWalletData(req.authUser!.id, amount);
+        res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
+        return;
+      } catch (err) {
+        console.error('[preview-encash] Production wallet data error:', err);
+      }
+    }
+  }
+  const payload = buildMemberWalletDetail(req.authUser!, amount);
+  res.status(200).json({ moneyMode: payload.moneyMode, preview: payload.preview, requestedAmount: payload.preview.requestedAmount });
 });
 
 memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {

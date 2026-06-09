@@ -154,8 +154,8 @@ export type ProductionPlacementReservation = {
 export type ProductionWalletLedgerEntry = {
   id: string;
   userId: string;
-  walletType: 'main';
-  entryType: 'direct_referral' | 'salesmatch' | 'binary_cycle' | 'get_five';
+  walletType: 'main' | 'lifestyle' | 'product' | 'pending' | 'encashment';
+  entryType: 'direct_referral' | 'salesmatch' | 'binary_cycle' | 'get_five' | 'lifestyle_rewards' | 'unilevel' | 'global_bonus';
   sourceReference: string;
   creditAmount: number;
   debitAmount: number;

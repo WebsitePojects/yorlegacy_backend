@@ -23,7 +23,8 @@ import {
   runMemberEncashment,
   runMemberMaintenanceCode,
   runMemberTransferActivationCodes,
-  runMemberUpgradeActivationCode
+  runMemberUpgradeActivationCode,
+  runMemberUpdatePayout
 } from '../modules/operations/legacy-parity-service.js';
 import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
 
@@ -73,6 +74,21 @@ memberRouter.get('/api/member/genealogy/binary', requireRole('member', 'admin', 
 
 memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+
+    void service.buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build binary genealogy tree.' });
+    });
+    return;
+  }
+
   res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
 });
 
@@ -258,6 +274,12 @@ memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'ad
 
 memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   res.status(200).json(runMemberEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
+});
+
+memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const payoutOption = typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '';
+  const payoutDetails = typeof req.body?.payoutDetails === 'string' ? req.body.payoutDetails : '';
+  res.status(200).json(runMemberUpdatePayout(req.authUser!, { payoutOption, payoutDetails }));
 });
 
 memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {

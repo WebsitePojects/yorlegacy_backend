@@ -4,6 +4,8 @@ import type {
   SessionUser
 } from '../../types/auth.js';
 import { buildGatedWriteResponse, getWalletLedger, getMoneyMode } from '../compensation/mvp-service.js';
+import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
+import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 import {
   getHybridMemberForUser,
   listHybridActivationRows,
@@ -32,9 +34,11 @@ import {
   resetSandboxState,
   submitSandboxEncashment,
   transferSandboxActivationCodes,
+  updateSandboxMemberPayout,
   updateSandboxMemberProfile,
   updateSandboxMemberStatus,
-  upgradeSandboxMemberWithCode
+  upgradeSandboxMemberWithCode,
+  findSandboxMemberByCode
 } from '../sandbox/dev-sandbox-store.js';
 
 const currency = (value: number): string =>
@@ -146,7 +150,24 @@ function activationInventoryFor(member: MemberRecord) {
 }
 
 function findMemberByCode(code: string) {
-  return listHybridMembers().find((member) => member.username === code || member.referralCode === code) ?? null;
+  if (isSandboxMode()) {
+    return findSandboxMemberByCode(code) ?? null;
+  }
+
+  const normalized = code.trim().toUpperCase();
+  let found = listHybridMembers().find((member) => member.username.toUpperCase() === normalized || member.referralCode.toUpperCase() === normalized) ?? null;
+  if (found) {
+    return found;
+  }
+  try {
+    const decodedUsername = decodeReferralCode(normalized).toUpperCase();
+    if (decodedUsername) {
+      found = listHybridMembers().find((member) => member.username.toUpperCase() === decodedUsername) ?? null;
+    }
+  } catch {
+    // Ignore decoding errors
+  }
+  return found;
 }
 
 function isRegistrationReadyCode(row: { packageTier: string; status: string; codeFamily?: string }) {
@@ -292,19 +313,18 @@ function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
     const nodeId = `${parentUsername}-${placement === 'left' ? 'L' : 'R'}`;
     const pathWithNode = [...path, nodeId];
 
-    const leftChildMember = allMembers.find(
-      (m) =>
-        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
-        m.placement === 'left' &&
-        placement === 'left'
-    );
+    const findShadowChildMember = (childSide: 'left' | 'right') =>
+      allMembers.find(
+        (member) =>
+          member.placement === childSide &&
+          ((member.placementParentUsername === parentUsername &&
+            member.placementParentShadowSide === placement) ||
+            (member.placementParentUsername === nodeId && !member.placementParentShadowSide) ||
+            (member.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1 && !member.placementParentShadowSide))
+      );
 
-    const rightChildMember = allMembers.find(
-      (m) =>
-        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
-        m.placement === 'right' &&
-        placement === 'right'
-    );
+    const leftChildMember = findShadowChildMember('left');
+    const rightChildMember = findShadowChildMember('right');
 
     const children: GenealogyNode[] = [];
     if (leftChildMember) {
@@ -576,7 +596,10 @@ export function buildMemberRegistrationReadiness(user: SessionUser) {
   const inventory = activationInventoryFor(member);
   const tree = buildMemberBinaryTree(member);
   const placementRecommendation = recommendPlacement(tree);
-  const referralLink = `https://yor.local/register?ref=${member.referralCode}&origin=referral-link`;
+  const referralLink = buildRegistrationUrl({
+    ref: encodeReferralCode(member.username),
+    origin: 'referral-link'
+  });
 
   return {
     moneyMode: currentMoneyMode(),
@@ -757,8 +780,9 @@ export function buildAdminMemberManagementCenter(input: {
       )
     : members;
   const paginated = paginateRows(filtered, page, pageSize);
-  const selectedUsername = input.username?.trim().toUpperCase() || (query && filtered[0]?.username) || '';
-  const selectedMember = members.find((member) => member.username === selectedUsername) ?? null;
+  const selectedUsername = input.username?.trim() || (query && filtered[0]?.username) || '';
+  const selectedMember =
+    members.find((member) => member.username.trim().toUpperCase() === selectedUsername.trim().toUpperCase()) ?? null;
 
   return {
     moneyMode: currentMoneyMode(),
@@ -891,7 +915,14 @@ export function buildPublicRegistrationPreview(viewer: SessionUser | null, input
   const placement =
     resolvedOrigin === 'genealogy-slot' && input.placementParentUsername && input.placementSide
       ? {
-          placementUsername: input.placementParentUsername,
+          placementUsername: input.placementParentUsername.endsWith('-L') || input.placementParentUsername.endsWith('-R')
+            ? input.placementParentUsername.slice(0, -2)
+            : input.placementParentUsername,
+          placementParentShadowSide: input.placementParentUsername.endsWith('-L')
+            ? 'left'
+            : input.placementParentUsername.endsWith('-R')
+              ? 'right'
+              : null,
           placementSide: input.placementSide,
           note: 'Placement stays locked to the selected genealogy slot.'
         }
@@ -1012,7 +1043,7 @@ export function runMemberEncashment(user: SessionUser, amount: number) {
 
 export function runAdminGenerateActivationCodes(
   user: SessionUser,
-  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string; remarks?: string }
+  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string; remarks?: string; codeFamily?: string }
 ) {
   return isSandboxMode()
     ? generateSandboxActivationCodes(
@@ -1021,7 +1052,8 @@ export function runAdminGenerateActivationCodes(
         payload.packageTier,
         payload.assignedTo,
         payload.accountType,
-        payload.remarks
+        payload.remarks,
+        payload.codeFamily
       )
     : buildGatedParityAction('admin-generate-activation-codes');
 }
@@ -1067,6 +1099,15 @@ export function runAdminUpdateMemberProfile(
   return isSandboxMode()
     ? updateSandboxMemberProfile(user, payload.username, payload)
     : buildGatedParityAction('admin-update-member-profile');
+}
+
+export function runMemberUpdatePayout(
+  user: SessionUser,
+  payload: { payoutOption: string; payoutDetails: string }
+) {
+  return isSandboxMode()
+    ? updateSandboxMemberPayout(user, payload)
+    : buildGatedParityAction('member-update-payout');
 }
 
 export function runAdminUpdateMemberStatus(

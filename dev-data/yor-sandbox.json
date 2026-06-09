@@ -3,7 +3,7 @@
   "metadata": {
     "version": 1,
     "lastResetAt": "2026-06-08T16:58:09.742Z",
-    "lastMutationAt": "2026-06-08T16:58:10.439Z"
+    "lastMutationAt": "2026-06-09T03:45:06.426Z"
   },
   "users": [
     {
@@ -59,6 +59,15 @@
       "passwordHash": "ed7c34913a8bd7c9848efb4cc3b352f4949c9e9de6f82060ce3b062b355faea81fe42b1cdadb52ceb790964b99e54f3ed00a6ad8054324ee4fb5a38a0c94c2a6",
       "passwordSalt": "8f0d729478278483de9c2ff77cdeafc4",
       "status": "active"
+    },
+    {
+      "id": "sandbox-root1",
+      "name": "root one",
+      "email": "vergel.agripa.asd@gmail.com",
+      "role": "member",
+      "passwordHash": "7a8a0eb568897a7cd13c6c7c7f1b1cdf9bcf48ee8b24715bfe36a6bd8402ce217a4884bee592719541219c43b74c44213493af6c4490cfa26e1e13bfc5c35456",
+      "passwordSalt": "90ceb3d4533af7de7f31f9d0cea858df",
+      "status": "active"
     }
   ],
   "adminProfiles": [
@@ -100,16 +109,16 @@
       "sponsorCode": "YOR-SPONSOR-001",
       "placement": "root",
       "placementParentUsername": null,
-      "directReferrals": 6,
+      "directReferrals": 7,
       "leftPoints": 24000,
-      "rightPoints": 23000,
-      "walletAvailable": 20200.75,
+      "rightPoints": 53000,
+      "walletAvailable": 35200.75,
       "walletPending": 4300,
       "cdBalance": 0,
       "stockist": false,
       "payoutOption": "GCash",
       "payoutDetails": "09170000001",
-      "lastActivity": "2026-06-08"
+      "lastActivity": "2026-06-09"
     },
     {
       "userId": "yor-legacy-002",
@@ -245,6 +254,33 @@
       "payoutOption": "GCash",
       "payoutDetails": "+63 900 111 2202",
       "lastActivity": "2026-06-08"
+    },
+    {
+      "userId": "sandbox-root1",
+      "username": "ROOT1",
+      "fullName": "root one",
+      "firstName": "root",
+      "lastName": "one",
+      "middleName": "",
+      "email": "vergel.agripa.asd@gmail.com",
+      "phone": "+63994332sad",
+      "address": "",
+      "packageTier": "VIP",
+      "accountStatus": "active",
+      "referralCode": "YOR-MEMBER-0003",
+      "sponsorCode": "YOR-MEMBER-001",
+      "placement": "left",
+      "placementParentUsername": "YOR0001-R",
+      "directReferrals": 0,
+      "leftPoints": 0,
+      "rightPoints": 0,
+      "walletAvailable": 0,
+      "walletPending": 0,
+      "cdBalance": 0,
+      "stockist": false,
+      "payoutOption": "GCash",
+      "payoutDetails": "+63994332sad",
+      "lastActivity": "2026-06-09"
     }
   ],
   "activationRows": [
@@ -329,10 +365,10 @@
       "code": "FSVI8X4R2M",
       "accountType": "FS",
       "packageTier": "VIP",
-      "assignedTo": "YOR0001",
-      "status": "available",
+      "assignedTo": "ROOT1",
+      "status": "used",
       "paymentStatus": "paid",
-      "remarks": "High-tier stockist sale cleared.",
+      "remarks": "High-tier stockist sale cleared. Registered ROOT1.",
       "generatedAt": "2026-05-28",
       "codeFamily": "YOR CODES"
     },
@@ -422,6 +458,19 @@
   ],
   "walletLedgerEntries": [
     {
+      "id": "WL-005",
+      "memberUsername": "YOR0001",
+      "walletType": "main",
+      "entryType": "direct_referral",
+      "sourceReference": "ROOT1",
+      "creditAmount": 15000,
+      "debitAmount": 0,
+      "balanceAfter": 35200.75,
+      "status": "posted",
+      "occurredAt": "2026-06-09T03:45:06.426Z",
+      "processId": "sandbox-direct_referral-1780976706426"
+    },
+    {
       "id": "WL-004",
       "memberUsername": "YOR0001",
       "walletType": "main",
@@ -475,6 +524,12 @@
     }
   ],
   "auditEvents": [
+    {
+      "actor": "Public Registration",
+      "action": "member_registration_committed",
+      "target": "ROOT1 under YOR0001",
+      "occurredAt": "2026-06-09T03:45:06.426Z"
+    },
     {
       "actor": "Public Registration",
       "action": "member_registration_committed",

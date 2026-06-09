@@ -2,10 +2,16 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticateUser } from '../modules/auth/auth-service.js';
 import { getDemoCredentials } from '../modules/auth/demo-users.js';
+import { isProductionMode } from '../modules/production/runtime.js';
 import {
+  createCsrfCookie,
+  createCsrfToken,
+  createExpiredCsrfCookie,
   createExpiredSessionCookie,
   createSessionCookie,
-  createSessionToken
+  createSessionToken,
+  CSRF_COOKIE_NAME,
+  readCookie
 } from '../modules/auth/session.js';
 
 const loginSchema = z.object({
@@ -24,6 +30,11 @@ authRouter.get('/api/auth/me', (req, res) => {
       user: null
     });
     return;
+  }
+
+  const existingCsrfToken = readCookie(req.headers.cookie, CSRF_COOKIE_NAME);
+  if (!existingCsrfToken) {
+    res.append('Set-Cookie', createCsrfCookie(createCsrfToken()));
   }
 
   res.status(200).json({
@@ -68,8 +79,12 @@ authRouter.post('/api/auth/login', async (req, res) => {
   }
 
   const token = createSessionToken(user, rememberMe);
+  const csrfToken = createCsrfToken();
 
-  res.setHeader('Set-Cookie', createSessionCookie(token, rememberMe));
+  res.setHeader('Set-Cookie', [
+    createSessionCookie(token, rememberMe),
+    createCsrfCookie(csrfToken, rememberMe)
+  ]);
   res.status(200).json({
     authenticated: true,
     user
@@ -77,12 +92,17 @@ authRouter.post('/api/auth/login', async (req, res) => {
 });
 
 authRouter.post('/api/auth/logout', (_req, res) => {
-  res.setHeader('Set-Cookie', createExpiredSessionCookie());
+  res.setHeader('Set-Cookie', [createExpiredSessionCookie(), createExpiredCsrfCookie()]);
   res.status(200).json({
     authenticated: false
   });
 });
 
 authRouter.get('/api/auth/demo-credentials', (_req, res) => {
+  if (isProductionMode()) {
+    res.status(404).json({ message: 'Demo credentials are disabled in production mode.' });
+    return;
+  }
+
   res.status(200).json(getDemoCredentials());
 });

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { env } from '../../config/env.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { AuditEvent, SessionUser } from '../../types/auth.js';
+import { decodeReferralCode, encodeReferralCode } from '../../lib/referral-utils.js';
 
 export type MemberRecord = {
   userId: string;
@@ -21,9 +22,13 @@ export type MemberRecord = {
   sponsorCode: string;
   placement: 'left' | 'right' | 'root';
   placementParentUsername: string | null;
+  placementParentShadowSide?: 'left' | 'right' | null;
   directReferrals: number;
   leftPoints: number;
   rightPoints: number;
+  leftSales?: number;
+  rightSales?: number;
+  matchedSales?: number;
   walletAvailable: number;
   walletPending: number;
   cdBalance: number;
@@ -127,11 +132,11 @@ const currency = (value: number): string =>
 
 const sandboxDataFile = path.resolve(process.cwd(), env.YOR_SANDBOX_DATA_FILE);
 const sandboxPackagePolicies = [
-  { code: 'BASIC', name: 'Basic', pv: 5, directReferralBonus: 200 },
-  { code: 'CLASSIC', name: 'Classic', pv: 10, directReferralBonus: 1000 },
-  { code: 'STANDARD', name: 'Standard', pv: 50, directReferralBonus: 5000 },
-  { code: 'BUSINESS', name: 'Business', pv: 100, directReferralBonus: 7000 },
-  { code: 'VIP', name: 'VIP', pv: 300, directReferralBonus: 15000 }
+  { code: 'BASIC', name: 'Basic', pv: 5, directReferralBonus: 200, salesmatchValue: 250, binaryCyclePercent: 0 },
+  { code: 'CLASSIC', name: 'Classic', pv: 10, directReferralBonus: 1000, salesmatchValue: 500, binaryCyclePercent: 2 },
+  { code: 'STANDARD', name: 'Standard', pv: 50, directReferralBonus: 5000, salesmatchValue: 2500, binaryCyclePercent: 3 },
+  { code: 'BUSINESS', name: 'Business', pv: 100, directReferralBonus: 7000, salesmatchValue: 5000, binaryCyclePercent: 4 },
+  { code: 'VIP', name: 'VIP', pv: 300, directReferralBonus: 15000, salesmatchValue: 15000, binaryCyclePercent: 5 }
 ] as const;
 const seededUserSalts = {
   member: 'ba43c72b000c8a310deced20454ebeb2',
@@ -220,7 +225,6 @@ function buildSeedUsers(): SandboxUserRecord[] {
     env.DEMO_SUPERADMIN_PASSWORD,
     seededUserSalts.superadmin
   );
-
   return [
     {
       id: 'yor-member-demo',
@@ -266,7 +270,7 @@ function buildSeedUsers(): SandboxUserRecord[] {
       passwordHash: superadminPassword.hash,
       passwordSalt: superadminPassword.salt,
       status: 'active'
-    }
+    },
   ];
 }
 
@@ -293,23 +297,26 @@ function buildSeedState(): SandboxState {
     members: [
       {
         userId: 'yor-member-demo',
-        username: 'YOR0001',
-        fullName: 'Yor Member',
+        username: 'yor01',
+        fullName: env.DEMO_MEMBER_NAME,
         firstName: 'Yor',
-        lastName: 'Member',
+        lastName: 'Company01',
         middleName: '',
-        email: 'member@yor.local',
+        email: env.DEMO_MEMBER_EMAIL.toLowerCase(),
         phone: '+63 900 000 0001',
         address: 'Makati City, Metro Manila',
         packageTier: 'Standard',
         accountStatus: 'active',
-        referralCode: 'YOR-MEMBER-001',
-        sponsorCode: 'YOR-SPONSOR-001',
+        referralCode: encodeReferralCode('YOR01'),
+        sponsorCode: '',
         placement: 'root',
         placementParentUsername: null,
         directReferrals: 5,
         leftPoints: 24000,
         rightPoints: 18000,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
         walletAvailable: 15200.75,
         walletPending: 4300,
         cdBalance: 0,
@@ -331,12 +338,16 @@ function buildSeedState(): SandboxState {
         packageTier: 'Business',
         accountStatus: 'active',
         referralCode: 'YOR-ALYSSA',
-        sponsorCode: 'YOR-MEMBER-001',
+        sponsorCode: encodeReferralCode('YOR01'),
         placement: 'left',
-        placementParentUsername: 'YOR0001-L',
+        placementParentUsername: 'yor01-L',
+        placementParentShadowSide: 'left',
         directReferrals: 3,
         leftPoints: 12000,
         rightPoints: 8000,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
         walletAvailable: 8950,
         walletPending: 1500,
         cdBalance: 500,
@@ -358,12 +369,16 @@ function buildSeedState(): SandboxState {
         packageTier: 'VIP',
         accountStatus: 'active',
         referralCode: 'YOR-MARCO',
-        sponsorCode: 'YOR-MEMBER-001',
+        sponsorCode: encodeReferralCode('YOR01'),
         placement: 'right',
-        placementParentUsername: 'YOR0001-R',
+        placementParentUsername: 'yor01-R',
+        placementParentShadowSide: 'right',
         directReferrals: 7,
         leftPoints: 18000,
         rightPoints: 21000,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
         walletAvailable: 31420,
         walletPending: 6100,
         cdBalance: 0,
@@ -388,9 +403,13 @@ function buildSeedState(): SandboxState {
         sponsorCode: 'YOR-ALYSSA',
         placement: 'left',
         placementParentUsername: 'YOR0002-L',
+        placementParentShadowSide: 'left',
         directReferrals: 1,
         leftPoints: 2500,
         rightPoints: 1500,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
         walletAvailable: 700,
         walletPending: 300,
         cdBalance: 0,
@@ -415,9 +434,13 @@ function buildSeedState(): SandboxState {
         sponsorCode: 'YOR-MARCO',
         placement: 'right',
         placementParentUsername: 'YOR0003-R',
+        placementParentShadowSide: 'right',
         directReferrals: 2,
         leftPoints: 3000,
         rightPoints: 4000,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
         walletAvailable: 1850,
         walletPending: 250,
         cdBalance: 150,
@@ -425,20 +448,50 @@ function buildSeedState(): SandboxState {
         payoutOption: 'Remittance Center',
         payoutDetails: 'Cebuana / Ramon Dela Cruz',
         lastActivity: '2026-05-24'
+      },
+      {
+        userId: 'yor-company-root',
+        username: 'yorinternational',
+        fullName: 'Yor International Company',
+        firstName: 'Yor',
+        lastName: 'International Company',
+        middleName: '',
+        email: 'yorinternational@yor.local',
+        phone: '+63 900 000 1000',
+        address: 'Yor International Head Office',
+        packageTier: 'VIP',
+        accountStatus: 'active',
+        referralCode: 'YOR-COMPANY-ROOT',
+        sponsorCode: '',
+        placement: 'root',
+        placementParentUsername: null,
+        directReferrals: 0,
+        leftPoints: 0,
+        rightPoints: 0,
+        leftSales: 0,
+        rightSales: 0,
+        matchedSales: 0,
+        walletAvailable: 0,
+        walletPending: 0,
+        cdBalance: 0,
+        stockist: false,
+        payoutOption: 'GCash',
+        payoutDetails: '09170001000',
+        lastActivity: '2026-06-09'
       }
     ],
     activationRows: [
-      { code: 'PDSTYQ8M4K', accountType: 'PD', packageTier: 'Standard', assignedTo: 'YOR0001', status: 'used', paymentStatus: 'paid', remarks: 'Consumed in prior registration cycle.', generatedAt: '2026-05-20', codeFamily: 'YOR CODES' },
+      { code: 'PDSTYQ8M4K', accountType: 'PD', packageTier: 'Standard', assignedTo: 'yor01', status: 'used', paymentStatus: 'paid', remarks: 'Consumed in prior registration cycle.', generatedAt: '2026-05-20', codeFamily: 'YOR CODES' },
       { code: 'FSBUP3N9XA', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0002', status: 'used', paymentStatus: 'externally-paid', remarks: 'Settled member-to-member outside office.', generatedAt: '2026-05-21', codeFamily: 'YOR CODES' },
-      { code: 'PDSTK7V2LC', accountType: 'PD', packageTier: 'Standard', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Paid and ready for release cycle.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'PDSTK7V2LC', accountType: 'PD', packageTier: 'Standard', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Paid and ready for release cycle.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'FSBUZ6Q1RH', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0003', status: 'available', paymentStatus: 'externally-paid', remarks: 'Stockist walk-in settlement verified by admin.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'unpaid', remarks: 'Awaiting package settlement.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'PDCLV4T9QB', accountType: 'PD', packageTier: 'Classic', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Ready for direct sponsor release.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'FSBUH7M2KC', accountType: 'FS', packageTier: 'Business', assignedTo: null, status: 'unreleased', paymentStatus: 'unpaid', remarks: 'General code pool inventory.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'FSVI8X4R2M', accountType: 'FS', packageTier: 'VIP', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'High-tier stockist sale cleared.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'MNTXP9Q2KL', accountType: 'PD', packageTier: 'Maintenance', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Monthly maintenance product code.', generatedAt: '2026-05-28', codeFamily: 'YOR MAINTENANCE' },
-      { code: 'PERF8M3N2A', accountType: 'PD', packageTier: 'Perfume Pack', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Yor Perfume variant bundle.', generatedAt: '2026-05-28', codeFamily: 'YOR PERFUME' },
-      { code: 'VISI3P9K7X', accountType: 'PD', packageTier: 'Vision Drops', assignedTo: 'YOR0001', status: 'available', paymentStatus: 'paid', remarks: 'Yor Vision wellness drops.', generatedAt: '2026-05-28', codeFamily: 'YOR VISION' }
+      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'yor01', status: 'available', paymentStatus: 'unpaid', remarks: 'Awaiting package settlement.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'PDCLV4T9QB', accountType: 'PD', packageTier: 'Classic', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Ready for direct sponsor release.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'FSBUH7M2KC', accountType: 'FS', packageTier: 'Business', assignedTo: null, status: 'unreleased', paymentStatus: 'unpaid', remarks: 'General code pool inventory — loose.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'FSVI8X4R2M', accountType: 'FS', packageTier: 'VIP', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'High-tier stockist sale cleared.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'MNTXP9Q2KL', accountType: 'PD', packageTier: 'Maintenance', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Monthly maintenance product code.', generatedAt: '2026-05-28', codeFamily: 'YOR MAINTENANCE' },
+      { code: 'PERF8M3N2A', accountType: 'PD', packageTier: 'Perfume Pack', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Yor Perfume variant bundle.', generatedAt: '2026-05-28', codeFamily: 'YOR PERFUME' },
+      { code: 'VISI3P9K7X', accountType: 'PD', packageTier: 'Vision Drops', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Yor Vision wellness drops.', generatedAt: '2026-05-28', codeFamily: 'YOR VISION' }
     ],
     pairingRows: [
       {
@@ -461,7 +514,7 @@ function buildSeedState(): SandboxState {
     payoutRows: [
       {
         reference: 'ENC-20260524-001',
-        member: 'YOR0001',
+        member: 'yor01',
         gross: currency(8000),
         fee: currency(450),
         maintenanceFee: currency(0),
@@ -493,7 +546,7 @@ function buildSeedState(): SandboxState {
     walletLedgerEntries: [
       {
         id: 'WL-001',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'main',
         entryType: 'direct_referral',
         sourceReference: 'YOR-ALYSSA',
@@ -506,10 +559,10 @@ function buildSeedState(): SandboxState {
       },
       {
         id: 'WL-002',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'main',
         entryType: 'salesmatch',
-        sourceReference: 'YOR0001 L/R match',
+        sourceReference: 'yor01 L/R match',
         creditAmount: 7500,
         debitAmount: 0,
         balanceAfter: 10200.75,
@@ -519,7 +572,7 @@ function buildSeedState(): SandboxState {
       },
       {
         id: 'WL-003',
-        memberUsername: 'YOR0001',
+        memberUsername: 'yor01',
         walletType: 'encashment',
         entryType: 'encashment_fee',
         sourceReference: 'ENC-20260524-001',
@@ -592,6 +645,9 @@ function normalizeMemberRecord(member: MemberRecord): MemberRecord {
     middleName,
     fullName: composeFullName(firstName, lastName, middleName),
     stockist: Boolean(member.stockist),
+    leftSales: Number(member.leftSales ?? 0),
+    rightSales: Number(member.rightSales ?? 0),
+    matchedSales: Number(member.matchedSales ?? 0),
     payoutOption: member.payoutOption?.trim() || 'GCash',
     payoutDetails: member.payoutDetails?.trim() || member.phone?.trim() || ''
   };
@@ -637,7 +693,7 @@ function normalizeSandboxState(input: SandboxStateInput): SandboxState {
     },
     users: mergeSeededRows(seed.users, input.users, 'id'),
     adminProfiles: mergeSeededRows(seed.adminProfiles, input.adminProfiles, 'userId'),
-    members: (Array.isArray(input.members) ? input.members : seed.members).map((member) =>
+    members: mergeSeededRows(seed.members, input.members, 'userId').map((member) =>
       normalizeMemberRecord(member as MemberRecord)
     ),
     activationRows: normalizedActivationRows,
@@ -739,14 +795,8 @@ export function findSandboxUserByUsername(username: string): SandboxUserRecord |
   if (normalized === 'yorsuperadmin' || normalized === 'superadmin') {
     return readState().users.find((u) => u.id === 'yor-superadmin-demo') ?? null;
   }
-  if (normalized === 'yorcashier_legacy') {
-    return readState().users.find((u) => u.id === 'yor-cashier-legacy-demo') ?? null;
-  }
-  if (normalized === 'yorbod_legacy') {
-    return readState().users.find((u) => u.id === 'yor-bod-legacy-demo') ?? null;
-  }
-  if (normalized === 'yormember') {
-    return readState().users.find((u) => u.id === 'yor-member-legacy-demo') ?? null;
+  if (normalized === 'yor01') {
+    return readState().users.find((u) => u.id === 'yor-member-demo') ?? null;
   }
 
   const member = readState().members.find(
@@ -768,11 +818,30 @@ export function findSandboxAdminProfileByUserId(userId: string): SandboxAdminPro
 }
 
 export function findSandboxMemberByCode(code: string): MemberRecord | null {
-  return readState().members.find((member) => member.username === code || member.referralCode === code) ?? null;
+  const normalized = code.trim().toUpperCase();
+  const members = readState().members;
+  const directMatch =
+    members.find(
+      (member) =>
+        member.username.trim().toUpperCase() === normalized ||
+        member.referralCode.trim().toUpperCase() === normalized
+    ) ?? null;
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  try {
+    const decodedUsername = decodeReferralCode(normalized).trim().toUpperCase();
+    return members.find((member) => member.username.trim().toUpperCase() === decodedUsername) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function findSandboxMemberByUsername(username: string): MemberRecord | null {
-  return readState().members.find((member) => member.username === username) ?? null;
+  const normalized = username.trim().toUpperCase();
+  return readState().members.find((member) => member.username.trim().toUpperCase() === normalized) ?? null;
 }
 
 function nextNumericId(values: string[], prefix: string): string {
@@ -799,6 +868,55 @@ function nextReferralCode(members: MemberRecord[]): string {
 function accountTypePrefix(value?: string): ActivationRow['accountType'] {
   const normalized = String(value ?? 'PD').trim().toUpperCase();
   return normalized === 'CD' || normalized === 'FS' ? normalized : 'PD';
+}
+
+function normalizeSandboxUsernameAlias(value: string): string | null {
+  const compact = value.trim().toUpperCase().replace(/[\s-]+/g, '');
+  const match = compact.match(/^YOR0*(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return `YOR${match[1].padStart(4, '0')}`;
+}
+
+function resolveSandboxAssignedMember(
+  members: MemberRecord[],
+  assignedTo?: string
+): MemberRecord | null {
+  const rawValue = assignedTo?.trim() ?? '';
+  if (!rawValue) {
+    return null;
+  }
+
+  const normalized = rawValue.toUpperCase();
+  const directMatch =
+    members.find(
+      (member) =>
+        member.username.trim().toUpperCase() === normalized ||
+        member.referralCode.trim().toUpperCase() === normalized ||
+        normalizeComparableName(member.fullName) === normalizeComparableName(rawValue)
+    ) ?? null;
+
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const normalizedAlias = normalizeSandboxUsernameAlias(rawValue);
+  if (normalizedAlias) {
+    const aliasMatch = members.find((member) => member.username.trim().toUpperCase() === normalizedAlias);
+    if (aliasMatch) {
+      return aliasMatch;
+    }
+  }
+
+  try {
+    const decodedUsername = decodeReferralCode(normalized).trim().toUpperCase();
+    return members.find((member) => member.username.trim().toUpperCase() === decodedUsername) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function packageCodePrefix(packageTier: string): string {
@@ -957,14 +1075,19 @@ function findBalancedAvailableSlot(
 }
 
 function isPlacementOccupied(
-  members: { placementParentUsername: string | null; placement: 'left' | 'right' | 'root' }[],
+  members: { placementParentUsername: string | null; placementParentShadowSide?: 'left' | 'right' | null; placement: 'left' | 'right' | 'root' }[],
   placementUsername: string,
-  placementSide: 'left' | 'right'
+  placementSide: 'left' | 'right',
+  placementParentShadowSide?: 'left' | 'right' | null
 ) {
+  const normalizedShadowSide = placementParentShadowSide ?? null;
   return members.some(
     (member) =>
-      (member.placementParentUsername === placementUsername ||
-        member.placementParentUsername === `${placementUsername}-${placementSide === 'left' ? 'L' : 'R'}`) &&
+      (normalizedShadowSide
+        ? member.placementParentUsername === placementUsername &&
+          member.placementParentShadowSide === normalizedShadowSide
+        : member.placementParentUsername === placementUsername ||
+          member.placementParentUsername === `${placementUsername}-${placementSide === 'left' ? 'L' : 'R'}`) &&
       member.placement === placementSide
   );
 }
@@ -979,6 +1102,7 @@ function resolveSandboxRegistrationPreview(
     sponsorUsername?: string;
     activationCode?: string;
     placementParentUsername?: string;
+    placementParentShadowSide?: 'left' | 'right' | null;
     placementSide?: 'left' | 'right';
   }
 ) {
@@ -997,15 +1121,17 @@ function resolveSandboxRegistrationPreview(
   const matchingNameCount = normalizedFullName
     ? members.filter((member) => normalizeComparableName(member.fullName) === normalizedFullName).length
     : 0;
-  const requestedUsername = input.username?.trim().toUpperCase() ?? '';
+  const requestedUsername = input.username?.trim() ?? '';
+  const normalizedRequestedUsername = requestedUsername.toUpperCase();
   const usernameTaken = requestedUsername
-    ? members.some((member) => member.username.toUpperCase() === requestedUsername)
+    ? members.some((member) => member.username.toUpperCase() === normalizedRequestedUsername)
     : false;
   const placement =
     origin === 'genealogy-slot'
       ? input.placementParentUsername && input.placementSide
         ? {
-            placementUsername: input.placementParentUsername,
+            placementUsername: getRealUsername(input.placementParentUsername),
+            placementParentShadowSide: input.placementParentShadowSide ?? getShadowSide(input.placementParentUsername),
             placementSide: input.placementSide,
             note: 'Placement is locked to the selected genealogy open slot.'
           }
@@ -1017,7 +1143,7 @@ function resolveSandboxRegistrationPreview(
           }
         : null;
   const occupiedPlacement = placement
-    ? isPlacementOccupied(members, placement.placementUsername, placement.placementSide)
+    ? isPlacementOccupied(members, placement.placementUsername, placement.placementSide, placement.placementParentShadowSide ?? null)
     : false;
   const issues = [
     requestedUsername ? null : 'Username is required for registration.',
@@ -1069,10 +1195,86 @@ function propagateBinaryPoints(state: SandboxState, placementParentUsername: str
   }
 }
 
+function settleSandboxPlacementCompensation(
+  state: SandboxState,
+  placementParentUsername: string,
+  placementParentShadowSide: 'left' | 'right' | null,
+  placement: 'left' | 'right',
+  points: number,
+  salesmatchValue: number,
+  sourceUsername: string
+): void {
+  let currentParentUsername: string | null = placementParentUsername;
+  let currentPlacement: 'left' | 'right' = placementParentShadowSide ?? placement;
+
+  while (currentParentUsername) {
+    const realUsername = getRealUsername(currentParentUsername);
+    const parent = state.members.find((member) => member.username === realUsername);
+
+    if (!parent) {
+      break;
+    }
+
+    const sideToAdd = currentPlacement;
+    const leftSalesBefore = parent.leftSales ?? 0;
+    const rightSalesBefore = parent.rightSales ?? 0;
+    const matchedSalesBefore = Math.min(leftSalesBefore, rightSalesBefore);
+
+    if (sideToAdd === 'left') {
+      parent.leftPoints += points;
+      parent.leftSales = leftSalesBefore + salesmatchValue;
+    } else {
+      parent.rightPoints += points;
+      parent.rightSales = rightSalesBefore + salesmatchValue;
+    }
+
+    const matchedSalesAfter = Math.min(parent.leftSales ?? 0, parent.rightSales ?? 0);
+    const salesmatchDelta = Math.max(0, matchedSalesAfter - matchedSalesBefore);
+    parent.matchedSales = matchedSalesAfter;
+
+    if (salesmatchDelta > 0) {
+      parent.walletAvailable += salesmatchDelta;
+      const salesmatchLedger = createLedgerEntry(
+        state,
+        parent.username,
+        'salesmatch',
+        sourceUsername,
+        salesmatchDelta,
+        0,
+        parent.walletAvailable,
+        'posted'
+      );
+      state.walletLedgerEntries.unshift(salesmatchLedger);
+
+      const parentPolicy = resolvePackagePolicy(parent.packageTier);
+      if ((parentPolicy.binaryCyclePercent ?? 0) > 0 && parent.packageTier.toUpperCase() !== 'BASIC') {
+        const binaryCredit = Number(((salesmatchDelta * parentPolicy.binaryCyclePercent) / 100).toFixed(2));
+        if (binaryCredit > 0) {
+          parent.walletAvailable += binaryCredit;
+          const binaryLedger = createLedgerEntry(
+            state,
+            parent.username,
+            'binary_cycle',
+            sourceUsername,
+            binaryCredit,
+            0,
+            parent.walletAvailable,
+            'posted'
+          );
+          state.walletLedgerEntries.unshift(binaryLedger);
+        }
+      }
+    }
+
+    currentPlacement = parent.placementParentShadowSide ?? currentPlacement;
+    currentParentUsername = parent.placementParentUsername;
+  }
+}
+
 export function transferSandboxActivationCodes(actor: SessionUser, targetUsername: string, codes: string[]) {
   return updateSandboxState((state) => {
     const member = state.members.find((entry) => entry.userId === actor.id || entry.email === actor.email);
-    const target = state.members.find((entry) => entry.username === targetUsername);
+    const target = state.members.find((entry) => entry.username.trim().toUpperCase() === targetUsername.trim().toUpperCase());
 
     if (!member) {
       throw new Error('Sandbox member profile not found.');
@@ -1113,7 +1315,7 @@ export function transferSandboxActivationCodes(actor: SessionUser, targetUsernam
 
 export function reassignSandboxActivationCodes(actor: SessionUser, targetUsername: string, codes: string[]) {
   return updateSandboxState((state) => {
-    const target = state.members.find((entry) => entry.username === targetUsername);
+    const target = state.members.find((entry) => entry.username.trim().toUpperCase() === targetUsername.trim().toUpperCase());
 
     if (!target) {
       throw new Error('Target member not found.');
@@ -1317,17 +1519,18 @@ export function generateSandboxActivationCodes(
   quantity: number,
   packageTier = 'Standard',
   assignedTo?: string,
-  accountType?: string
+  accountType?: string,
+  remarks?: string,
+  codeFamily = 'YOR CODES'
 ) {
   return updateSandboxState((state) => {
     const count = Math.max(1, Math.min(50, Math.floor(quantity)));
-    const normalizedOwner = assignedTo?.trim().toUpperCase() ?? '';
-    const owner = normalizedOwner ? state.members.find((member) => member.username === normalizedOwner) : null;
+    const requestedOwner = assignedTo?.trim() ?? '';
+    const owner = resolveSandboxAssignedMember(state.members, requestedOwner);
     const codeAccountType = accountTypePrefix(accountType);
-
-    if (normalizedOwner && !owner) {
-      throw new Error('Assigned member was not found.');
-    }
+    const resolvedCodeFamily = String(codeFamily || 'YOR CODES').trim().toUpperCase();
+    const releaseImmediately = Boolean(owner);
+    const fallbackToPool = Boolean(requestedOwner && !owner);
 
     for (let index = 0; index < count; index += 1) {
       state.activationRows.unshift({
@@ -1335,14 +1538,42 @@ export function generateSandboxActivationCodes(
         accountType: codeAccountType,
         packageTier,
         assignedTo: owner?.username ?? null,
-        status: 'unreleased',
-        paymentStatus: 'unpaid',
-        remarks: owner ? `Tagged to ${owner.username} at generation.` : 'General code pool inventory.',
-        generatedAt: todayDate()
+        status: releaseImmediately ? 'available' : 'unreleased',
+        paymentStatus: 'paid',
+        remarks:
+          remarks?.trim() ||
+          (owner
+            ? `Tagged, released, and transferred to ${owner.username} at generation.`
+            : fallbackToPool
+              ? `Tagged member "${requestedOwner}" was not found, so this batch was generated into the general code pool.`
+            : 'General code pool inventory.'),
+        generatedAt: todayDate(),
+        codeFamily: resolvedCodeFamily
       });
     }
 
-    addAuditEvent(state, actor.name, 'activation_batch_generated', `${count} x ${codeAccountType} ${packageTier} -> ${owner?.username ?? 'unassigned pool'}`);
+    addAuditEvent(
+      state,
+      actor.name,
+      'activation_batch_generated',
+      `${count} x ${codeAccountType} ${packageTier} ${resolvedCodeFamily} -> ${owner?.username ?? 'unassigned pool'}`
+    );
+    if (fallbackToPool) {
+      addAuditEvent(
+        state,
+        actor.name,
+        'activation_batch_tag_fallback',
+        `${count} x ${codeAccountType} ${packageTier} fallback to unassigned pool from requested target "${requestedOwner}"`
+      );
+    }
+    if (owner) {
+      addAuditEvent(
+        state,
+        actor.name,
+        'activation_batch_released_and_transferred',
+        `${count} x ${codeAccountType} ${packageTier} -> ${owner.username}`
+      );
+    }
 
     return {
       moneyMode: 'sandbox' as const,
@@ -1350,7 +1581,9 @@ export function generateSandboxActivationCodes(
       status: 'completed' as const,
       reason: 'Sandbox code batch committed.',
       detail: owner
-        ? `Generated ${count} ${codeAccountType} ${packageTier} code(s) for ${owner.username}.`
+        ? `Generated, released, and transferred ${count} ${codeAccountType} ${packageTier} code(s) to ${owner.username}.`
+        : fallbackToPool
+          ? `Generated ${count} ${codeAccountType} ${packageTier} code(s) into the unassigned pool because "${requestedOwner}" was not matched to a member.`
         : `Generated ${count} ${codeAccountType} ${packageTier} code(s) into the unassigned pool.`
     };
   });
@@ -1580,6 +1813,8 @@ export function commitSandboxRegistration(actor: string, input: {
   username?: string;
   placementParentUsername?: string;
   placementSide?: 'left' | 'right';
+  payoutOption?: string;
+  payoutDetails?: string;
 }) {
   return updateSandboxState((state) => {
     const preview = resolveSandboxRegistrationPreview(state.members, state.activationRows, input);
@@ -1596,7 +1831,7 @@ export function commitSandboxRegistration(actor: string, input: {
       throw new Error('Password must be at least 6 characters.');
     }
 
-    const username = input.username?.trim().toUpperCase() || nextUsername(state.members);
+    const username = input.username?.trim() || nextUsername(state.members);
     const emailToUse = input.email?.trim()
       ? input.email.trim().toLowerCase()
       : `${username.toLowerCase()}@yor.local`;
@@ -1605,7 +1840,7 @@ export function commitSandboxRegistration(actor: string, input: {
       throw new Error('Username is required.');
     }
 
-    if (state.members.some((member) => member.username.toUpperCase() === username)) {
+    if (state.members.some((member) => member.username.toUpperCase() === username.toUpperCase())) {
       throw new Error('Username already exists in the sandbox.');
     }
 
@@ -1634,14 +1869,24 @@ export function commitSandboxRegistration(actor: string, input: {
       throw new Error('Activation code is already used or unavailable.');
     }
 
-    if (isPlacementOccupied(state.members, preview.placement.placementUsername, preview.placement.placementSide)) {
-      throw new Error(`Placement side ${preview.placement.placementSide.toUpperCase()} is already occupied under ${preview.placement.placementUsername}.`);
+    if (
+      isPlacementOccupied(
+        state.members,
+        preview.placement.placementUsername,
+        preview.placement.placementSide,
+        preview.placement.placementParentShadowSide ?? null
+      )
+    ) {
+      const placementLabel = preview.placement.placementParentShadowSide
+        ? `${preview.placement.placementUsername}-${preview.placement.placementParentShadowSide === 'left' ? 'L' : 'R'}`
+        : preview.placement.placementUsername;
+      throw new Error(`Placement side ${preview.placement.placementSide.toUpperCase()} is already occupied under ${placementLabel}.`);
     }
 
     const policy = resolvePackagePolicy(code.packageTier);
     const userId = `sandbox-${username.toLowerCase()}`;
     const passwordHash = createPasswordHashSync(input.password);
-    const referralCode = nextReferralCode(state.members);
+    const referralCode = encodeReferralCode(username);
     const preferredSide = preview.placement.placementSide;
     const parsedName = splitFullName(input.fullName.trim());
 
@@ -1690,22 +1935,34 @@ export function commitSandboxRegistration(actor: string, input: {
         packageTier: policy.name,
       accountStatus: 'active',
       referralCode,
-      sponsorCode: sponsor.referralCode,
+      sponsorCode: encodeReferralCode(sponsor.username),
       placement: preferredSide,
       placementParentUsername: preview.placement.placementUsername,
+      placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
       directReferrals: 0,
       leftPoints: 0,
       rightPoints: 0,
+      leftSales: 0,
+      rightSales: 0,
+      matchedSales: 0,
       walletAvailable: 0,
       walletPending: 0,
       cdBalance: 0,
       stockist: false,
-      payoutOption: 'GCash',
-      payoutDetails: input.phone?.trim() || '',
+      payoutOption: input.payoutOption?.trim() || 'GCash',
+      payoutDetails: input.payoutDetails?.trim() || input.phone?.trim() || '',
       lastActivity: todayDate()
     });
 
-    propagateBinaryPoints(state, preview.placement.placementUsername, preferredSide, policy.pv * 100);
+    settleSandboxPlacementCompensation(
+      state,
+      preview.placement.placementUsername,
+      preview.placement.placementParentShadowSide ?? null,
+      preferredSide,
+      policy.pv,
+      policy.salesmatchValue,
+      username
+    );
     addAuditEvent(state, actor, 'member_registration_committed', `${username} under ${sponsor.username}`);
 
     return {
@@ -1877,7 +2134,7 @@ export function buildSandboxAdminActivationMetrics() {
 
 export function renameSandboxMember(actor: SessionUser, username: string, fullName: string) {
   return updateSandboxState((state) => {
-    const member = state.members.find((entry) => entry.username === username);
+    const member = state.members.find((entry) => entry.username.trim().toUpperCase() === username.trim().toUpperCase());
 
     if (!member) {
       throw new Error('Member not found.');
@@ -1927,7 +2184,7 @@ export function updateSandboxMemberProfile(
   }
 ) {
   return updateSandboxState((state) => {
-    const member = state.members.find((entry) => entry.username === username);
+    const member = state.members.find((entry) => entry.username.trim().toUpperCase() === username.trim().toUpperCase());
 
     if (!member) {
       throw new Error('Member not found.');
@@ -1975,13 +2232,45 @@ export function updateSandboxMemberProfile(
   });
 }
 
+export function updateSandboxMemberPayout(
+  actor: SessionUser,
+  payload: { payoutOption: string; payoutDetails: string }
+) {
+  return updateSandboxState((state) => {
+    const member = state.members.find(
+      (entry) => entry.userId === actor.id
+    );
+
+    if (!member) {
+      throw new Error('Member not found.');
+    }
+
+    const payoutOption = payload.payoutOption.trim();
+    if (!payoutOption) {
+      throw new Error('Select a valid payout method.');
+    }
+
+    member.payoutOption = payoutOption;
+    member.payoutDetails = payload.payoutDetails.trim();
+    member.lastActivity = todayDate();
+
+    return {
+      moneyMode: 'sandbox' as const,
+      action: 'member-update-payout',
+      status: 'completed' as const,
+      reason: 'Payout settings updated.',
+      detail: `Payout method set to ${payoutOption}.`
+    };
+  });
+}
+
 export function updateSandboxMemberStatus(
   actor: SessionUser,
   username: string,
   nextStatus: 'active' | 'pending' | 'frozen' | 'suspended'
 ) {
   return updateSandboxState((state) => {
-    const member = state.members.find((entry) => entry.username === username);
+    const member = state.members.find((entry) => entry.username.trim().toUpperCase() === username.trim().toUpperCase());
 
     if (!member) {
       throw new Error('Member not found.');

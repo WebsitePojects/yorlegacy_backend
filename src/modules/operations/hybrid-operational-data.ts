@@ -34,7 +34,16 @@ const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
   'dashboard',
   'member-management',
   'encashment-reports',
+  'account-shadow-management',
   'account-genealogy',
+  'finance-accounting',
+  'cd-accounts',
+  'voucher-management',
+  'rankings',
+  'get-five-package-claims',
+  'contact-messages',
+  'news-posts',
+  'change-password',
   'activation-codes'
 ]);
 const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
@@ -71,11 +80,11 @@ function packagePolicyForTier(packageTier: string) {
 const members: MemberRecord[] = [
   {
     userId: 'yor-member-demo',
-    username: 'YOR0001',
-    fullName: 'Yor Member',
+    username: 'yor01',
+    fullName: 'Yor Company01',
     firstName: 'Yor',
-    lastName: 'Member',
-    email: 'member@yor.local',
+    lastName: 'Company01',
+    email: 'yor01@yor.local',
     packageTier: 'Standard',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-001',
@@ -101,9 +110,10 @@ const members: MemberRecord[] = [
     packageTier: 'Business',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-002',
-    sponsorCode: 'YOR-MEMBER-001',
+    sponsorCode: 'yor01-ref',
     placement: 'left',
-    placementParentUsername: 'YOR0001',
+    placementParentUsername: 'yor01',
+    placementParentShadowSide: 'left',
     directReferrals: 3,
     leftPoints: 12000,
     rightPoints: 8000,
@@ -123,9 +133,10 @@ const members: MemberRecord[] = [
     packageTier: 'VIP',
     accountStatus: 'active',
     referralCode: 'YOR-MEMBER-003',
-    sponsorCode: 'YOR-MEMBER-001',
+    sponsorCode: 'yor01-ref',
     placement: 'right',
-    placementParentUsername: 'YOR0001',
+    placementParentUsername: 'yor01',
+    placementParentShadowSide: 'right',
     directReferrals: 7,
     leftPoints: 18000,
     rightPoints: 21000,
@@ -148,6 +159,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-002',
     placement: 'left',
     placementParentUsername: 'YOR0002',
+    placementParentShadowSide: 'left',
     directReferrals: 1,
     leftPoints: 2500,
     rightPoints: 1500,
@@ -170,6 +182,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-003',
     placement: 'right',
     placementParentUsername: 'YOR0003',
+    placementParentShadowSide: 'right',
     directReferrals: 2,
     leftPoints: 3000,
     rightPoints: 4000,
@@ -194,7 +207,7 @@ const walletRows = [
   {
     date: '2026-05-27',
     type: 'salesmatch',
-    source: 'YOR0001 L/R match',
+    source: 'yor01 L/R match',
     credit: money(7500),
     debit: money(0),
     balance: money(10200.75),
@@ -233,7 +246,7 @@ const pairingRows: PairingRow[] = [
 const payoutRows: PayoutRow[] = [
   {
     reference: 'ENC-20260524-001',
-    member: 'YOR0001',
+    member: 'yor01',
     gross: money(8000),
     fee: money(450),
     tax: money(800),
@@ -268,7 +281,7 @@ const activationRows: ActivationRow[] = [
     code: 'PDSTYQ8M4K',
     accountType: 'PD',
     packageTier: 'Standard',
-    assignedTo: 'YOR0001',
+    assignedTo: 'yor01',
     status: 'used',
     paymentStatus: 'paid',
     remarks: 'Consumed in prior registration cycle.',
@@ -288,7 +301,7 @@ const activationRows: ActivationRow[] = [
     code: 'PDSTK7V2LC',
     accountType: 'PD',
     packageTier: 'Standard',
-    assignedTo: 'YOR0001',
+    assignedTo: 'yor01',
     status: 'available',
     paymentStatus: 'paid',
     remarks: 'Paid and ready for release cycle.',
@@ -530,7 +543,7 @@ function memberMvpModule(
     status: 'read-only',
     legacyReference: 'Yor MVP compensation prototype',
     permissions: ['member', ...STAFF_ROLES],
-    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Value-changing writes remain approval-controlled.', 'good')],
+    metrics: [],
     table: table(label, rows),
     gatedActions: []
   };
@@ -555,7 +568,7 @@ function adminMvpModule(
       : 'read-only',
     legacyReference: 'Yor MVP admin prototype',
     permissions,
-    metrics: [metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Requires evidence before writes.', 'good')],
+    metrics: [],
     table: table(label, rows),
     gatedActions: isSandboxMode()
       ? []
@@ -768,8 +781,47 @@ function adminModules(): OperationalModule[] {
       gatedActions: []
     },
     {
+      id: 'contact-messages',
+      label: 'Contact Messages',
+      path: '/admin/contact-messages',
+      group: 'Content',
+      description: 'Review and manage contact form submissions from the public site.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/contact-messages.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [metric('Total Messages', '0'), metric('Unread', '0', undefined, 'warning')],
+      table: table('Contact Messages', []),
+      gatedActions: []
+    },
+    {
+      id: 'news-posts',
+      label: 'News & Posts',
+      path: '/admin/news-posts',
+      group: 'Content',
+      description: 'Manage news, announcements, memos, and promotions visible on the public site.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/news-posts.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [metric('Published Posts', '0'), metric('Drafts', '0')],
+      table: table('Posts', []),
+      gatedActions: []
+    },
+    {
+      id: 'change-password',
+      label: 'Change Password',
+      path: '/admin/change-password',
+      group: 'Settings',
+      description: 'Update administrator account passwords.',
+      status: 'read-only' as const,
+      legacyReference: 'adminpanel/change-password.php',
+      permissions: ADMIN_AND_SUPERADMIN_ROLES,
+      metrics: [],
+      table: table('Password Changes', []),
+      gatedActions: []
+    },
+    {
       id: 'activation-codes',
-      label: 'Activation Code Management',
+      label: 'Manage Codes',
       path: '/admin/activation-codes',
       group: 'Codes',
       description: isSandboxMode()
@@ -1202,32 +1254,37 @@ export function buildOpsOfficeSnapshot(
       ),
       metric('Free Slot Accounts', String(activeMembers.filter((member) => member.packageTier === 'Business' || member.packageTier === 'VIP').length)),
       metric('CD Accounts', String(activeMembers.filter((member) => member.cdBalance > 0).length)),
-      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: visibleModules,
     queues,
     auditEvents: activeAuditEvents,
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
-    notices: [
-      isSandboxMode()
-        ? 'Reports and value-changing actions are active in the current runtime for end-to-end office testing.'
-        : 'Reports are operationally wired and role-filtered; value-changing actions remain disabled until documented rule tests pass.',
-      'Hybrid data mirrors the legacy operational reference while Yor-specific package names and public compensation surfaces take priority.'
-    ]
+    notices: []
   };
 }
 
 export function buildMemberOfficeSnapshot(
   user: SessionUser,
-  profile: { referralCode?: string; sponsorCode?: string; packageTier?: string; accountStatus?: string } | null
+  profile: {
+    referralCode?: string;
+    sponsorCode?: string;
+    packageTier?: string;
+    accountStatus?: string;
+    username?: string;
+    fullName?: string;
+    payoutMethod?: string;
+  } | null
 ) {
   const member = currentMemberFor(user);
+  const pick = <T>(value: T | undefined, fallback: T) => (value !== undefined ? value : fallback);
   const mergedMember = {
     ...member,
-    referralCode: profile?.referralCode ?? member.referralCode,
-    sponsorCode: profile?.sponsorCode ?? member.sponsorCode,
-    packageTier: profile?.packageTier ?? member.packageTier,
-    accountStatus: profile?.accountStatus ?? member.accountStatus
+    referralCode: pick(profile?.referralCode, member.referralCode),
+    sponsorCode: pick(profile?.sponsorCode, member.sponsorCode),
+    packageTier: pick(profile?.packageTier, member.packageTier),
+    accountStatus: pick(profile?.accountStatus, member.accountStatus),
+    username: pick(profile?.username, member.username),
+    fullName: pick(profile?.fullName, member.fullName)
   };
 
   return {
@@ -1239,7 +1296,7 @@ export function buildMemberOfficeSnapshot(
       accountStatus: mergedMember.accountStatus,
       username: mergedMember.username,
       fullName: mergedMember.fullName,
-      payoutMethod: 'GCash'
+      payoutMethod: profile?.payoutMethod ?? 'GCash'
     },
     wallet: {
       availableBalance: money(mergedMember.walletAvailable),
@@ -1250,16 +1307,10 @@ export function buildMemberOfficeSnapshot(
       metric('Left Points', String(mergedMember.leftPoints)),
       metric('Right Points', String(mergedMember.rightPoints)),
       metric('Direct Referrals', String(mergedMember.directReferrals)),
-      metric('Workflow Mode', isSandboxMode() ? 'Operational MVP' : 'Review Mode', isSandboxMode() ? 'End-to-end workflow testing is active in the current runtime.' : 'Reports remain active while value-changing writes stay approval-controlled.', 'good')
     ],
     modules: memberModules(mergedMember).filter((module) => canSeeModule(user, module)),
     gatedActions: isSandboxMode() ? [] : branchRuntimeNotes,
-    alerts: [
-      'Wallet, pairing, referral, and encashment reports are visible for verification.',
-      isSandboxMode()
-        ? 'Registration, code, wallet, and approval flows are active in the current runtime for end-to-end office testing.'
-        : 'Requests that release, deduct, or create value remain in review mode while compensation evidence and tests pass.'
-    ]
+    alerts: []
   };
 }
 

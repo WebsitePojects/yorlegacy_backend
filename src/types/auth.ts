@@ -1,4 +1,5 @@
 export type AppRole = 'member' | 'admin' | 'cashier' | 'bod' | 'superadmin';
+export type MoneyMode = 'playground' | 'sandbox' | 'production';
 
 export type SessionUser = {
   id: string;
@@ -141,7 +142,7 @@ export type AdminMemberProfile = {
 };
 
 export type AdminMemberManagementCenter = {
-  moneyMode: 'playground' | 'sandbox';
+  moneyMode: MoneyMode;
   query: string;
   page: number;
   pageSize: number;
@@ -153,7 +154,7 @@ export type AdminMemberManagementCenter = {
 };
 
 export type ShadowAccountCenter = {
-  moneyMode: 'playground' | 'sandbox';
+  moneyMode: MoneyMode;
   owner: string;
   accounts: Array<{
     id: string;

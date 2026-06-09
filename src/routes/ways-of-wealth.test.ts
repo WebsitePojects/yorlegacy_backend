@@ -3,6 +3,22 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../app';
 import { resetSandboxState } from '../modules/sandbox/dev-sandbox-store.js';
 
+function buildCookieHeader(setCookie: string[] | string | undefined): string[] {
+  const values = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  return values.map((value) => value.split(';')[0]);
+}
+
+function getCookieValue(cookies: string[], name: string): string | null {
+  for (const cookie of cookies) {
+    const [key, ...rest] = cookie.split('=');
+    if (key === name) {
+      return rest.join('=');
+    }
+  }
+
+  return null;
+}
+
 function getUsernameFromEmail(email: string): string {
   const norm = email.toLowerCase().trim();
   if (norm === 'yoradmin@gmail.com') return 'yorsuperadmin';
@@ -12,7 +28,7 @@ function getUsernameFromEmail(email: string): string {
   if (norm === 'admin@yor.local') return 'yoradmin';
   if (norm === 'cashier@yor.local') return 'yorcashier';
   if (norm === 'bod@yor.local') return 'yorbod';
-  if (norm === 'member@yor.local') return 'YOR0001';
+  if (norm === 'member@yor.local') return 'yor01';
   return email.split('@')[0];
 }
 
@@ -20,11 +36,11 @@ async function loginAs(email: string, password: string) {
   const username = getUsernameFromEmail(email);
   const res = await request(app).post('/api/auth/login').send({ username, password });
   expect(res.status).toBe(200);
-  return res.headers['set-cookie'][0] as string;
+  return buildCookieHeader(res.headers['set-cookie']);
 }
 
-const MEMBER = () => loginAs('member@yor.local', 'YorMember123!');
-const ADMIN  = () => loginAs('admin@yor.local',  'YorAdmin123!');
+const MEMBER = () => loginAs('member@yor.local', '1');
+const ADMIN  = () => loginAs('admin@yor.local',  '1');
 const SUPER  = () => loginAs('yoradmin@gmail.com', '1');
 
 function containsMatch(arr: string[], pattern: RegExp) {
@@ -164,7 +180,7 @@ describe('Way 3 – Salesmatch Bonus', () => {
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.root.nodeId).toBe('YOR0001');
+    expect(res.body.root.nodeId).toBe('yor01');
     // Root must have left child (Alyssa, placed left) and right child (Marco, placed right)
     expect(res.body.nodes.length).toBeGreaterThan(1);
   });
@@ -353,17 +369,16 @@ describe('Way 5 – Get Yor Five Bonus', () => {
 describe('Way 6 – Lifestyle Rewards', () => {
   beforeEach(() => { resetSandboxState(); });
 
-  it('income simulation credits the approved 1% backend lifestyle rate while preserving public 3% messaging elsewhere', async () => {
+  it('income simulation credits lifestyle reward from product repurchase total', async () => {
     const cookie = await MEMBER();
     const res = await request(app)
       .get(`/api/member/income/${STREAMS.lifestyleRewards}`)
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    // Approved backend rule: PHP 30,000 qualifying repeat pool × 1% = PHP 300
     expect(res.body.simulatedGross).toBe(300);
     const trace: string[] = res.body.calculationTrace;
-    expect(containsMatch(trace, /30,000|repeat|lifestyle|1%|300/i)).toBe(true);
+    expect(containsMatch(trace, /30,000|repeat|lifestyle|300/i)).toBe(true);
   });
 
   it('wallet list contains a separate lifestyle wallet', async () => {
@@ -572,6 +587,7 @@ describe('Cross-stream – payout schedule, wallet, and encashment rules', () =>
     const res = await request(app)
       .post('/api/member/wallet/preview-encash')
       .set('Cookie', cookie)
+      .set('x-yor-csrf-token', getCookieValue(cookie, 'yor_csrf') ?? '')
       .send({ amount: 5000 });
 
     expect(res.status).toBe(200);
@@ -606,6 +622,7 @@ describe('Cross-stream – payout schedule, wallet, and encashment rules', () =>
     const encashRes = await request(app)
       .post('/api/member/wallet/encash')
       .set('Cookie', cookie)
+      .set('x-yor-csrf-token', getCookieValue(cookie, 'yor_csrf') ?? '')
       .send({ amount: 5000 });
 
     expect(encashRes.status).toBe(200);
@@ -625,6 +642,7 @@ describe('Cross-stream – payout schedule, wallet, and encashment rules', () =>
     await request(app)
       .post('/api/member/wallet/encash')
       .set('Cookie', memberCookie)
+      .set('x-yor-csrf-token', getCookieValue(memberCookie, 'yor_csrf') ?? '')
       .send({ amount: 3000 });
 
     const adminCookie = await ADMIN();
@@ -642,6 +660,7 @@ describe('Cross-stream – payout schedule, wallet, and encashment rules', () =>
     const res = await request(app)
       .post('/api/member/wallet/preview-encash')
       .set('Cookie', cookie)
+      .set('x-yor-csrf-token', getCookieValue(cookie, 'yor_csrf') ?? '')
       .send({ amount: 5000 });
 
     expect(res.status).toBe(200);

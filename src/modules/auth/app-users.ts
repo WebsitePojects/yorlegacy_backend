@@ -23,6 +23,9 @@ type MemberProfileRow = {
   sponsor_code: string | null;
   package_tier: string | null;
   account_status: string | null;
+  username: string | null;
+  full_name: string | null;
+  payout_method: string | null;
 };
 
 type AdminProfileRow = {
@@ -41,6 +44,9 @@ export type PersistedMemberProfile = {
   sponsorCode?: string;
   packageTier?: string;
   accountStatus?: string;
+  username?: string;
+  fullName?: string;
+  payoutMethod?: string;
 };
 
 export type PersistedAdminProfile = {
@@ -133,7 +139,7 @@ export async function findAppUserByUsername(
   const { data: memberProfile } = await supabase
     .from('member_profiles')
     .select('user_id')
-    .eq('username', username.trim())
+    .ilike('username', username.trim())
     .maybeSingle();
 
   let targetUserId = memberProfile?.user_id;
@@ -143,7 +149,7 @@ export async function findAppUserByUsername(
     const { data: legacyAccount } = await supabase
       .from('legacy_access_accounts')
       .select('display_name')
-      .eq('username', username.trim())
+      .ilike('username', username.trim())
       .maybeSingle();
 
     if (legacyAccount) {
@@ -198,7 +204,7 @@ export async function findMemberProfileByUserId(
 
   const { data, error } = await supabase
     .from('member_profiles')
-    .select('referral_code,sponsor_code,package_tier,account_status')
+    .select('referral_code,sponsor_code,package_tier,account_status,username,full_name,payout_method')
     .eq('user_id', userId)
     .maybeSingle<MemberProfileRow>();
 
@@ -208,9 +214,12 @@ export async function findMemberProfileByUserId(
 
   return {
     referralCode: data.referral_code ?? undefined,
-    sponsorCode: data.sponsor_code ?? undefined,
+    sponsorCode: data.sponsor_code ?? '',
     packageTier: data.package_tier ?? undefined,
-    accountStatus: data.account_status ?? undefined
+    accountStatus: data.account_status ?? undefined,
+    username: data.username ?? undefined,
+    fullName: data.full_name ?? undefined,
+    payoutMethod: data.payout_method ?? undefined
   };
 }
 

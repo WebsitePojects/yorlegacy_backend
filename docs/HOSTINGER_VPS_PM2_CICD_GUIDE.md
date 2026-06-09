@@ -117,11 +117,13 @@ cd /opt/yor-backend
 cat > /opt/yor-backend/.env <<EOF
 NODE_ENV=production
 PORT=8787
-YOR_RUNTIME_MODE=sandbox
-YOR_SANDBOX_DATA_FILE=/opt/yor-backend/dev-data/yor-sandbox.json
+YOR_RUNTIME_MODE=production
 FRONTEND_ORIGIN=https://yorinternational.net,https://www.yorinternational.net
 APP_SESSION_SECRET=$(openssl rand -hex 64)
 SESSION_TTL_HOURS=12
+SUPABASE_URL=your-supabase-url
+SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
+SUPABASE_SECRET_KEY=your-supabase-secret-key
 DEMO_MEMBER_EMAIL=member@yor.local
 DEMO_MEMBER_PASSWORD=YorMember123!
 DEMO_MEMBER_NAME=Yor Member
@@ -138,6 +140,13 @@ DEMO_SUPERADMIN_EMAIL=yoradmin@gmail.com
 DEMO_SUPERADMIN_PASSWORD=1
 DEMO_SUPERADMIN_NAME=Yor Super Admin
 EOF
+
+### Production Supabase target
+
+- Supabase project name: `Yorinternationalprod`
+- Provision the live project with the operator-provided database password before the backend cutover
+- Point `/opt/yor-backend/.env` at the new project URL and privileged server key before starting PM2
+- Keep `YOR_RUNTIME_MODE=production` only after the schema is applied to the live project and health checks pass
 
 chmod 600 /opt/yor-backend/.env
 

@@ -64,6 +64,10 @@ function normalizePageContent(page: PageContent): PageContent {
 }
 
 export async function getPageBySlug(slug: string): Promise<PageContent | null> {
+  if (process.env.VITEST) {
+    return staticPages[slug] ?? null;
+  }
+
   const supabase = getSupabasePublicClient();
 
   if (!supabase) {

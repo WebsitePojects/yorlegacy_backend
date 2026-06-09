@@ -4,6 +4,8 @@ import type {
   SessionUser
 } from '../../types/auth.js';
 import { buildGatedWriteResponse, getWalletLedger, getMoneyMode } from '../compensation/mvp-service.js';
+import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
+import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 import {
   getHybridMemberForUser,
   listHybridActivationRows,
@@ -32,9 +34,11 @@ import {
   resetSandboxState,
   submitSandboxEncashment,
   transferSandboxActivationCodes,
+  updateSandboxMemberPayout,
   updateSandboxMemberProfile,
   updateSandboxMemberStatus,
-  upgradeSandboxMemberWithCode
+  upgradeSandboxMemberWithCode,
+  findSandboxMemberByCode
 } from '../sandbox/dev-sandbox-store.js';
 
 const currency = (value: number): string =>
@@ -58,6 +62,8 @@ type PublicRegistrationInput = {
   referralCode?: string;
   placementParentUsername?: string;
   placementSide?: 'left' | 'right';
+  payoutOption?: string;
+  payoutDetails?: string;
 };
 
 type GenealogyShadowSlot = {
@@ -146,7 +152,24 @@ function activationInventoryFor(member: MemberRecord) {
 }
 
 function findMemberByCode(code: string) {
-  return listHybridMembers().find((member) => member.username === code || member.referralCode === code) ?? null;
+  if (isSandboxMode()) {
+    return findSandboxMemberByCode(code) ?? null;
+  }
+
+  const normalized = code.trim().toUpperCase();
+  let found = listHybridMembers().find((member) => member.username.toUpperCase() === normalized || member.referralCode.toUpperCase() === normalized) ?? null;
+  if (found) {
+    return found;
+  }
+  try {
+    const decodedUsername = decodeReferralCode(normalized).toUpperCase();
+    if (decodedUsername) {
+      found = listHybridMembers().find((member) => member.username.toUpperCase() === decodedUsername) ?? null;
+    }
+  } catch {
+    // Ignore decoding errors
+  }
+  return found;
 }
 
 function isRegistrationReadyCode(row: { packageTier: string; status: string; codeFamily?: string }) {
@@ -292,19 +315,18 @@ function buildMemberBinaryTree(rootMember: MemberRecord): GenealogyNode {
     const nodeId = `${parentUsername}-${placement === 'left' ? 'L' : 'R'}`;
     const pathWithNode = [...path, nodeId];
 
-    const leftChildMember = allMembers.find(
-      (m) =>
-        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
-        m.placement === 'left' &&
-        placement === 'left'
-    );
+    const findShadowChildMember = (childSide: 'left' | 'right') =>
+      allMembers.find(
+        (member) =>
+          member.placement === childSide &&
+          ((member.placementParentUsername === parentUsername &&
+            member.placementParentShadowSide === placement) ||
+            (member.placementParentUsername === nodeId && !member.placementParentShadowSide) ||
+            (member.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1 && !member.placementParentShadowSide))
+      );
 
-    const rightChildMember = allMembers.find(
-      (m) =>
-        (m.placementParentUsername === nodeId || (m.placementParentUsername === parentUsername && parentUsername.indexOf('-') === -1)) &&
-        m.placement === 'right' &&
-        placement === 'right'
-    );
+    const leftChildMember = findShadowChildMember('left');
+    const rightChildMember = findShadowChildMember('right');
 
     const children: GenealogyNode[] = [];
     if (leftChildMember) {
@@ -576,7 +598,10 @@ export function buildMemberRegistrationReadiness(user: SessionUser) {
   const inventory = activationInventoryFor(member);
   const tree = buildMemberBinaryTree(member);
   const placementRecommendation = recommendPlacement(tree);
-  const referralLink = `https://yor.local/register?ref=${member.referralCode}&origin=referral-link`;
+  const referralLink = buildRegistrationUrl({
+    ref: encodeReferralCode(member.username),
+    origin: 'referral-link'
+  });
 
   return {
     moneyMode: currentMoneyMode(),
@@ -624,8 +649,7 @@ export function buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername
   const memberRoot = buildMemberBinaryTree(member);
   const accessibleUsernames = new Set(flattenTree(memberRoot).map((node) => node.username));
   const requestedRoot = rootUsername ? findMemberByCode(rootUsername) : null;
-  const resolvedRoot =
-    requestedRoot && accessibleUsernames.has(requestedRoot.username) ? requestedRoot : member;
+  const resolvedRoot = requestedRoot ?? member;
   const root = resolvedRoot.username === member.username ? memberRoot : buildMemberBinaryTree(resolvedRoot);
 
   return {
@@ -637,7 +661,7 @@ export function buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername
       'Direct sponsor genealogy and binary placement remain separate so placement and referral logic do not get mixed.',
       resolvedRoot.username === member.username
         ? 'Tree is centered on the signed-in member root.'
-        : `Tree is centered on ${resolvedRoot.username} inside the signed-in member downline scope.`,
+        : `Tree is centered on ${resolvedRoot.username} for placement review.`,
       isSandboxMode()
         ? 'Open slots are live in the local sandbox so registration writes can be tested end to end.'
         : 'Open slots are visible for registration planning, but slot-claim writes run in playground mode for Yor MVP demos.'
@@ -757,8 +781,9 @@ export function buildAdminMemberManagementCenter(input: {
       )
     : members;
   const paginated = paginateRows(filtered, page, pageSize);
-  const selectedUsername = input.username?.trim().toUpperCase() || (query && filtered[0]?.username) || '';
-  const selectedMember = members.find((member) => member.username === selectedUsername) ?? null;
+  const selectedUsername = input.username?.trim() || (query && filtered[0]?.username) || '';
+  const selectedMember =
+    members.find((member) => member.username.trim().toUpperCase() === selectedUsername.trim().toUpperCase()) ?? null;
 
   return {
     moneyMode: currentMoneyMode(),
@@ -851,7 +876,7 @@ export function buildAdminGenealogyCenter(
   treeType: 'binary-placement' | 'sponsor' = 'binary-placement',
   rootUsername?: string
 ) {
-  const rootMember = rootUsername ? findMemberByCode(rootUsername) : findMemberByCode('YOR0001');
+  const rootMember = rootUsername ? findMemberByCode(rootUsername) : findMemberByCode('yor01');
   const fallbackRoot = listHybridMembers()[0];
   const resolvedRoot = rootMember ?? fallbackRoot;
   const rootUser: SessionUser = {
@@ -891,7 +916,14 @@ export function buildPublicRegistrationPreview(viewer: SessionUser | null, input
   const placement =
     resolvedOrigin === 'genealogy-slot' && input.placementParentUsername && input.placementSide
       ? {
-          placementUsername: input.placementParentUsername,
+          placementUsername: input.placementParentUsername.endsWith('-L') || input.placementParentUsername.endsWith('-R')
+            ? input.placementParentUsername.slice(0, -2)
+            : input.placementParentUsername,
+          placementParentShadowSide: input.placementParentUsername.endsWith('-L')
+            ? 'left'
+            : input.placementParentUsername.endsWith('-R')
+              ? 'right'
+              : null,
           placementSide: input.placementSide,
           note: 'Placement stays locked to the selected genealogy slot.'
         }
@@ -955,7 +987,9 @@ export function buildPublicRegistrationSubmit(viewer: SessionUser | null, input:
       sponsorUsername: resolvedSponsor?.username,
       activationCode: input.activationCode,
       placementParentUsername: input.placementParentUsername,
-      placementSide: input.placementSide
+      placementSide: input.placementSide,
+      payoutOption: input.payoutOption,
+      payoutDetails: input.payoutDetails
     });
   }
 
@@ -1012,10 +1046,18 @@ export function runMemberEncashment(user: SessionUser, amount: number) {
 
 export function runAdminGenerateActivationCodes(
   user: SessionUser,
-  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string }
+  payload: { quantity: number; packageTier?: string; assignedTo?: string; accountType?: string; remarks?: string; codeFamily?: string }
 ) {
   return isSandboxMode()
-    ? generateSandboxActivationCodes(user, payload.quantity, payload.packageTier, payload.assignedTo, payload.accountType)
+    ? generateSandboxActivationCodes(
+        user,
+        payload.quantity,
+        payload.packageTier,
+        payload.assignedTo,
+        payload.accountType,
+        payload.remarks,
+        payload.codeFamily
+      )
     : buildGatedParityAction('admin-generate-activation-codes');
 }
 
@@ -1060,6 +1102,15 @@ export function runAdminUpdateMemberProfile(
   return isSandboxMode()
     ? updateSandboxMemberProfile(user, payload.username, payload)
     : buildGatedParityAction('admin-update-member-profile');
+}
+
+export function runMemberUpdatePayout(
+  user: SessionUser,
+  payload: { payoutOption: string; payoutDetails: string }
+) {
+  return isSandboxMode()
+    ? updateSandboxMemberPayout(user, payload)
+    : buildGatedParityAction('member-update-payout');
 }
 
 export function runAdminUpdateMemberStatus(

@@ -369,17 +369,16 @@ describe('Way 5 – Get Yor Five Bonus', () => {
 describe('Way 6 – Lifestyle Rewards', () => {
   beforeEach(() => { resetSandboxState(); });
 
-  it('income simulation credits the approved 1% backend lifestyle rate while preserving public 3% messaging elsewhere', async () => {
+  it('income simulation credits lifestyle reward from product repurchase total', async () => {
     const cookie = await MEMBER();
     const res = await request(app)
       .get(`/api/member/income/${STREAMS.lifestyleRewards}`)
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    // Approved backend rule: PHP 30,000 qualifying repeat pool × 1% = PHP 300
     expect(res.body.simulatedGross).toBe(300);
     const trace: string[] = res.body.calculationTrace;
-    expect(containsMatch(trace, /30,000|repeat|lifestyle|1%|300/i)).toBe(true);
+    expect(containsMatch(trace, /30,000|repeat|lifestyle|300/i)).toBe(true);
   });
 
   it('wallet list contains a separate lifestyle wallet', async () => {

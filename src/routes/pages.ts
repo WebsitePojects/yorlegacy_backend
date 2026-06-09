@@ -54,7 +54,9 @@ pagesRouter.post('/api/registration/preview', async (request, response) => {
       request.body?.placementSide ??
       request.body?.placementContext?.side,
     placementToken: request.body?.placementToken,
-    placementReservationId: request.body?.placementReservationId
+    placementReservationId: request.body?.placementReservationId,
+    payoutOption: typeof request.body?.payoutOption === 'string' ? request.body.payoutOption : undefined,
+    payoutDetails: typeof request.body?.payoutDetails === 'string' ? request.body.payoutDetails : undefined
   };
 
   if (isProductionMode()) {
@@ -89,7 +91,9 @@ pagesRouter.post('/api/registration/submit', async (request, response) => {
       request.body?.placementSide ??
       request.body?.placementContext?.side,
     placementToken: request.body?.placementToken,
-    placementReservationId: request.body?.placementReservationId
+    placementReservationId: request.body?.placementReservationId,
+    payoutOption: typeof request.body?.payoutOption === 'string' ? request.body.payoutOption : undefined,
+    payoutDetails: typeof request.body?.payoutDetails === 'string' ? request.body.payoutDetails : undefined
   };
 
   if (isProductionMode()) {

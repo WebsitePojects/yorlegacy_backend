@@ -8,6 +8,7 @@ export type PackagePolicy = {
   directSellingPrice: number;
   directReferralBonus: number;
   salesmatchValue: number;
+  salesmatchBinaryPoints: number;
   weeklySalesmatchCap: number;
   monthlySalesmatchCap: number;
   binaryCyclePercent?: number;

@@ -22,7 +22,16 @@ describe('GET /health', () => {
       'dashboard',
       'member-management',
       'encashment-reports',
+      'account-shadow-management',
       'account-genealogy',
+      'finance-accounting',
+      'cd-accounts',
+      'voucher-management',
+      'rankings',
+      'get-five-package-claims',
+      'contact-messages',
+      'news-posts',
+      'change-password',
       'activation-codes'
     ]);
     expect(response.body.roleSurfaces.bod).toEqual(response.body.roleSurfaces.admin);

@@ -63,6 +63,8 @@ Production note:
 - `YOR_RUNTIME_MODE=sandbox` keeps the mutable branch-local runtime active.
 - `YOR_RUNTIME_MODE=production` switches registration and activation-code writes to the Supabase-backed encoding service.
 - Do not flip to `production` until the live database has the latest schema and the backend has a real privileged Supabase key.
+- The current production cutover target in this workspace is the Supabase project named `Yorinternationalprod`.
+- Use the operator-provided database password during the Supabase provisioning step, then wire the resulting project URL and server key into `.env`.
 
 ## Supabase Setup
 

@@ -166,7 +166,8 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'b
     packageTier: req.body?.packageTier,
     assignedTo: req.body?.assignedTo,
     accountType: req.body?.accountType,
-    remarks
+    remarks,
+    codeFamily: req.body?.codeFamily
   }));
 });
 

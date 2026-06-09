@@ -31,6 +31,9 @@ export function getMoneyMode() {
   return moneyMode;
 }
 
+// 1 PV = PHP 250 SMB. Binary Points credited from a salesmatch event = salesmatch value / PV_PESO_RATE.
+export const PV_PESO_RATE = 250;
+
 const sourceReferences = [
   'BUSINESSRULE.md',
   'docs/YOR International Compensation Plan.pdf',
@@ -48,6 +51,7 @@ export const packagePolicies: PackagePolicy[] = [
     directSellingPrice: 350,
     directReferralBonus: 200,
     salesmatchValue: 250,
+    salesmatchBinaryPoints: 250 / PV_PESO_RATE,
     weeklySalesmatchCap: 5000,
     monthlySalesmatchCap: 20000
   },
@@ -59,6 +63,7 @@ export const packagePolicies: PackagePolicy[] = [
     directSellingPrice: 320,
     directReferralBonus: 1000,
     salesmatchValue: 500,
+    salesmatchBinaryPoints: 500 / PV_PESO_RATE,
     weeklySalesmatchCap: 20000,
     monthlySalesmatchCap: 80000,
     binaryCyclePercent: 2,
@@ -74,6 +79,7 @@ export const packagePolicies: PackagePolicy[] = [
     directSellingPrice: 300,
     directReferralBonus: 5000,
     salesmatchValue: 2500,
+    salesmatchBinaryPoints: 2500 / PV_PESO_RATE,
     weeklySalesmatchCap: 60000,
     monthlySalesmatchCap: 240000,
     binaryCyclePercent: 3,
@@ -89,6 +95,7 @@ export const packagePolicies: PackagePolicy[] = [
     directSellingPrice: 280,
     directReferralBonus: 7000,
     salesmatchValue: 5000,
+    salesmatchBinaryPoints: 5000 / PV_PESO_RATE,
     weeklySalesmatchCap: 120000,
     monthlySalesmatchCap: 480000,
     binaryCyclePercent: 4,
@@ -104,6 +111,7 @@ export const packagePolicies: PackagePolicy[] = [
     directSellingPrice: 250,
     directReferralBonus: 15000,
     salesmatchValue: 15000,
+    salesmatchBinaryPoints: 15000 / PV_PESO_RATE,
     weeklySalesmatchCap: 300000,
     monthlySalesmatchCap: 1200000,
     binaryCyclePercent: 5,
@@ -133,10 +141,10 @@ export const earningStreams: EarningStreamPolicy[] = [
   {
     id: 'binary-cycle',
     label: 'Binary Cycle Bonus',
-    source: 'First direct left/right recruit pairing under the earner’s own salesmatch event',
-    basis: 'VIP 5% launch scope on the earner’s first direct left/right pair salesmatch only; shadow and spillover placements are excluded',
+    source: 'Binary placement salesmatch movement on the earner account',
+    basis: 'Classic 2%, Standard 3%, Business 4%, and VIP 5% applied to the earner salesmatch basis; shadow accounts remain excluded while spillover may still qualify through placement truth',
     writeStatus: moneyMode,
-    unresolved: ['Company still needs final launch confirmation on whether Classic, Standard, and Business participate or VIP-only remains active at launch.']
+    unresolved: ['Production deployment still requires append-only ledgers, deterministic process keys, duplicate-prevention proof, and final live database rollout evidence.']
   },
   {
     id: 'get-five',
@@ -150,9 +158,9 @@ export const earningStreams: EarningStreamPolicy[] = [
     id: 'lifestyle-rewards',
     label: 'Lifestyle Rewards',
     source: 'Repeat purchase product movement',
-    basis: 'Repeat-purchase stream with separate lifestyle wallet, package caps, and approved internal payable-credit handling',
+    basis: 'Repeat-purchase stream based on product repurchase price. Perfume PHP 500 per purchase; Refill PHP 150 per purchase via separate YOR REFILL code. Credited to the separate lifestyle wallet with package daily/monthly caps.',
     writeStatus: moneyMode,
-    unresolved: ['Internal finance signoff for the approved display-rate vs payable-rate policy is still pending.']
+    unresolved: ['Production posting cadence and cadence confirmation still pending.']
   },
   {
     id: 'unilevel',
@@ -207,11 +215,12 @@ const simulations: Record<string, IncomeSimulationResult> = {
     'Left points: 24,000',
     'Right points: 18,000',
     'Weak side matched; 6,000 left points carry forward',
+    'Salesmatch event: PHP 15,000 = 60 BP credited (1 PV = PHP 250 SMB; 15,000 ÷ 250)',
     'Weekly cap checked before simulated ledger posting'
   ]),
   'binary-cycle': simulation('binary-cycle', 750, 'Cycle percentage preview', [
-    'Salesmatch event basis: PHP 15,000',
-    'Launch scope: first direct left/right pair only',
+    'Salesmatch event basis: PHP 15,000 = 60 BP (1 PV = PHP 250 SMB)',
+    'Placement-based binary cycle follows the earner salesmatch event',
     'Earner package: VIP',
     'VIP binary cycle percent: 5%'
   ]),
@@ -221,9 +230,10 @@ const simulations: Record<string, IncomeSimulationResult> = {
     'Process key prevents reusing the same five recruits'
   ]),
   'lifestyle-rewards': simulation('lifestyle-rewards', 300, 'Repeat-purchase lifestyle preview', [
-    'Repeat purchase pool: PHP 30,000',
-    'Separate lifestyle wallet threshold remains PHP 1,000',
-    'Posted lifestyle credit follows the approved internal payable-credit rule'
+    'Repeat purchase product total: PHP 30,000',
+    'Perfume PHP 500 per purchase; Refill PHP 150 per purchase (YOR REFILL code)',
+    'Lifestyle reward credited: PHP 300',
+    'Separate lifestyle wallet threshold remains PHP 1,000'
   ]),
   unilevel: simulation('unilevel', 4200, 'Ten-level unilevel preview', [
     'Sponsor genealogy is separate from binary placement',

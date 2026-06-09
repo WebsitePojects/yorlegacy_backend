@@ -45,7 +45,9 @@ function mapMemberRow(row: any): ProductionMemberProfile {
     middleName: row.middle_name ?? '',
     contactNumber: row.contact_number ?? '',
     normalizedFullName: row.normalized_full_name ?? '',
-    createdAt: row.created_at ?? isoNow()
+    createdAt: row.created_at ?? isoNow(),
+    payoutMethod: row.payout_method ?? undefined,
+    payoutDetails: row.payout_details ?? undefined
   };
 }
 
@@ -55,6 +57,7 @@ function mapNetworkRow(row: any): ProductionNetworkAccount {
     sponsorUserId: row.sponsor_user_id,
     directReferrerUserId: row.direct_referrer_user_id,
     placementParentUserId: row.placement_parent_user_id,
+    placementParentShadowSide: row.placement_parent_shadow_side,
     placementSide: row.placement_side,
     currentAccountTypeCode: row.current_account_type_code ?? 0,
     currentAccountType: row.current_account_type ?? 'PD',
@@ -132,6 +135,7 @@ function mapReservationRow(row: any): ProductionPlacementReservation {
     referralCode: row.referral_code,
     placementParentUserId: row.placement_parent_user_id,
     placementParentUsername: row.placement_parent_username,
+    placementParentShadowSide: row.placement_parent_shadow_side,
     placementSide: row.placement_side,
     shareToken: row.share_token,
     status: row.status,
@@ -340,7 +344,9 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           middle_name: profile.middleName,
           contact_number: profile.contactNumber,
           normalized_full_name: profile.normalizedFullName,
-          created_at: profile.createdAt
+          created_at: profile.createdAt,
+          payout_method: profile.payoutMethod ?? null,
+          payout_details: profile.payoutDetails ?? null
         },
         { onConflict: 'user_id' }
       );
@@ -352,6 +358,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           sponsor_user_id: account.sponsorUserId,
           direct_referrer_user_id: account.directReferrerUserId,
           placement_parent_user_id: account.placementParentUserId,
+          placement_parent_shadow_side: account.placementParentShadowSide ?? null,
           placement_side: account.placementSide,
           current_account_type_code: account.currentAccountTypeCode,
           current_account_type: account.currentAccountType,
@@ -369,14 +376,19 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       const { data } = await client.from('network_accounts').select('*').eq('user_id', userId).maybeSingle();
       return data ? mapNetworkRow(data) : null;
     },
-    findPlacementChild: async (parentUserId, side) => {
-      const { data } = await client
+    findPlacementChild: async (parentUserId, side, shadowSide) => {
+      let query = client
         .from('network_accounts')
         .select('*')
         .eq('placement_parent_user_id', parentUserId)
         .eq('placement_side', side)
-        .eq('registration_status', 'active')
-        .maybeSingle();
+        .eq('registration_status', 'active');
+
+      if (shadowSide) {
+        query = query.eq('placement_parent_shadow_side', shadowSide);
+      }
+
+      const { data } = await query.maybeSingle();
       return data ? mapNetworkRow(data) : null;
     },
     saveSalesmatchBalance: async (balance) => {
@@ -432,6 +444,7 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           referral_code: reservation.referralCode,
           placement_parent_user_id: reservation.placementParentUserId,
           placement_parent_username: reservation.placementParentUsername,
+          placement_parent_shadow_side: reservation.placementParentShadowSide ?? null,
           placement_side: reservation.placementSide,
           share_token: reservation.shareToken,
           status: reservation.status,

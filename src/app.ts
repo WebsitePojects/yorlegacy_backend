@@ -22,3 +22,8 @@ app.use(authRouter);
 app.use(memberRouter);
 app.use(adminRouter);
 app.use(pagesRouter);
+
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('EXPRESS ERROR:', err);
+  res.status(500).json({ error: err.message, stack: err.stack });
+});

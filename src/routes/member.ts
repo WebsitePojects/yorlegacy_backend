@@ -276,9 +276,22 @@ memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'c
   res.status(200).json(runMemberEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
 });
 
-memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const payoutOption = typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '';
   const payoutDetails = typeof req.body?.payoutDetails === 'string' ? req.body.payoutDetails : '';
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.updateMemberPayoutSettings(req.authUser!, { payoutOption, payoutDetails }));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update payout settings.' });
+    }
+    return;
+  }
   res.status(200).json(runMemberUpdatePayout(req.authUser!, { payoutOption, payoutDetails }));
 });
 

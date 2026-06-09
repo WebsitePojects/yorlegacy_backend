@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
-import { packagePolicies } from '../compensation/mvp-service.js';
+import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { MoneyMode, SessionUser } from '../../types/auth.js';
+import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
+import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
 export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR VISION';
@@ -18,6 +20,7 @@ export type PackageConfig = {
   accountType: AccountType;
   directReferralBonus: number;
   salesmatchValue: number;
+  salesmatchBinaryPoints: number;
   binaryCyclePercent: number;
   getFiveAmount: number;
   binaryPoints: number;
@@ -33,9 +36,10 @@ const PACKAGE_CONFIGS = new Map<string, PackageConfig>(
         accountType: packageTier === 'Business' || packageTier === 'VIP' ? 'FS' : 'PD',
         directReferralBonus: policy.directReferralBonus,
         salesmatchValue: policy.salesmatchValue,
+        salesmatchBinaryPoints: policy.salesmatchValue / PV_PESO_RATE,
         binaryCyclePercent: policy.binaryCyclePercent ?? 0,
         getFiveAmount: packageTier === 'Basic' ? 0 : policy.price,
-        binaryPoints: policy.pv * 100
+        binaryPoints: policy.pv
       }
     ];
   })
@@ -66,6 +70,8 @@ export type ProductionMemberProfile = {
   contactNumber: string;
   normalizedFullName: string;
   createdAt: string;
+  payoutMethod?: string;
+  payoutDetails?: string;
 };
 
 export type ProductionNetworkAccount = {
@@ -73,6 +79,7 @@ export type ProductionNetworkAccount = {
   sponsorUserId: string | null;
   directReferrerUserId: string | null;
   placementParentUserId: string | null;
+  placementParentShadowSide?: PlacementSide | null;
   placementSide: PlacementSide | null;
   currentAccountTypeCode: number;
   currentAccountType: AccountType;
@@ -127,6 +134,7 @@ export type ProductionPlacementReservation = {
   referralCode: string;
   placementParentUserId: string;
   placementParentUsername: string;
+  placementParentShadowSide?: PlacementSide | null;
   placementSide: PlacementSide;
   shareToken: string;
   status: 'active' | 'consumed' | 'expired';
@@ -167,6 +175,7 @@ export type ProductionCompensationQueueItem = {
   status: 'pending' | 'processed';
   payload: {
     placementParentUserId: string;
+    placementParentShadowSide?: PlacementSide | null;
     placementSide: PlacementSide;
     salesmatchValue: number;
     binaryPoints: number;
@@ -192,10 +201,13 @@ export type ProductionRegistrationInput = {
   placementSide?: PlacementSide;
   placementToken?: string;
   placementReservationId?: string;
+  payoutOption?: string;
+  payoutDetails?: string;
 };
 
 export type ProductionPlacementContext = {
   placementUsername: string;
+  placementParentShadowSide?: PlacementSide | null;
   placementSide: PlacementSide;
   note: string;
 };
@@ -277,6 +289,56 @@ export type ProductionRegistrationSubmitResponse = {
   };
 };
 
+type ProductionGenealogyNode = {
+  nodeId: string;
+  username: string;
+  fullName: string;
+  referralCode: string;
+  packageTier: string;
+  placement: 'root' | 'left' | 'right';
+  status: string;
+  depth: number;
+  tracePath: string;
+  binaryPoints: number;
+  directReferrals: number;
+  leftPoints: number;
+  rightPoints: number;
+  openSlots: {
+    left: boolean;
+    right: boolean;
+  };
+  shadowSlots: {
+    left: {
+      id: string;
+      owner: string;
+      placement: 'left';
+      state: 'reserved_shadow' | 'activated_shadow';
+      label: string;
+      activationStatus: 'inactive' | 'activated';
+      registrationEnabled: boolean;
+      walletEnabled: boolean;
+      unilevelEnabled: boolean;
+      binaryCycleEnabled: boolean;
+      note: string;
+    };
+    right: {
+      id: string;
+      owner: string;
+      placement: 'right';
+      state: 'reserved_shadow' | 'activated_shadow';
+      label: string;
+      activationStatus: 'inactive' | 'activated';
+      registrationEnabled: boolean;
+      walletEnabled: boolean;
+      unilevelEnabled: boolean;
+      binaryCycleEnabled: boolean;
+      note: string;
+    };
+  };
+  accountStateLabel: 'PD' | 'FS' | 'CD - Paid';
+  children: ProductionGenealogyNode[];
+};
+
 export type ProductionEncodingRepository = {
   getMoneyMode(): MoneyMode;
   now(): string;
@@ -304,7 +366,7 @@ export type ProductionEncodingRepository = {
   saveMemberProfile(profile: ProductionMemberProfile): Promise<void>;
   saveNetworkAccount(account: ProductionNetworkAccount): Promise<void>;
   findNetworkAccountByUserId(userId: string): Promise<ProductionNetworkAccount | null>;
-  findPlacementChild(parentUserId: string, side: PlacementSide): Promise<ProductionNetworkAccount | null>;
+  findPlacementChild(parentUserId: string, side: PlacementSide, shadowSide?: PlacementSide | null): Promise<ProductionNetworkAccount | null>;
   saveSalesmatchBalance(balance: ProductionSalesmatchBalance): Promise<void>;
   getSalesmatchBalance(userId: string): Promise<ProductionSalesmatchBalance | null>;
   enqueueCompensation(item: ProductionCompensationQueueItem): Promise<void>;
@@ -391,6 +453,21 @@ function splitFullName(fullName: string): { firstName: string; lastName: string;
   return { firstName, lastName, middleName };
 }
 
+function parsePlacementParentAddress(username: string): {
+  memberUsername: string;
+  shadowSide: PlacementSide | null;
+  label: string;
+} {
+  const label = username.trim();
+  if (label.endsWith('-L')) {
+    return { memberUsername: label.slice(0, -2), shadowSide: 'left', label };
+  }
+  if (label.endsWith('-R')) {
+    return { memberUsername: label.slice(0, -2), shadowSide: 'right', label };
+  }
+  return { memberUsername: label, shadowSide: null, label };
+}
+
 function buildProcessId(scope: string, ...parts: string[]) {
   return [scope, ...parts].join(':');
 }
@@ -401,6 +478,195 @@ function randomToken(): string {
 
 export class ProductionEncodingService {
   constructor(private readonly repo: ProductionEncodingRepository) {}
+
+  async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string) {
+    const signedInMember = await this.requireMemberByUserId(user.id);
+    const members = await this.repo.listMembers();
+    const networks = await Promise.all(members.map((member) => this.repo.findNetworkAccountByUserId(member.userId)));
+    const membersByUserId = new Map(members.map((member) => [member.userId, member]));
+    const networksByUserId = new Map(
+      networks.filter((network): network is ProductionNetworkAccount => Boolean(network)).map((network) => [network.userId, network])
+    );
+    const membersByUsername = new Map(members.map((member) => [member.username, member]));
+    const directReferralCounts = new Map<string, number>();
+
+    for (const member of members) {
+      if (!member.sponsorCode) {
+        continue;
+      }
+      const sponsor = members.find((candidate) => candidate.referralCode === member.sponsorCode);
+      if (!sponsor) {
+        continue;
+      }
+      directReferralCounts.set(sponsor.userId, (directReferralCounts.get(sponsor.userId) ?? 0) + 1);
+    }
+
+    const flattenTree = (root: ProductionGenealogyNode) => {
+      const nodes: Array<Omit<ProductionGenealogyNode, 'children'> & { parentNodeId: string | null; level: number }> = [];
+
+      const walk = (node: ProductionGenealogyNode, parentNodeId: string | null, level: number) => {
+        const { children, ...rest } = node;
+        nodes.push({
+          ...rest,
+          parentNodeId,
+          level
+        });
+
+        for (const child of children) {
+          walk(child, node.nodeId, level + 1);
+        }
+      };
+
+      walk(root, null, 0);
+      return nodes;
+    };
+
+    const toShadowSlot = <TPlacement extends PlacementSide>(owner: ProductionMemberProfile, placement: TPlacement) => ({
+      id: `${owner.username}-${placement.toUpperCase()}-SHADOW`,
+      owner: owner.username,
+      placement,
+      state: 'reserved_shadow' as const,
+      label: `${owner.username} ${placement === 'left' ? 'Left' : 'Right'} Shadow`,
+      activationStatus: 'inactive' as const,
+      registrationEnabled: true,
+      walletEnabled: false,
+      unilevelEnabled: false,
+      binaryCycleEnabled: false,
+      note: `Reserved ${placement} shadow support under ${owner.username}.`
+    });
+
+    const toAccountStateLabel = (network: ProductionNetworkAccount | null): 'PD' | 'FS' | 'CD - Paid' => {
+      if (!network) {
+        return 'PD';
+      }
+      if (network.currentAccountType === 'FS') {
+        return 'FS';
+      }
+      return 'PD';
+    };
+
+    const buildTreeNode = (
+      member: ProductionMemberProfile,
+      placement: 'root' | 'left' | 'right',
+      depth: number,
+      path: string[]
+    ): ProductionGenealogyNode => {
+      const network = networksByUserId.get(member.userId) ?? null;
+      const tracePath = [...path, member.username];
+
+      return {
+        nodeId: member.username,
+        username: member.username,
+        fullName: member.fullName,
+        referralCode: member.referralCode,
+        packageTier: member.packageTier,
+        placement,
+        status: member.accountStatus,
+        depth,
+        tracePath: tracePath.join(' > '),
+        binaryPoints: Math.min(network?.leftPoints ?? 0, network?.rightPoints ?? 0),
+        directReferrals: directReferralCounts.get(member.userId) ?? 0,
+        leftPoints: network?.leftPoints ?? 0,
+        rightPoints: network?.rightPoints ?? 0,
+        openSlots: {
+          left: false,
+          right: false
+        },
+        shadowSlots: {
+          left: toShadowSlot(member, 'left'),
+          right: toShadowSlot(member, 'right')
+        },
+        accountStateLabel: toAccountStateLabel(network),
+        children: [
+          buildShadowTreeNode(member, 'left', depth + 1, tracePath),
+          buildShadowTreeNode(member, 'right', depth + 1, tracePath)
+        ]
+      };
+    };
+
+    const findShadowChildNetwork = (
+      parentUserId: string,
+      shadowSide: PlacementSide,
+      childSide: PlacementSide
+    ) =>
+      networks.find(
+        (candidate) =>
+          candidate?.placementParentUserId === parentUserId &&
+          candidate.placementSide === childSide &&
+          candidate.registrationStatus === 'active' &&
+          (candidate.placementParentShadowSide === shadowSide ||
+            (!candidate.placementParentShadowSide && candidate.placementSide === shadowSide))
+      ) ?? null;
+
+    const buildShadowTreeNode = (
+      owner: ProductionMemberProfile,
+      placement: PlacementSide,
+      depth: number,
+      path: string[]
+    ): ProductionGenealogyNode => {
+      const nodeId = `${owner.username}-${placement === 'left' ? 'L' : 'R'}`;
+      const tracePath = [...path, nodeId];
+      const leftNetwork = findShadowChildNetwork(owner.userId, placement, 'left');
+      const rightNetwork = findShadowChildNetwork(owner.userId, placement, 'right');
+      const leftMember = leftNetwork ? membersByUserId.get(leftNetwork.userId) ?? null : null;
+      const rightMember = rightNetwork ? membersByUserId.get(rightNetwork.userId) ?? null : null;
+      const children: ProductionGenealogyNode[] = [];
+
+      if (leftMember) {
+        children.push(buildTreeNode(leftMember, 'left', depth + 1, tracePath));
+      }
+
+      if (rightMember) {
+        children.push(buildTreeNode(rightMember, 'right', depth + 1, tracePath));
+      }
+
+      return {
+        nodeId,
+        username: nodeId,
+        fullName: 'Binary Function Only',
+        referralCode: '',
+        packageTier: 'Binary Function Only',
+        placement,
+        status: 'shadow',
+        depth,
+        tracePath: tracePath.join(' > '),
+        binaryPoints: 0,
+        directReferrals: 0,
+        leftPoints: 0,
+        rightPoints: 0,
+        openSlots: {
+          left: !leftMember,
+          right: !rightMember
+        },
+        shadowSlots: {
+          left: null as any,
+          right: null as any
+        },
+        accountStateLabel: 'PD',
+        children
+      };
+    };
+
+    const memberRoot = buildTreeNode(signedInMember, 'root', 0, []);
+    const requestedRoot = rootUsername ? membersByUsername.get(rootUsername) ?? null : null;
+    const resolvedRoot = requestedRoot ?? signedInMember;
+    const root =
+      resolvedRoot.username === signedInMember.username ? memberRoot : buildTreeNode(resolvedRoot, 'root', 0, []);
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      treeType: 'binary-placement',
+      root,
+      nodes: flattenTree(root),
+      notes: [
+        'Direct sponsor genealogy and binary placement remain separate so placement and referral logic do not get mixed.',
+        resolvedRoot.username === signedInMember.username
+          ? 'Tree is centered on the signed-in member root.'
+          : `Tree is centered on ${resolvedRoot.username} for placement review.`,
+        'Open slots are generated from the live production-backed placement tree.'
+      ]
+    };
+  }
 
   async buildMemberActivationCodeCenter(user: SessionUser) {
     const member = await this.requireMemberByUserId(user.id);
@@ -563,10 +829,12 @@ export class ProductionEncodingService {
             placementSide: activeReservation.placementSide,
             shareToken: activeReservation.shareToken,
             expiresAt: activeReservation.expiresAt,
-            shareLink: this.buildShareLink(member.referralCode, activeReservation.shareToken)
+            shareLink: this.buildShareLink(encodeReferralCode(member.username), activeReservation.shareToken)
           }
         : null,
-      referralLink: activeReservation ? this.buildShareLink(member.referralCode, activeReservation.shareToken) : '',
+      referralLink: activeReservation
+        ? this.buildShareLink(encodeReferralCode(member.username), activeReservation.shareToken)
+        : '',
       availableCodes: codes.map((code) => mapCodeRow(code, member.username)),
       checklist: [
         'Choose the final placement slot before sharing the referral link.',
@@ -581,14 +849,15 @@ export class ProductionEncodingService {
     input: { placementParentUsername: string; placementSide: PlacementSide; expiresInHours?: number }
   ) {
     const sponsor = await this.requireMemberByUserId(user.id);
-    const placementParent = await this.requireMemberByUsername(input.placementParentUsername);
+    const placementAddress = parsePlacementParentAddress(input.placementParentUsername);
+    const placementParent = await this.requireMemberByUsername(placementAddress.memberUsername);
     const parentNetwork = await this.repo.findNetworkAccountByUserId(placementParent.userId);
     if (!parentNetwork || parentNetwork.registrationStatus !== 'active') {
       throw new Error('Placement parent is not available.');
     }
-    const occupied = await this.repo.findPlacementChild(placementParent.userId, input.placementSide);
+    const occupied = await this.repo.findPlacementChild(placementParent.userId, input.placementSide, placementAddress.shadowSide);
     if (occupied) {
-      throw new Error(`Placement side ${input.placementSide.toUpperCase()} is already occupied under ${placementParent.username}.`);
+      throw new Error(`Placement side ${input.placementSide.toUpperCase()} is already occupied under ${placementAddress.label}.`);
     }
 
     const reservation: ProductionPlacementReservation = {
@@ -596,7 +865,8 @@ export class ProductionEncodingService {
       sponsorUserId: sponsor.userId,
       referralCode: sponsor.referralCode,
       placementParentUserId: placementParent.userId,
-      placementParentUsername: placementParent.username,
+      placementParentUsername: placementAddress.label,
+      placementParentShadowSide: placementAddress.shadowSide,
       placementSide: input.placementSide,
       shareToken: randomToken(),
       status: 'active',
@@ -615,8 +885,26 @@ export class ProductionEncodingService {
         placementSide: reservation.placementSide,
         expiresAt: reservation.expiresAt,
         shareToken: reservation.shareToken,
-        shareLink: this.buildShareLink(sponsor.referralCode, reservation.shareToken)
+        shareLink: this.buildShareLink(encodeReferralCode(sponsor.username), reservation.shareToken)
       }
+    };
+  }
+
+  async updateMemberPayoutSettings(user: SessionUser, payload: { payoutOption: string; payoutDetails: string }) {
+    const payoutMethod = payload.payoutOption.trim();
+    if (!payoutMethod) {
+      throw new Error('Select a valid payout method.');
+    }
+    const member = await this.requireMemberByUserId(user.id);
+    member.payoutMethod = payoutMethod;
+    member.payoutDetails = payload.payoutDetails.trim();
+    await this.repo.saveMemberProfile(member);
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      action: 'member-update-payout',
+      status: 'completed' as const,
+      reason: 'Payout settings updated.',
+      detail: `Payout method set to ${payoutMethod}.`
     };
   }
 
@@ -689,9 +977,16 @@ export class ProductionEncodingService {
     const previewCode = preview.matchingCode;
     const sponsor = await this.requireMemberByUsername(preview.sponsor.username);
     const placementParent = await this.requireMemberByUsername(preview.placement.placementUsername);
-    const occupied = await this.repo.findPlacementChild(placementParent.userId, preview.placement.placementSide);
+    const occupied = await this.repo.findPlacementChild(
+      placementParent.userId,
+      preview.placement.placementSide,
+      preview.placement.placementParentShadowSide ?? null
+    );
     if (occupied) {
-      throw new Error(`Placement side ${preview.placement.placementSide.toUpperCase()} is already occupied under ${placementParent.username}.`);
+      const placementLabel = preview.placement.placementParentShadowSide
+        ? `${placementParent.username}-${preview.placement.placementParentShadowSide === 'left' ? 'L' : 'R'}`
+        : placementParent.username;
+      throw new Error(`Placement side ${preview.placement.placementSide.toUpperCase()} is already occupied under ${placementLabel}.`);
     }
 
     const [matchingCode] = (await this.repo.listActivationCodesForUser(sponsor.userId)).filter((code) => code.code === previewCode.code);
@@ -742,13 +1037,16 @@ export class ProductionEncodingService {
       middleName: parsedName.middleName,
       contactNumber: (input.phone ?? '').trim(),
       normalizedFullName: normalizeFullName(fullName),
-      createdAt
+      createdAt,
+      payoutMethod: (input.payoutOption ?? '').trim() || undefined,
+      payoutDetails: (input.payoutDetails ?? '').trim() || undefined
     };
     const network: ProductionNetworkAccount = {
       userId,
       sponsorUserId: sponsor.userId,
       directReferrerUserId: sponsor.userId,
       placementParentUserId: placementParent.userId,
+      placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
       placementSide: preview.placement.placementSide,
       currentAccountTypeCode: matchingCode.accountType === 'FS' ? 2 : 1,
       currentAccountType: matchingCode.accountType,
@@ -814,6 +1112,7 @@ export class ProductionEncodingService {
       status: 'pending',
       payload: {
         placementParentUserId: placementParent.userId,
+        placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
         placementSide: preview.placement.placementSide,
         salesmatchValue: matchingCode.lockedSalesmatchValue,
         binaryPoints: matchingCode.lockedBinaryPoints,
@@ -865,7 +1164,7 @@ export class ProductionEncodingService {
       }
 
       let currentParentUserId: string | null = item.payload.placementParentUserId;
-      let currentSide: PlacementSide = item.payload.placementSide;
+      let currentSide: PlacementSide = item.payload.placementParentShadowSide ?? item.payload.placementSide;
 
       while (currentParentUserId) {
         const profile = await this.repo.findMemberByUserId(currentParentUserId);
@@ -936,7 +1235,7 @@ export class ProductionEncodingService {
           }
         }
 
-        currentSide = network.placementSide ?? currentSide;
+        currentSide = network.placementParentShadowSide ?? currentSide;
         currentParentUserId = network.placementParentUserId;
       }
 
@@ -1118,14 +1417,14 @@ export class ProductionEncodingService {
 
     if (input.referralCode?.trim()) {
       return {
-        member: await this.repo.findMemberByReferralCode(input.referralCode.trim()),
+        member: await this.findMemberByReferralCodeOrUsername(input.referralCode),
         mode: 'referral-link'
       };
     }
 
     if (input.sponsorReferralCode?.trim()) {
       return {
-        member: await this.repo.findMemberByReferralCode(input.sponsorReferralCode.trim()),
+        member: await this.findMemberByReferralCodeOrUsername(input.sponsorReferralCode),
         mode: 'manual-sponsor'
       };
     }
@@ -1143,21 +1442,23 @@ export class ProductionEncodingService {
       if (!viewer || !input.placementParentUsername || !input.placementSide) {
         return { context: null, reservation: null, issue: 'Placement slot is required for genealogy encoding.' };
       }
-      const parent = await this.repo.findMemberByUsername(input.placementParentUsername);
+      const placementAddress = parsePlacementParentAddress(input.placementParentUsername);
+      const parent = await this.repo.findMemberByUsername(placementAddress.memberUsername);
       if (!parent) {
         return { context: null, reservation: null, issue: 'Placement parent was not found.' };
       }
-      const occupied = await this.repo.findPlacementChild(parent.userId, input.placementSide);
+      const occupied = await this.repo.findPlacementChild(parent.userId, input.placementSide, placementAddress.shadowSide);
       if (occupied) {
         return {
           context: null,
           reservation: null,
-          issue: `Placement side ${input.placementSide.toUpperCase()} is already occupied under ${parent.username}.`
+          issue: `Placement side ${input.placementSide.toUpperCase()} is already occupied under ${placementAddress.label}.`
         };
       }
       return {
         context: {
           placementUsername: parent.username,
+          placementParentShadowSide: placementAddress.shadowSide,
           placementSide: input.placementSide,
           note: 'Placement stays locked to the selected genealogy slot.'
         },
@@ -1186,7 +1487,12 @@ export class ProductionEncodingService {
       };
     }
 
-    const occupied = await this.repo.findPlacementChild(reservation.placementParentUserId, reservation.placementSide);
+    const reservationAddress = parsePlacementParentAddress(reservation.placementParentUsername);
+    const occupied = await this.repo.findPlacementChild(
+      reservation.placementParentUserId,
+      reservation.placementSide,
+      reservation.placementParentShadowSide ?? reservationAddress.shadowSide
+    );
     if (occupied) {
       return {
         context: null,
@@ -1197,7 +1503,8 @@ export class ProductionEncodingService {
 
     return {
       context: {
-        placementUsername: reservation.placementParentUsername,
+        placementUsername: reservationAddress.memberUsername,
+        placementParentShadowSide: reservation.placementParentShadowSide ?? reservationAddress.shadowSide,
         placementSide: reservation.placementSide,
         note: 'Placement is locked from the active sponsor-generated share link.'
       },
@@ -1248,7 +1555,31 @@ export class ProductionEncodingService {
   }
 
   private buildShareLink(referralCode: string, placementToken: string) {
-    return `https://yor.local/register?ref=${encodeURIComponent(referralCode)}&placementToken=${encodeURIComponent(placementToken)}`;
+    return buildRegistrationUrl({
+      ref: referralCode,
+      placementToken
+    });
+  }
+
+  private async findMemberByReferralCodeOrUsername(code: string): Promise<ProductionMemberProfile | null> {
+    const trimmed = code.trim();
+    let member = await this.repo.findMemberByReferralCode(trimmed);
+    if (member) {
+      return member;
+    }
+    member = await this.repo.findMemberByReferralCode(trimmed.toUpperCase());
+    if (member) {
+      return member;
+    }
+    try {
+      const decodedUsername = decodeReferralCode(trimmed).toUpperCase();
+      if (decodedUsername) {
+        member = await this.repo.findMemberByUsername(decodedUsername);
+      }
+    } catch {
+      // Ignore decoding errors
+    }
+    return member;
   }
 
   private buildUsername(sequence: number) {
@@ -1256,7 +1587,7 @@ export class ProductionEncodingService {
   }
 
   private buildReferralCode(sequence: number) {
-    return `YOR-MEMBER-${String(sequence).padStart(4, '0')}`;
+    return encodeReferralCode(this.buildUsername(sequence));
   }
 
   private async requireUserById(userId: string) {
@@ -1276,7 +1607,7 @@ export class ProductionEncodingService {
   }
 
   private async requireMemberByUsername(username: string) {
-    const member = await this.repo.findMemberByUsername(username);
+    const member = await this.repo.findMemberByUsername(username.trim());
     if (!member) {
       throw new Error(`Member ${username} was not found.`);
     }
@@ -1326,14 +1657,18 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     },
     findUserById: async (userId) => state.users.find((item) => item.id === userId) ?? null,
     findMemberByUserId: async (userId) => state.members.find((item) => item.userId === userId) ?? null,
-    findMemberByUsername: async (username) => state.members.find((item) => item.username === username) ?? null,
-    findMemberByReferralCode: async (referralCode) => state.members.find((item) => item.referralCode === referralCode) ?? null,
+    findMemberByUsername: async (username) =>
+      state.members.find((item) => item.username.trim().toUpperCase() === username.trim().toUpperCase()) ?? null,
+    findMemberByReferralCode: async (referralCode) =>
+      state.members.find((item) => item.referralCode.trim().toUpperCase() === referralCode.trim().toUpperCase()) ?? null,
     findUserByUsername: async (username) => {
-      const member = state.members.find((item) => item.username === username);
+      const member = state.members.find((item) => item.username.trim().toUpperCase() === username.trim().toUpperCase());
       return member ? state.users.find((item) => item.id === member.userId) ?? null : null;
     },
     findUserByReferralCode: async (referralCode) => {
-      const member = state.members.find((item) => item.referralCode === referralCode);
+      const member = state.members.find(
+        (item) => item.referralCode.trim().toUpperCase() === referralCode.trim().toUpperCase()
+      );
       return member ? state.users.find((item) => item.id === member.userId) ?? null : null;
     },
     findUserByEmail: async (email) => state.users.find((item) => item.email === email) ?? null,
@@ -1387,9 +1722,13 @@ export function createInMemoryProductionEncodingRepository(seed?: {
       }
     },
     findNetworkAccountByUserId: async (userId) => state.networkAccounts.find((item) => item.userId === userId) ?? null,
-    findPlacementChild: async (parentUserId, side) =>
+    findPlacementChild: async (parentUserId, side, shadowSide) =>
       state.networkAccounts.find(
-        (item) => item.placementParentUserId === parentUserId && item.placementSide === side && item.registrationStatus === 'active'
+        (item) =>
+          item.placementParentUserId === parentUserId &&
+          item.placementSide === side &&
+          item.registrationStatus === 'active' &&
+          (shadowSide ? item.placementParentShadowSide === shadowSide : true)
       ) ?? null,
     saveSalesmatchBalance: async (balance) => {
       const index = state.salesmatchBalances.findIndex((item) => item.userId === balance.userId);

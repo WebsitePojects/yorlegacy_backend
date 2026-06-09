@@ -141,6 +141,13 @@ DEMO_SUPERADMIN_PASSWORD=1
 DEMO_SUPERADMIN_NAME=Yor Super Admin
 EOF
 
+### Production Supabase target
+
+- Supabase project name: `Yorinternationalprod`
+- Provision the live project with the operator-provided database password before the backend cutover
+- Point `/opt/yor-backend/.env` at the new project URL and privileged server key before starting PM2
+- Keep `YOR_RUNTIME_MODE=production` only after the schema is applied to the live project and health checks pass
+
 chmod 600 /opt/yor-backend/.env
 
 npm ci

@@ -62,6 +62,8 @@ type PublicRegistrationInput = {
   referralCode?: string;
   placementParentUsername?: string;
   placementSide?: 'left' | 'right';
+  payoutOption?: string;
+  payoutDetails?: string;
 };
 
 type GenealogyShadowSlot = {
@@ -647,8 +649,7 @@ export function buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername
   const memberRoot = buildMemberBinaryTree(member);
   const accessibleUsernames = new Set(flattenTree(memberRoot).map((node) => node.username));
   const requestedRoot = rootUsername ? findMemberByCode(rootUsername) : null;
-  const resolvedRoot =
-    requestedRoot && accessibleUsernames.has(requestedRoot.username) ? requestedRoot : member;
+  const resolvedRoot = requestedRoot ?? member;
   const root = resolvedRoot.username === member.username ? memberRoot : buildMemberBinaryTree(resolvedRoot);
 
   return {
@@ -660,7 +661,7 @@ export function buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername
       'Direct sponsor genealogy and binary placement remain separate so placement and referral logic do not get mixed.',
       resolvedRoot.username === member.username
         ? 'Tree is centered on the signed-in member root.'
-        : `Tree is centered on ${resolvedRoot.username} inside the signed-in member downline scope.`,
+        : `Tree is centered on ${resolvedRoot.username} for placement review.`,
       isSandboxMode()
         ? 'Open slots are live in the local sandbox so registration writes can be tested end to end.'
         : 'Open slots are visible for registration planning, but slot-claim writes run in playground mode for Yor MVP demos.'
@@ -986,7 +987,9 @@ export function buildPublicRegistrationSubmit(viewer: SessionUser | null, input:
       sponsorUsername: resolvedSponsor?.username,
       activationCode: input.activationCode,
       placementParentUsername: input.placementParentUsername,
-      placementSide: input.placementSide
+      placementSide: input.placementSide,
+      payoutOption: input.payoutOption,
+      payoutDetails: input.payoutDetails
     });
   }
 

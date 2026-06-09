@@ -34,7 +34,20 @@ const envSchema = z.object({
   DEMO_SUPERADMIN_NAME: z.string().default('Yor Super Admin')
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+export const env =
+  process.env.NODE_ENV === 'test'
+    ? {
+        ...parsedEnv,
+        YOR_RUNTIME_MODE: 'sandbox',
+        SUPABASE_URL: undefined,
+        SUPABASE_PUBLISHABLE_KEY: undefined,
+        SUPABASE_ANON_KEY: undefined,
+        SUPABASE_SECRET_KEY: undefined,
+        SUPABASE_SERVICE_ROLE_KEY: undefined
+      }
+    : parsedEnv;
 
 export function getSupabaseServerKey(): string | null {
   return env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY ?? null;

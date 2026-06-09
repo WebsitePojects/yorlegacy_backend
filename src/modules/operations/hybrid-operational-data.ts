@@ -33,19 +33,18 @@ const ALL_OPS_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
   'dashboard',
   'member-management',
-  'account-genealogy',
-  'activation-codes',
   'encashment-reports',
+  'account-shadow-management',
+  'account-genealogy',
   'finance-accounting',
   'cd-accounts',
   'voucher-management',
   'rankings',
-  'global-bonus',
   'get-five-package-claims',
-  'get-five-reports',
   'contact-messages',
   'news-posts',
   'change-password',
+  'activation-codes'
 ]);
 const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
   'dashboard',
@@ -114,6 +113,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-001',
     placement: 'left',
     placementParentUsername: 'YOR0001',
+    placementParentShadowSide: 'left',
     directReferrals: 3,
     leftPoints: 12000,
     rightPoints: 8000,
@@ -136,6 +136,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-001',
     placement: 'right',
     placementParentUsername: 'YOR0001',
+    placementParentShadowSide: 'right',
     directReferrals: 7,
     leftPoints: 18000,
     rightPoints: 21000,
@@ -158,6 +159,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-002',
     placement: 'left',
     placementParentUsername: 'YOR0002',
+    placementParentShadowSide: 'left',
     directReferrals: 1,
     leftPoints: 2500,
     rightPoints: 1500,
@@ -180,6 +182,7 @@ const members: MemberRecord[] = [
     sponsorCode: 'YOR-MEMBER-003',
     placement: 'right',
     placementParentUsername: 'YOR0003',
+    placementParentShadowSide: 'right',
     directReferrals: 2,
     leftPoints: 3000,
     rightPoints: 4000,
@@ -818,7 +821,7 @@ function adminModules(): OperationalModule[] {
     },
     {
       id: 'activation-codes',
-      label: 'Activation Code Management',
+      label: 'Manage Codes',
       path: '/admin/activation-codes',
       group: 'Codes',
       description: isSandboxMode()

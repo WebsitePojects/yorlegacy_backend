@@ -144,6 +144,7 @@ create table if not exists network_accounts (
   sponsor_user_id uuid references app_users(id) on delete set null,
   direct_referrer_user_id uuid references app_users(id) on delete set null,
   placement_parent_user_id uuid references app_users(id) on delete set null,
+  placement_parent_shadow_side text check (placement_parent_shadow_side in ('left', 'right')),
   main_account_user_id uuid references app_users(id) on delete set null,
   stockist_legacy_uid bigint,
   account_type_code integer,
@@ -358,6 +359,7 @@ alter table if exists activation_codes add column if not exists locked_get_five_
 alter table if exists activation_codes add column if not exists remarks text not null default '';
 
 alter table if exists network_accounts add column if not exists placement_side text check (placement_side in ('left', 'right'));
+alter table if exists network_accounts add column if not exists placement_parent_shadow_side text check (placement_parent_shadow_side in ('left', 'right'));
 alter table if exists network_accounts add column if not exists current_account_type text;
 alter table if exists network_accounts add column if not exists package_tier text;
 alter table if exists network_accounts add column if not exists left_points integer not null default 0;
@@ -385,6 +387,7 @@ create table if not exists placement_reservations (
   referral_code text not null,
   placement_parent_user_id uuid not null references app_users(id) on delete cascade,
   placement_parent_username text not null,
+  placement_parent_shadow_side text check (placement_parent_shadow_side in ('left', 'right')),
   placement_side text not null check (placement_side in ('left', 'right')),
   share_token text not null unique,
   status text not null default 'active' check (status in ('active', 'consumed', 'expired')),

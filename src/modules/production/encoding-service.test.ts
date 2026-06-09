@@ -52,13 +52,15 @@ function seedNetwork(
   packageTier: ProductionNetworkAccount['packageTier'],
   sponsorUserId: string | null,
   placementParentUserId: string | null,
-  placementSide: ProductionNetworkAccount['placementSide']
+  placementSide: ProductionNetworkAccount['placementSide'],
+  placementParentShadowSide: ProductionNetworkAccount['placementParentShadowSide'] = null
 ): ProductionNetworkAccount {
   return {
     userId,
     sponsorUserId,
     directReferrerUserId: sponsorUserId,
     placementParentUserId,
+    placementParentShadowSide,
     placementSide,
     currentAccountTypeCode: packageTier === 'Business' || packageTier === 'VIP' ? 2 : 1,
     currentAccountType: packageTier === 'Business' || packageTier === 'VIP' ? 'FS' : 'PD',
@@ -90,7 +92,7 @@ function seedCode(overrides: Partial<ProductionActivationCode> = {}): Production
     registrationEligible: overrides.registrationEligible ?? true,
     lockedDirectReferralBonus: overrides.lockedDirectReferralBonus ?? 5000,
     lockedSalesmatchValue: overrides.lockedSalesmatchValue ?? 2500,
-    lockedBinaryPoints: overrides.lockedBinaryPoints ?? 5000,
+    lockedBinaryPoints: overrides.lockedBinaryPoints ?? 50,
     lockedGetFiveAmount: overrides.lockedGetFiveAmount ?? 25998,
     processId: overrides.processId ?? 'seed:code:1',
     remarks: overrides.remarks ?? ''
@@ -162,7 +164,7 @@ describe('ProductionEncodingService', () => {
           rightSales: 2500,
           matchedSales: 0,
           leftPoints: 0,
-          rightPoints: 5000,
+          rightPoints: 50,
           matchedPoints: 0,
           updatedAt: '2026-06-08T09:00:00.000Z'
         }
@@ -265,5 +267,91 @@ describe('ProductionEncodingService', () => {
 
     const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(ledger.find((entry) => entry.entryType === 'get_five')?.creditAmount).toBe(25998);
+  });
+
+  it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const leftUser = seedUser('left-user', 'Left Branch', 'left@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const leftMember = seedMember('left-user', 'YOR0002', 'YOR-MEMBER-0002', 'Business', 'Left Branch', 'YOR-MEMBER-0001');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser, leftUser],
+      members: [sponsorMember, leftMember],
+      networkAccounts: [
+        seedNetwork('sponsor-user', 'Standard', null, null, null),
+        seedNetwork('left-user', 'Business', 'sponsor-user', 'sponsor-user', 'left', 'left')
+      ],
+      activationCodes: [seedCode({ code: 'YOR-ACT-00001003' })]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Placed Prospect',
+        username: 'YOR3001',
+        phone: '+63 999 333 3333',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00001003',
+        placementParentUsername: 'YOR0002',
+        placementSide: 'right'
+      }
+    );
+
+    const tree = await service.buildScopedBinaryGenealogyCenter(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      'YOR0002'
+    );
+
+    expect(tree.root.username).toBe('YOR0002');
+    expect(tree.root.children.find((child) => child.placement === 'right')?.username).toBe('YOR0002-R');
+    expect(
+      tree.root.children
+        .find((child) => child.placement === 'right')
+        ?.children.find((child) => child.username === 'YOR3001')?.placement
+    ).toBe('right');
+  });
+
+  it('accepts shadow-derived placement labels and still encodes under the real member slot', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const shadowRootUser = seedUser('shadow-root-user', 'Shadow Root', 'shadow@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const shadowRootMember = seedMember('shadow-root-user', 'YOR0002', 'YOR-MEMBER-0002', 'Business', 'Shadow Root', 'YOR-MEMBER-0001');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser, shadowRootUser],
+      members: [sponsorMember, shadowRootMember],
+      networkAccounts: [
+        seedNetwork('sponsor-user', 'Standard', null, null, null),
+        seedNetwork('shadow-root-user', 'Business', 'sponsor-user', 'sponsor-user', 'left', 'left')
+      ],
+      activationCodes: [seedCode({ code: 'YOR-ACT-00001004' })]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const submit = await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Shadow Slot Prospect',
+        username: 'YOR3002',
+        phone: '+63 999 444 4444',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00001004',
+        placementParentUsername: 'YOR0002-L',
+        placementSide: 'right'
+      }
+    );
+
+    expect(submit.createdMember.username).toBe('YOR3002');
+
+    const tree = await service.buildScopedBinaryGenealogyCenter(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      'YOR0002'
+    );
+
+    const leftShadow = tree.root.children.find((child) => child.placement === 'left');
+    expect(leftShadow?.username).toBe('YOR0002-L');
+    expect(leftShadow?.children.find((child) => child.username === 'YOR3002')?.placement).toBe('right');
   });
 });

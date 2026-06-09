@@ -1811,6 +1811,8 @@ export function commitSandboxRegistration(actor: string, input: {
   username?: string;
   placementParentUsername?: string;
   placementSide?: 'left' | 'right';
+  payoutOption?: string;
+  payoutDetails?: string;
 }) {
   return updateSandboxState((state) => {
     const preview = resolveSandboxRegistrationPreview(state.members, state.activationRows, input);
@@ -1945,8 +1947,8 @@ export function commitSandboxRegistration(actor: string, input: {
       walletPending: 0,
       cdBalance: 0,
       stockist: false,
-      payoutOption: 'GCash',
-      payoutDetails: input.phone?.trim() || '',
+      payoutOption: input.payoutOption?.trim() || 'GCash',
+      payoutDetails: input.payoutDetails?.trim() || input.phone?.trim() || '',
       lastActivity: todayDate()
     });
 

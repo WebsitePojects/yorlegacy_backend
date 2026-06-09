@@ -38,6 +38,26 @@ memberRouter.get('/api/member/summary', requireRole('member', 'admin', 'cashier'
 
 memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const office = await buildMemberOffice(req.authUser!);
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const walletData = await service.buildMemberWalletData(req.authUser!.id);
+        const mainWallet = walletData.wallets.find((w: { type: string }) => w.type === 'main');
+        const available = mainWallet?.balance ?? 0;
+        res.status(200).json({
+          ...office,
+          wallet: {
+            ...office.wallet,
+            availableBalance: `PHP ${available.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          }
+        });
+        return;
+      } catch (err) {
+        console.error('[office] Production wallet override error:', err);
+      }
+    }
+  }
   res.status(200).json(office);
 });
 

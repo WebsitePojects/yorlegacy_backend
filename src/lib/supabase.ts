@@ -1,5 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { WebSocket } from 'ws';
 import { env, getSupabasePublicKey, getSupabaseServerKey } from '../config/env.js';
+
+// Node < 22 has no native WebSocket; pass the 'ws' package as the realtime transport.
+// This backend never uses realtime subscriptions, but createClient always initialises
+// the RealtimeClient internally and will throw without a transport on Node < 22.
+const realtimeOptions = { transport: WebSocket as unknown as typeof globalThis.WebSocket };
 
 let serverClient: SupabaseClient | null = null;
 let publicClient: SupabaseClient | null = null;
@@ -21,7 +27,10 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
 
   if (!serverClient) {
-    serverClient = createClient(env.SUPABASE_URL, serverKey);
+    serverClient = createClient(env.SUPABASE_URL, serverKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: realtimeOptions
+    });
     console.info(`Supabase client initialized for ${env.SUPABASE_URL}`);
   }
 
@@ -43,7 +52,10 @@ export function getSupabasePublicClient(): SupabaseClient | null {
   }
 
   if (!publicClient) {
-    publicClient = createClient(env.SUPABASE_URL, publicKey);
+    publicClient = createClient(env.SUPABASE_URL, publicKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: realtimeOptions
+    });
     console.info(`Supabase public client initialized for ${env.SUPABASE_URL}`);
   }
 

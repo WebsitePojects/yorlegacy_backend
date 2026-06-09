@@ -163,6 +163,17 @@ export async function findAppUserByUsername(
         return toSessionUser(appUser);
       }
     }
+
+    // 3. Final fallback: match admin/staff users by email prefix (username@domain)
+    const { data: prefixUser } = await supabase
+      .from('app_users')
+      .select('id,email,display_name,role,status,password_hash,password_salt')
+      .ilike('email', `${username.trim()}@%`)
+      .maybeSingle<AppUserRow>();
+
+    if (prefixUser) {
+      return toSessionUser(prefixUser);
+    }
   } else {
     const { data: appUser, error: appUserError } = await supabase
       .from('app_users')

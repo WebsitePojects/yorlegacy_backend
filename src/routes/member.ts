@@ -42,11 +42,20 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const walletData = await service.buildMemberWalletData(req.authUser!.id);
+        const [walletData, pts] = await Promise.all([
+          service.buildMemberWalletData(req.authUser!.id),
+          service.getMemberBinaryBalance(req.authUser!.id)
+        ]);
         const mainWallet = walletData.wallets.find((w: { type: string }) => w.type === 'main');
         const available = mainWallet?.balance ?? 0;
+        const updatedMetrics = office.metrics.map((m: { label: string }) =>
+          pts && m.label === 'Left Points'  ? { ...m, value: String(pts.leftPoints) }  :
+          pts && m.label === 'Right Points' ? { ...m, value: String(pts.rightPoints) } :
+          m
+        );
         res.status(200).json({
           ...office,
+          metrics: updatedMetrics,
           wallet: {
             ...office.wallet,
             availableBalance: `PHP ${available.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -54,7 +63,7 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
         });
         return;
       } catch (err) {
-        console.error('[office] Production wallet override error:', err);
+        console.error('[office] Production override error:', err);
       }
     }
   }
@@ -406,7 +415,7 @@ memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', '
   res.status(200).json(runMemberUpdatePayout(req.authUser!, { payoutOption, payoutDetails }));
 });
 
-memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const moduleId = Array.isArray(req.params.moduleId)
     ? req.params.moduleId[0]
     : req.params.moduleId;
@@ -417,6 +426,40 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
       message: 'Member module not found for this role'
     });
     return;
+  }
+
+  // In production, replace salesmatch-bonus metrics and table with live Supabase data
+  if (isProductionMode() && moduleId === 'salesmatch-bonus') {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const pts = await service.getMemberBinaryBalance(req.authUser!.id);
+        if (pts !== null) {
+          module.metrics = [
+            { label: 'Current Left', value: String(pts.leftPoints), tone: 'neutral' as const },
+            { label: 'Current Right', value: String(pts.rightPoints), tone: 'neutral' as const }
+          ];
+          // Build pairing rows from lifetime matched totals only when at least one match has occurred
+          const tableRows: Array<Record<string, string | number>> = pts.matchedPoints > 0 ? [{
+            leftPoints: pts.leftPoints + pts.matchedPoints,
+            rightPoints: pts.rightPoints + pts.matchedPoints,
+            matchedPoints: pts.matchedPoints,
+            salesmatch: `PHP ${pts.matchedSales.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            carryForward: pts.leftPoints > 0 ? `${pts.leftPoints} left pts` : pts.rightPoints > 0 ? `${pts.rightPoints} right pts` : '0'
+          }] : [];
+          const columns = [
+            { key: 'leftPoints', label: 'Left Points' },
+            { key: 'rightPoints', label: 'Right Points' },
+            { key: 'matchedPoints', label: 'Matched Points' },
+            { key: 'salesmatch', label: 'Salesmatch' },
+            { key: 'carryForward', label: 'Carry Forward' }
+          ];
+          module.table = { title: 'Salesmatch snapshots', columns, rows: tableRows };
+        }
+      } catch (err) {
+        console.error('[modules] salesmatch-bonus enrichment error:', err);
+      }
+    }
   }
 
   res.status(200).json(module);

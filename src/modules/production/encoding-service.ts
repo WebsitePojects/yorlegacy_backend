@@ -723,6 +723,25 @@ export class ProductionEncodingService {
     };
   }
 
+  async getMemberBinaryBalance(userId: string): Promise<{
+    leftPoints: number;
+    rightPoints: number;
+    matchedPoints: number;
+    matchedSales: number;
+  } | null> {
+    const [balance, network] = await Promise.all([
+      this.repo.getSalesmatchBalance(userId),
+      this.repo.findNetworkAccountByUserId(userId)
+    ]);
+    if (!balance && !network) return null;
+    return {
+      leftPoints: network?.leftPoints ?? balance?.leftPoints ?? 0,
+      rightPoints: network?.rightPoints ?? balance?.rightPoints ?? 0,
+      matchedPoints: balance?.matchedPoints ?? 0,
+      matchedSales: Number(balance?.matchedSales ?? 0)
+    };
+  }
+
   async isCompanyRootAccount(user: SessionUser): Promise<boolean> {
     const member = await this.repo.findMemberByUserId(user.id);
     const upper = member?.username?.toUpperCase() ?? '';

@@ -742,6 +742,86 @@ export class ProductionEncodingService {
     };
   }
 
+  async getMemberGetYorFiveData(userId: string): Promise<{
+    moneyMode: MoneyMode;
+    memberPackageTier: string;
+    tierProgress: Array<{
+      tier: string;
+      claimValue: number;
+      referralCount: number;
+      completedGroups: number;
+      remainingToNext: number;
+      nextThreshold: number;
+    }>;
+    ledgerEntries: Array<{
+      id: string;
+      sourceReference: string;
+      creditAmount: number;
+      balanceAfter: number;
+      status: string;
+      occurredAt: string;
+    }>;
+    totalEarned: number;
+    completedGroupsTotal: number;
+  }> {
+    const ELIGIBLE_TIERS = ['Classic', 'Standard', 'Business', 'VIP'] as const;
+    const CLAIM_VALUES: Record<string, number> = {
+      Classic: 5998,
+      Standard: 25998,
+      Business: 50998,
+      VIP: 159998
+    };
+
+    const [member, allMembers, allLedger] = await Promise.all([
+      this.repo.findMemberByUserId(userId),
+      this.repo.listMembers(),
+      this.repo.listWalletLedgerEntriesForUser(userId)
+    ]);
+
+    const memberReferralCode = member?.referralCode ?? '';
+    const directs = allMembers.filter(
+      (m) => m.sponsorCode != null && m.sponsorCode === memberReferralCode
+    );
+
+    const tierProgress = ELIGIBLE_TIERS.map((tier) => {
+      const count = directs.filter((d) => d.packageTier === tier).length;
+      const completedGroups = Math.floor(count / 5);
+      const remainder = count % 5;
+      const remainingToNext = remainder === 0 ? 5 : 5 - remainder;
+      return {
+        tier,
+        claimValue: CLAIM_VALUES[tier] ?? 0,
+        referralCount: count,
+        completedGroups,
+        remainingToNext,
+        nextThreshold: (completedGroups + 1) * 5
+      };
+    });
+
+    const gyfEntries = allLedger
+      .filter((e) => e.entryType === 'get_five')
+      .map((e) => ({
+        id: e.id,
+        sourceReference: e.sourceReference,
+        creditAmount: e.creditAmount,
+        balanceAfter: e.balanceAfter,
+        status: e.status,
+        occurredAt: e.occurredAt
+      }));
+
+    const totalEarned = gyfEntries.reduce((sum, e) => sum + e.creditAmount, 0);
+    const completedGroupsTotal = tierProgress.reduce((sum, t) => sum + t.completedGroups, 0);
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      memberPackageTier: member?.packageTier ?? 'Basic',
+      tierProgress,
+      ledgerEntries: gyfEntries,
+      totalEarned,
+      completedGroupsTotal
+    };
+  }
+
   async isCompanyRootAccount(user: SessionUser): Promise<boolean> {
     const member = await this.repo.findMemberByUserId(user.id);
     const upper = member?.username?.toUpperCase() ?? '';

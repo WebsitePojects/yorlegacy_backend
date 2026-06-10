@@ -415,6 +415,45 @@ memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', '
   res.status(200).json(runMemberUpdatePayout(req.authUser!, { payoutOption, payoutDetails }));
 });
 
+memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const data = await service.getMemberGetYorFiveData(req.authUser!.id);
+        res.status(200).json(data);
+        return;
+      } catch (err) {
+        console.error('[get-yor-five] Production data error:', err);
+      }
+    }
+  }
+  // Sandbox fallback: derive from hybrid operational data
+  const { getMemberModule: getModule, getHybridMemberForUser } = await import('../modules/operations/hybrid-operational-data.js');
+  const mod = getModule(req.authUser!, 'get-five-bonus');
+  const member = getHybridMemberForUser(req.authUser!);
+  const row = mod?.table.rows[0] ?? {};
+  const directSamePackage = Number(row.directSamePackage ?? 0);
+  const completedGroups = Number(row.completedGroups ?? 0);
+  const CLAIM_VALUES: Record<string, number> = { Classic: 5998, Standard: 25998, Business: 50998, VIP: 159998 };
+  const tier = String(member?.packageTier ?? '');
+  res.status(200).json({
+    moneyMode: 'sandbox',
+    memberPackageTier: tier,
+    tierProgress: ['Classic', 'Standard', 'Business', 'VIP'].map((t) => ({
+      tier: t,
+      claimValue: CLAIM_VALUES[t] ?? 0,
+      referralCount: t === tier ? directSamePackage : 0,
+      completedGroups: t === tier ? completedGroups : 0,
+      remainingToNext: t === tier ? (directSamePackage % 5 === 0 ? 5 : 5 - (directSamePackage % 5)) : 5,
+      nextThreshold: t === tier ? (completedGroups + 1) * 5 : 5
+    })),
+    ledgerEntries: [],
+    totalEarned: 0,
+    completedGroupsTotal: completedGroups
+  });
+});
+
 memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const moduleId = Array.isArray(req.params.moduleId)
     ? req.params.moduleId[0]
@@ -458,6 +497,45 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
         }
       } catch (err) {
         console.error('[modules] salesmatch-bonus enrichment error:', err);
+      }
+    }
+  }
+
+  // In production, replace get-five-bonus metrics and table with live Supabase data
+  if (isProductionMode() && moduleId === 'get-five-bonus') {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
+        const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        module.metrics = [
+          { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
+          { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+        ];
+        module.table = {
+          title: 'Get Yor Five progress',
+          columns: [
+            { key: 'package', label: 'Package' },
+            { key: 'directSamePackage', label: 'Direct Same Package' },
+            { key: 'completedGroups', label: 'Completed Groups' },
+            { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'target', label: 'Target' },
+            { key: 'status', label: 'Status' }
+          ],
+          rows: gyf.tierProgress
+            .filter((t) => t.tier === gyf.memberPackageTier)
+            .map((t) => ({
+              package: t.tier,
+              directSamePackage: t.referralCount,
+              completedGroups: t.completedGroups,
+              remainingToNextGroup: t.remainingToNext,
+              target: 5,
+              status: t.referralCount >= 5 ? 'qualified' : 'building'
+            }))
+        };
+      } catch (err) {
+        console.error('[modules] get-five-bonus enrichment error:', err);
       }
     }
   }

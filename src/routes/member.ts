@@ -540,5 +540,44 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
     }
   }
 
+  // In production, replace get-yor-five metrics and table with live Supabase data
+  if (isProductionMode() && moduleId === 'get-yor-five') {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
+        const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        module.metrics = [
+          { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
+          { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+        ];
+        module.table = {
+          title: 'Get Yor Five overview',
+          columns: [
+            { key: 'package', label: 'Package' },
+            { key: 'directSamePackage', label: 'Direct Same Package' },
+            { key: 'completedGroups', label: 'Completed Groups' },
+            { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'target', label: 'Target' },
+            { key: 'status', label: 'Status' }
+          ],
+          rows: gyf.tierProgress
+            .filter((t) => t.tier === gyf.memberPackageTier)
+            .map((t) => ({
+              package: t.tier,
+              directSamePackage: t.referralCount,
+              completedGroups: t.completedGroups,
+              remainingToNextGroup: t.remainingToNext,
+              target: 5,
+              status: t.referralCount >= 5 ? 'qualified' : 'building'
+            }))
+        };
+      } catch (err) {
+        console.error('[modules] get-yor-five enrichment error:', err);
+      }
+    }
+  }
+
   res.status(200).json(module);
 });

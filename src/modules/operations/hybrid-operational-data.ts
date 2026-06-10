@@ -1035,6 +1035,32 @@ function memberModules(member: MemberRecord): OperationalModule[] {
       gatedActions: []
     },
     {
+      id: 'get-yor-five',
+      label: 'Get Yor Five',
+      path: '/member/get-yor-five',
+      group: 'Compensation',
+      description: 'Full Get Yor Five progress — per-tier referral counts, completed groups, and wallet ledger entries.',
+      status: 'live-report',
+      legacyReference: 'ecom/hifive-bonus.php',
+      permissions: ['member', ...STAFF_ROLES],
+      metrics: [
+        metric('Direct Same Package', String(sameTierDirects)),
+        metric('Completed Groups', String(completedGroups)),
+        metric('Next Milestone', directsRemaining === 0 ? 'ready now' : `${directsRemaining} remaining`)
+      ],
+      table: table('Get Yor Five overview', [
+        {
+          package: member.packageTier,
+          directSamePackage: sameTierDirects,
+          completedGroups,
+          remainingToNextGroup: directsRemaining,
+          target: 5,
+          status: sameTierDirects >= 5 ? 'qualified' : 'building'
+        }
+      ]),
+      gatedActions: []
+    },
+    {
       id: 'activation-codes',
       label: 'Activation Codes',
       path: '/member/activation-codes',

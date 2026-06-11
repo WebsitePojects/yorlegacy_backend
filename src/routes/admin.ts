@@ -294,17 +294,22 @@ adminRouter.post('/api/admin/members/:username/change-name', requireRole('admin'
 
 adminRouter.post('/api/admin/members/:username/profile', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const username = Array.isArray(req.params.username) ? req.params.username[0] : req.params.username;
+  const actorRole = req.authUser!.role;
+  const canEditFullProfile = actorRole === 'admin' || actorRole === 'superadmin' || actorRole === 'bod';
+
   res.status(200).json(
     runAdminUpdateMemberProfile(req.authUser!, {
       username,
       firstName: typeof req.body?.firstName === 'string' ? req.body.firstName : '',
       lastName: typeof req.body?.lastName === 'string' ? req.body.lastName : '',
       middleName: typeof req.body?.middleName === 'string' ? req.body.middleName : '',
-      password: typeof req.body?.password === 'string' ? req.body.password : '',
-      payoutOption: typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '',
-      payoutDetails: typeof req.body?.payoutDetails === 'string' ? req.body.payoutDetails : '',
-      address: typeof req.body?.address === 'string' ? req.body.address : '',
-      contactNumber: typeof req.body?.contactNumber === 'string' ? req.body.contactNumber : ''
+      password: canEditFullProfile && typeof req.body?.password === 'string' ? req.body.password : '',
+      payoutOption: canEditFullProfile && typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '',
+      payoutDetails: canEditFullProfile && typeof req.body?.payoutDetails === 'string' ? req.body.payoutDetails : '',
+      address: canEditFullProfile && typeof req.body?.address === 'string' ? req.body.address : '',
+      contactNumber: canEditFullProfile && typeof req.body?.contactNumber === 'string' ? req.body.contactNumber : '',
+      email: canEditFullProfile && typeof req.body?.email === 'string' ? req.body.email : undefined,
+      newUsername: canEditFullProfile && typeof req.body?.newUsername === 'string' ? req.body.newUsername : undefined
     })
   );
 });

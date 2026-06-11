@@ -34,6 +34,7 @@ import {
   resetSandboxState,
   submitSandboxEncashment,
   transferSandboxActivationCodes,
+  updateSandboxMemberCredentials,
   updateSandboxMemberPayout,
   updateSandboxMemberProfile,
   updateSandboxMemberStatus,
@@ -515,7 +516,7 @@ export function buildMemberWalletDetail(user: SessionUser, amount?: number) {
   const systemRetainer = payoutPreviewAmount * 0.05;
   const tax = payoutPreviewAmount * 0.10;
   const fee = processingFee + systemRetainer;
-  const cdDeduction = Math.min(member.cdBalance, Math.max(0, payoutPreviewAmount * 0.05));
+  const cdDeduction = Math.min(member.cdBalance, payoutPreviewAmount);
   const totalDeductions = fee + tax + cdDeduction;
   const netReceivable = Math.max(0, payoutPreviewAmount - totalDeductions);
 
@@ -1097,11 +1098,22 @@ export function runAdminUpdateMemberProfile(
     payoutDetails?: string;
     address?: string;
     contactNumber?: string;
+    email?: string;
+    newUsername?: string;
   }
 ) {
   return isSandboxMode()
     ? updateSandboxMemberProfile(user, payload.username, payload)
     : buildGatedParityAction('admin-update-member-profile');
+}
+
+export function runMemberUpdateCredentials(
+  user: SessionUser,
+  payload: { email?: string; password?: string }
+) {
+  return isSandboxMode()
+    ? updateSandboxMemberCredentials(user, payload)
+    : buildGatedParityAction('member-update-credentials');
 }
 
 export function runMemberUpdatePayout(

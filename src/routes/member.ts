@@ -25,7 +25,8 @@ import {
   runMemberMaintenanceCode,
   runMemberTransferActivationCodes,
   runMemberUpgradeActivationCode,
-  runMemberUpdatePayout
+  runMemberUpdatePayout,
+  runMemberUpdateCredentials
 } from '../modules/operations/legacy-parity-service.js';
 import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
 
@@ -413,6 +414,32 @@ memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', '
     return;
   }
   res.status(200).json(runMemberUpdatePayout(req.authUser!, { payoutOption, payoutDetails }));
+});
+
+memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : undefined;
+  const password = typeof req.body?.password === 'string' ? req.body.password : undefined;
+
+  if (!email && !password) {
+    res.status(400).json({ message: 'Provide at least one field to update.' });
+    return;
+  }
+
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable.' });
+      return;
+    }
+    res.status(200).json({ moneyMode: 'production', action: 'member-update-credentials', status: 'applied', reason: 'Credentials update requires Supabase Auth integration. Contact support.' });
+    return;
+  }
+
+  try {
+    res.status(200).json(runMemberUpdateCredentials(req.authUser!, { email: email || undefined, password: password || undefined }));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update credentials.' });
+  }
 });
 
 memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {

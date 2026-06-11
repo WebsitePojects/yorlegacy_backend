@@ -33,6 +33,7 @@ const ALL_OPS_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
   'dashboard',
   'member-management',
+  'account-details',
   'encashment-reports',
   'account-shadow-management',
   'account-genealogy',
@@ -628,6 +629,19 @@ function adminModules(): OperationalModule[] {
       permissions: ADMIN_AND_SUPERADMIN_ROLES,
       metrics: [metric('Accounts Indexed', String(allMembers.length)), metric('Pending Accounts', String(allMembers.filter((member) => member.accountStatus === 'pending').length), undefined, 'warning')],
       table: table('Members', memberRows),
+      gatedActions: []
+    },
+    {
+      id: 'account-details',
+      label: 'Account Details',
+      path: '/admin/account-details',
+      group: 'Accounts',
+      description: 'Search and update member profile names. Cashier can edit names only; admin can edit full profile.',
+      status: isSandboxMode() ? 'sandbox-write' : 'playground-write',
+      legacyReference: 'adminpanel/account-details.php',
+      permissions: CASHIER_CODE_ROLES,
+      metrics: [metric('Accounts Indexed', String(allMembers.length))],
+      table: table('Account details', memberRows),
       gatedActions: []
     },
     {

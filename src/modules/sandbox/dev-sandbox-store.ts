@@ -1476,7 +1476,7 @@ export function submitSandboxEncashment(actor: SessionUser, amount: number) {
     const systemRetainer = amount * 0.05;
     const tax = amount * 0.10;
     const fee = processingFee + systemRetainer;
-    const cdDeduction = Math.min(member.cdBalance, Math.max(0, amount * 0.05));
+    const cdDeduction = Math.min(member.cdBalance, amount);
     const net = Math.max(0, amount - fee - tax - cdDeduction);
     const reference = nextEncashmentReference(state.payoutRows);
 
@@ -2043,7 +2043,7 @@ export function getSandboxWalletSummary(user: SessionUser, amount?: number) {
   const systemRetainer = requestedAmount * 0.05;
   const tax = requestedAmount * 0.10;
   const fee = processingFee + systemRetainer;
-  const cdDeduction = Math.min(member.cdBalance, Math.max(0, requestedAmount * 0.05));
+  const cdDeduction = Math.min(member.cdBalance, requestedAmount);
   const totalDeductions = fee + tax + cdDeduction;
   const netReceivable = Math.max(0, requestedAmount - totalDeductions);
 
@@ -2189,6 +2189,8 @@ export function updateSandboxMemberProfile(
     payoutDetails?: string;
     address?: string;
     contactNumber?: string;
+    email?: string;
+    newUsername?: string;
   }
 ) {
   return updateSandboxState((state) => {
@@ -2225,6 +2227,30 @@ export function updateSandboxMemberProfile(
         const passwordHash = createPasswordHashSync(payload.password.trim());
         linkedUser.passwordHash = passwordHash.hash;
         linkedUser.passwordSalt = passwordHash.salt;
+      }
+
+      if (payload.email && payload.email.trim()) {
+        const nextEmail = payload.email.trim().toLowerCase();
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+          const emailTaken = state.users.some(
+            (u) => u.id !== member.userId && u.email.toLowerCase() === nextEmail
+          );
+          if (!emailTaken) {
+            linkedUser.email = nextEmail;
+            member.email = nextEmail;
+          }
+        }
+      }
+    }
+
+    if (payload.newUsername && payload.newUsername.trim()) {
+      const nextUsername = payload.newUsername.trim();
+      const usernameTaken = state.members.some(
+        (m) => m.username.toUpperCase() !== username.toUpperCase() &&
+               m.username.toUpperCase() === nextUsername.toUpperCase()
+      );
+      if (!usernameTaken) {
+        member.username = nextUsername;
       }
     }
 
@@ -2268,6 +2294,68 @@ export function updateSandboxMemberPayout(
       status: 'completed' as const,
       reason: 'Payout settings updated.',
       detail: `Payout method set to ${payoutOption}.`
+    };
+  });
+}
+
+export function updateSandboxMemberCredentials(
+  actor: SessionUser,
+  payload: { email?: string; password?: string }
+) {
+  return updateSandboxState((state) => {
+    const member = state.members.find((entry) => entry.userId === actor.id);
+
+    if (!member) {
+      throw new Error('Member not found.');
+    }
+
+    const linkedUser = state.users.find((entry) => entry.id === actor.id);
+
+    if (!linkedUser) {
+      throw new Error('User account not found.');
+    }
+
+    const updates: string[] = [];
+
+    if (payload.email && payload.email.trim()) {
+      const nextEmail = payload.email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+        throw new Error('Enter a valid email address.');
+      }
+      const emailTaken = state.users.some(
+        (u) => u.id !== actor.id && u.email.toLowerCase() === nextEmail
+      );
+      if (emailTaken) {
+        throw new Error('That email address is already in use.');
+      }
+      linkedUser.email = nextEmail;
+      member.email = nextEmail;
+      updates.push('email');
+    }
+
+    if (payload.password && payload.password.trim()) {
+      if (payload.password.trim().length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+      const passwordHash = createPasswordHashSync(payload.password.trim());
+      linkedUser.passwordHash = passwordHash.hash;
+      linkedUser.passwordSalt = passwordHash.salt;
+      updates.push('password');
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No changes provided.');
+    }
+
+    member.lastActivity = todayDate();
+    addAuditEvent(state, actor.name, 'member_credentials_updated', `${member.username} -> ${updates.join(', ')}`);
+
+    return {
+      moneyMode: 'sandbox' as const,
+      action: 'member-update-credentials',
+      status: 'completed' as const,
+      reason: 'Credentials updated.',
+      detail: `Updated: ${updates.join(', ')}.`
     };
   });
 }

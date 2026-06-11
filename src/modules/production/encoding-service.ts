@@ -1268,25 +1268,33 @@ export class ProductionEncodingService {
       });
     }
 
-    const queueItem: ProductionCompensationQueueItem = {
-      id: crypto.randomUUID(),
-      processId: buildProcessId('registration-placement-sales', userId, matchingCode.code),
-      eventType: 'placement-sales',
-      status: 'pending',
-      payload: {
-        placementParentUserId: placementParent.userId,
-        placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
-        placementSide: preview.placement.placementSide,
-        salesmatchValue: matchingCode.lockedSalesmatchValue,
-        binaryPoints: matchingCode.lockedBinaryPoints,
-        createdMemberUserId: userId,
-        createdMemberUsername: finalUsername,
-        activationCode: matchingCode.code
-      },
-      createdAt,
-      processedAt: null
-    };
-    await this.repo.enqueueCompensation(queueItem);
+    // Only PD accounts with a paid code generate binary PV to uplines.
+    // FS accounts (Business/VIP on credit) and unpaid-code accounts do not propagate binary points.
+    const eligibleForBinaryPV = matchingCode.accountType !== 'FS' && matchingCode.paymentStatus !== 'unpaid';
+    let queuedProcessIds: string[] = [];
+
+    if (eligibleForBinaryPV) {
+      const queueItem: ProductionCompensationQueueItem = {
+        id: crypto.randomUUID(),
+        processId: buildProcessId('registration-placement-sales', userId, matchingCode.code),
+        eventType: 'placement-sales',
+        status: 'pending',
+        payload: {
+          placementParentUserId: placementParent.userId,
+          placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
+          placementSide: preview.placement.placementSide,
+          salesmatchValue: matchingCode.lockedSalesmatchValue,
+          binaryPoints: matchingCode.lockedBinaryPoints,
+          createdMemberUserId: userId,
+          createdMemberUsername: finalUsername,
+          activationCode: matchingCode.code
+        },
+        createdAt,
+        processedAt: null
+      };
+      await this.repo.enqueueCompensation(queueItem);
+      queuedProcessIds = [queueItem.processId];
+    }
 
     if (preview.placementReservationId) {
       const reservation = await this.repo.findPlacementReservationById(preview.placementReservationId);
@@ -1301,9 +1309,11 @@ export class ProductionEncodingService {
       action: 'production-registration-submit',
       status: 'completed',
       reason: 'Production registration committed and downstream compensation queued.',
-      detail: `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`,
+      detail: eligibleForBinaryPV
+        ? `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`
+        : `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral. Binary PV not queued: ${matchingCode.accountType === 'FS' ? 'FS account' : 'unpaid code'} is not eligible to generate binary points.`,
       placementReservationId: preview.placementReservationId,
-      queuedCompensation: [queueItem.processId],
+      queuedCompensation: queuedProcessIds,
       createdMember: {
         username: finalUsername,
         fullName,
@@ -1575,14 +1585,24 @@ export class ProductionEncodingService {
   }
 
   async buildMemberWalletData(userId: string, encashAmount?: number) {
-    const [member, ledgerEntries] = await Promise.all([
+    const [member, ledgerEntries, networkAccount, allActivationCodes] = await Promise.all([
       this.repo.findMemberByUserId(userId),
-      this.repo.listWalletLedgerEntriesForUser(userId)
+      this.repo.listWalletLedgerEntriesForUser(userId),
+      this.repo.findNetworkAccountByUserId(userId),
+      this.repo.listActivationCodes()
     ]);
 
     if (!member) {
       throw new Error('Member profile not found.');
     }
+
+    const memberCode = allActivationCodes.find(
+      c => c.code === networkAccount?.activationCode && c.status === 'used'
+    );
+    const packagePrice = packagePolicies.find(
+      p => p.name.toLowerCase() === member.packageTier.toLowerCase()
+    )?.price ?? 0;
+    const cdBalance = memberCode?.paymentStatus === 'unpaid' ? packagePrice : 0;
 
     // Sum balances per wallet type
     const mainBalance = ledgerEntries
@@ -1649,7 +1669,7 @@ export class ProductionEncodingService {
     const systemRetainer = payoutPreviewAmount * 0.05;
     const tax = payoutPreviewAmount * 0.10;
     const fee = processingFee + systemRetainer;
-    const cdDeduction = 0;
+    const cdDeduction = Math.min(cdBalance, payoutPreviewAmount);
     const totalDeductions = fee + tax + cdDeduction;
     const netReceivable = Math.max(0, payoutPreviewAmount - totalDeductions);
 
@@ -1686,7 +1706,7 @@ export class ProductionEncodingService {
       summary: {
         availableBalance: mainBalance,
         pendingBalance: 0,
-        cdBalance: 0,
+        cdBalance,
         payoutMethod: member.payoutMethod ?? 'GCash',
         payoutSchedule: 'Tuesday encashment / Friday payout'
       },

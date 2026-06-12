@@ -518,6 +518,113 @@ describe('ProductionEncodingService', () => {
     expect(await repo.listPendingCompensation(10)).toHaveLength(0);
   });
 
+  it('a locked upline (no personally-sponsored qualified direct) accumulates volume but earns no salesmatch', async () => {
+    const uplineUser = seedUser('upline-user', 'Upline', 'upline@yor.local');
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const uplineMember = seedMember('upline-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Upline Member');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0002', 'YOR-MEMBER-0002', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [uplineUser, sponsorUser],
+      members: [uplineMember, sponsorMember],
+      networkAccounts: [
+        seedNetwork('upline-user', 'Standard', null, null, null),
+        // Sponsor sits outside the upline's binary subtree.
+        seedNetwork('sponsor-user', 'Standard', null, null, null)
+      ],
+      activationCodes: [seedCode({ code: 'YOR-ACT-00009006', assignedUserId: 'sponsor-user' })],
+      salesmatchBalances: [
+        {
+          userId: 'upline-user',
+          leftSales: 2500,
+          rightSales: 0,
+          matchedSales: 0,
+          leftPoints: 10,
+          rightPoints: 0,
+          matchedPoints: 0,
+          updatedAt: '2026-06-08T09:00:00.000Z'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    // Spillover: sponsored by sponsor-user, but placed under upline-user's right leg.
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Spillover Prospect',
+        username: 'YOR9006',
+        phone: '+63 999 100 0001',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009006',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'right'
+      }
+    );
+    await service.processCompensationQueue();
+
+    const uplineLedger = await repo.listWalletLedgerEntriesForUser('upline-user');
+    expect(uplineLedger.filter((entry) => entry.entryType === 'salesmatch')).toHaveLength(0);
+    expect(uplineLedger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+
+    const balance = await repo.getSalesmatchBalance('upline-user');
+    // Legs accumulated and carried — nothing consumed while locked.
+    expect(balance).toMatchObject({ leftSales: 2500, rightSales: 2500, matchedSales: 0 });
+  });
+
+  it('an FS upline never earns salesmatch while volume passes through to higher uplines', async () => {
+    const grandUser = seedUser('grand-user', 'Grand', 'grand@yor.local');
+    const fsUser = seedUser('fs-user', 'Free Slot', 'fs@yor.local');
+    const grandMember = seedMember('grand-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Grand Member');
+    const fsMember = seedMember('fs-user', 'YOR0002', 'YOR-MEMBER-0002', 'Business', 'Free Slot Member', 'YOR-MEMBER-0001');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [grandUser, fsUser],
+      members: [grandMember, fsMember],
+      networkAccounts: [
+        seedNetwork('grand-user', 'Standard', null, null, null),
+        seedNetwork('fs-user', 'Business', 'grand-user', 'grand-user', 'left')
+      ],
+      activationCodes: [seedCode({ code: 'YOR-ACT-00009007', assignedUserId: 'grand-user' })],
+      salesmatchBalances: [
+        {
+          userId: 'grand-user',
+          leftSales: 0,
+          rightSales: 2500,
+          matchedSales: 0,
+          leftPoints: 0,
+          rightPoints: 10,
+          matchedPoints: 0,
+          updatedAt: '2026-06-08T09:00:00.000Z'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    // Sponsored by grand-user (unlock direct), placed under the FS node's left slot.
+    await service.submitRegistration(
+      { id: 'grand-user', name: 'Grand', email: 'grand@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Deep Prospect',
+        username: 'YOR9007',
+        phone: '+63 999 100 0002',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009007',
+        placementParentUsername: 'YOR0002',
+        placementSide: 'left'
+      }
+    );
+    await service.processCompensationQueue();
+
+    const fsLedger = await repo.listWalletLedgerEntriesForUser('fs-user');
+    expect(fsLedger).toHaveLength(0);
+
+    const grandLedger = await repo.listWalletLedgerEntriesForUser('grand-user');
+    const salesmatch = grandLedger.filter((entry) => entry.entryType === 'salesmatch');
+    expect(salesmatch).toHaveLength(1);
+    expect(salesmatch[0].creditAmount).toBe(2500);
+  });
+
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const leftUser = seedUser('left-user', 'Left Branch', 'left@yor.local');

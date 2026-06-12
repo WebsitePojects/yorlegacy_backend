@@ -1379,9 +1379,7 @@ export class ProductionEncodingService {
             updatedAt: this.repo.now()
           };
 
-        const matchedSalesBefore = Math.min(balance.leftSales, balance.rightSales);
-        const matchedPointsBefore = Math.min(balance.leftPoints, balance.rightPoints);
-
+        // Legs always accumulate (strong-leg carry, no flush-out)...
         if (currentSide === 'left') {
           balance.leftSales += item.payload.salesmatchValue;
           balance.leftPoints += item.payload.binaryPoints;
@@ -1391,53 +1389,67 @@ export class ProductionEncodingService {
           balance.rightPoints += item.payload.binaryPoints;
           network.rightPoints += item.payload.binaryPoints;
         }
-
-        const matchedSalesAfter = Math.min(balance.leftSales, balance.rightSales);
-        const matchedPointsAfter = Math.min(balance.leftPoints, balance.rightPoints);
-        const salesmatchDelta = Math.max(0, matchedSalesAfter - matchedSalesBefore);
-        const pointsDelta = Math.max(0, matchedPointsAfter - matchedPointsBefore);
-        balance.matchedSales += salesmatchDelta;
-        balance.matchedPoints += pointsDelta;
         balance.updatedAt = this.repo.now();
 
-        // Reduce both legs by the matched amount — weak leg zeroes out, strong leg carries forward residual.
-        if (salesmatchDelta > 0) {
-          balance.leftSales -= salesmatchDelta;
-          balance.rightSales -= salesmatchDelta;
-          balance.leftPoints -= pointsDelta;
-          balance.rightPoints -= pointsDelta;
-          network.leftPoints = Math.max(0, network.leftPoints - pointsDelta);
-          network.rightPoints = Math.max(0, network.rightPoints - pointsDelta);
-        }
+        // ...but match execution requires an eligible recipient. GATE-BIN-PAIR-20260612
+        // (owner ruling): only PD / fully-settled CD accounts pair — FS and unpaid-CD
+        // recipients hold volume until eligible (Nogatu instead lets unpaid-CD owners
+        // receive; deviation recorded in the pending-decisions log). Nogatu parity:
+        // pairing also unlocks only after one personally-sponsored qualified direct
+        // is placed inside the recipient's binary subtree — spillover alone never
+        // unlocks the first pairing payout (binaryEligibility.js).
+        const recipientEligible = countsForPairingSource(this.networkAccountState(network));
+        const unlocked = recipientEligible && (await this.hasQualifiedPersonalDirectInSubtree(profile.userId));
 
-        await this.repo.saveNetworkAccount(network);
-        await this.repo.saveSalesmatchBalance(balance);
+        if (!unlocked) {
+          await this.repo.saveNetworkAccount(network);
+          await this.repo.saveSalesmatchBalance(balance);
+        } else {
+          const matchedSales = Math.min(balance.leftSales, balance.rightSales);
+          const matchedPoints = Math.min(balance.leftPoints, balance.rightPoints);
+          const salesmatchDelta = Math.max(0, matchedSales);
+          const pointsDelta = Math.max(0, matchedPoints);
+          balance.matchedSales += salesmatchDelta;
+          balance.matchedPoints += pointsDelta;
 
-        if (salesmatchDelta > 0) {
-          await this.postLedgerIfNeeded({
-            userId: profile.userId,
-            entryType: 'salesmatch',
-            sourceReference: item.payload.createdMemberUsername,
-            creditAmount: salesmatchDelta,
-            processId: `${item.processId}:salesmatch:${profile.userId}:${matchedSalesAfter}`,
-            notes: `Salesmatch delta from ${item.payload.createdMemberUsername}.`
-          });
+          // Reduce both legs by the matched amount — weak leg zeroes out, strong leg carries forward residual.
+          if (salesmatchDelta > 0) {
+            balance.leftSales -= salesmatchDelta;
+            balance.rightSales -= salesmatchDelta;
+            balance.leftPoints -= pointsDelta;
+            balance.rightPoints -= pointsDelta;
+            network.leftPoints = Math.max(0, network.leftPoints - pointsDelta);
+            network.rightPoints = Math.max(0, network.rightPoints - pointsDelta);
+          }
 
-          // Binary cycle fires on the salesmatch delta. The upstream gate (eligibleForBinaryPV
-          // in submitRegistration) ensures only PD and CD Paid accounts generate the binary PV
-          // that produces the salesmatch delta in the first place. FS and CD Unpaid accounts
-          // never reach this path because they were never enqueued.
-          const packageConfig = getPackageConfig(profile.packageTier);
-          if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
-            const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+          await this.repo.saveNetworkAccount(network);
+          await this.repo.saveSalesmatchBalance(balance);
+
+          if (salesmatchDelta > 0) {
             await this.postLedgerIfNeeded({
               userId: profile.userId,
-              entryType: 'binary_cycle',
+              entryType: 'salesmatch',
               sourceReference: item.payload.createdMemberUsername,
-              creditAmount: binaryCredit,
-              processId: `${item.processId}:binary:${profile.userId}:${matchedPointsAfter}:${pointsDelta}`,
-              notes: `Binary cycle delta from ${item.payload.createdMemberUsername}.`
+              creditAmount: salesmatchDelta,
+              processId: `${item.processId}:salesmatch:${profile.userId}:${balance.matchedSales}`,
+              notes: `Salesmatch delta from ${item.payload.createdMemberUsername}.`
             });
+
+            // Binary cycle fires on the salesmatch delta. Source eligibility is
+            // enforced upstream (only PD / settled-CD entries enqueue PV) and
+            // recipient eligibility above.
+            const packageConfig = getPackageConfig(profile.packageTier);
+            if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
+              const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+              await this.postLedgerIfNeeded({
+                userId: profile.userId,
+                entryType: 'binary_cycle',
+                sourceReference: item.payload.createdMemberUsername,
+                creditAmount: binaryCredit,
+                processId: `${item.processId}:binary:${profile.userId}:${balance.matchedPoints}:${pointsDelta}`,
+                notes: `Binary cycle delta from ${item.payload.createdMemberUsername}.`
+              });
+            }
           }
         }
 
@@ -2058,6 +2070,39 @@ export class ProductionEncodingService {
       createdAt: input.createdAt,
       processedAt: null
     };
+  }
+
+  // Nogatu binaryEligibility parity: the first pairing payout unlocks only when
+  // the member has personally sponsored at least one qualified (PD / settled-CD)
+  // direct that is placed inside their own binary subtree.
+  private async hasQualifiedPersonalDirectInSubtree(ownerUserId: string): Promise<boolean> {
+    const directs = await this.repo.listDirectsBySponsor(ownerUserId);
+    for (const direct of directs) {
+      if (direct.registrationStatus !== 'active') {
+        continue;
+      }
+      if (!countsForPairingSource(this.networkAccountState(direct))) {
+        continue;
+      }
+      if (await this.isPlacedWithinSubtree(direct.userId, ownerUserId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async isPlacedWithinSubtree(nodeUserId: string, ancestorUserId: string): Promise<boolean> {
+    const MAX_TREE_DEPTH = 200;
+    let current = await this.repo.findNetworkAccountByUserId(nodeUserId);
+    let depth = 0;
+    while (current?.placementParentUserId && depth < MAX_TREE_DEPTH) {
+      if (current.placementParentUserId === ancestorUserId) {
+        return true;
+      }
+      current = await this.repo.findNetworkAccountByUserId(current.placementParentUserId);
+      depth += 1;
+    }
+    return false;
   }
 
   // Counts only eligibility-qualified same-package directs (PD / fully-settled CD).

@@ -61,8 +61,10 @@ function seedNetwork(
     directReferrerUserId: sponsorUserId,
     placementParentUserId,
     placementSide,
-    currentAccountTypeCode: packageTier === 'Business' || packageTier === 'VIP' ? 2 : 1,
-    currentAccountType: packageTier === 'Business' || packageTier === 'VIP' ? 'FS' : 'PD',
+    // Matrix sponsors are PD accounts on every tier: this suite verifies payout
+    // values; recipient eligibility (FS/CD gating) is covered in encoding-service tests.
+    currentAccountTypeCode: 1,
+    currentAccountType: 'PD',
     packageTier,
     activationCode: null,
     registrationStatus: 'active',

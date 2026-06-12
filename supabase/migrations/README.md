@@ -29,3 +29,4 @@ supabase db push
 | `0001_baseline_note.sql` | Marks `schema.sql` (2026-06-12 state) as the applied baseline |
 | `0002_encashments_and_settlement.sql` | Encashment workflow table, CD settlement audit, cap tracking, retainer ledger type |
 | `0003_settled_event_action.sql` | `settled` action for activation-code events |
+| `0004_code_normalization_audit.sql` | Audit table for identity/code normalization runs |

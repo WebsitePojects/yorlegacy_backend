@@ -12,7 +12,7 @@ import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { MoneyMode, SessionUser } from '../../types/auth.js';
-import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
+import { buildCanonicalReferralCode, decodeReferralCode, encodeReferralCode } from '../../lib/referral-utils.js';
 import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
@@ -2447,7 +2447,7 @@ export class ProductionEncodingService {
   }
 
   private buildReferralCode(sequence: number) {
-    return encodeReferralCode(this.buildUsername(sequence));
+    return buildCanonicalReferralCode(this.buildUsername(sequence));
   }
 
   private async requireUserById(userId: string) {

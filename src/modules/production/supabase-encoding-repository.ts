@@ -154,7 +154,9 @@ function mapCodeRow(row: ActivationCodeRow): ProductionActivationCode {
     lockedBinaryPoints: Number(row.locked_binary_points ?? 0),
     lockedGetFiveAmount: Number(row.locked_get_five_amount ?? 0),
     processId: row.process_id ?? '',
-    remarks: row.remarks ?? ''
+    remarks: row.remarks ?? '',
+    settledAt: row.settled_at ?? null,
+    settledByUserId: row.settled_by_user_id ?? null
   };
 }
 
@@ -325,7 +327,9 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           locked_binary_points: row.lockedBinaryPoints,
           locked_get_five_amount: row.lockedGetFiveAmount,
           process_id: row.processId,
-          remarks: row.remarks
+          remarks: row.remarks,
+          settled_at: row.settledAt,
+          settled_by_user_id: row.settledByUserId
         })),
         { onConflict: 'id' }
       );

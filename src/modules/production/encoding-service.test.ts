@@ -98,7 +98,9 @@ function seedCode(overrides: Partial<ProductionActivationCode> = {}): Production
     lockedBinaryPoints: overrides.lockedBinaryPoints ?? 50,
     lockedGetFiveAmount: overrides.lockedGetFiveAmount ?? 25998,
     processId: overrides.processId ?? 'seed:code:1',
-    remarks: overrides.remarks ?? ''
+    remarks: overrides.remarks ?? '',
+    settledAt: overrides.settledAt ?? null,
+    settledByUserId: overrides.settledByUserId ?? null
   };
 }
 
@@ -398,6 +400,122 @@ describe('ProductionEncodingService', () => {
     const createdUser = await repo.findUserByUsername('YOR9002');
     const createdNetwork = await repo.findNetworkAccountByUserId(createdUser!.id);
     expect(createdNetwork).toMatchObject({ currentAccountType: 'CD', cdAmount: 25998, cdTotal: 0, cdStatus: 1 });
+  });
+
+  it('settling a used CD code fires the deferred DR and queues PV exactly once', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser, seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009003',
+          packageTier: 'Standard',
+          accountType: 'CD',
+          paymentStatus: 'unpaid'
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const admin = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Credit Prospect',
+        username: 'YOR9003',
+        phone: '+63 999 777 7777',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009003',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+    expect((await repo.listWalletLedgerEntriesForUser('sponsor-user')).length).toBe(0);
+
+    const settle = await service.settleActivationCode(admin, 'YOR-ACT-00009003', 'paid');
+    expect(settle.status).toBe('completed');
+
+    const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    const drEntries = ledger.filter((entry) => entry.entryType === 'direct_referral');
+    expect(drEntries).toHaveLength(1);
+    expect(drEntries[0].creditAmount).toBe(5000);
+
+    const queue = await repo.listPendingCompensation(10);
+    expect(queue).toHaveLength(1);
+    expect(queue[0].payload.salesmatchValue).toBe(2500);
+
+    const createdUser = await repo.findUserByUsername('YOR9003');
+    const createdNetwork = await repo.findNetworkAccountByUserId(createdUser!.id);
+    expect(createdNetwork).toMatchObject({ cdStatus: 2, cdTotal: 25998 });
+
+    const replay = await service.settleActivationCode(admin, 'YOR-ACT-00009003', 'paid');
+    expect(replay.reason).toContain('already settled');
+    expect((await repo.listWalletLedgerEntriesForUser('sponsor-user')).filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(1);
+    expect(await repo.listPendingCompensation(10)).toHaveLength(1);
+  });
+
+  it('settling an FS code flips payment status but never fires DR or PV', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser, seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009004',
+          packageTier: 'Business',
+          accountType: 'FS',
+          paymentStatus: 'unpaid'
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const admin = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Free Slot Prospect',
+        username: 'YOR9004',
+        phone: '+63 999 888 8888',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009004',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'right'
+      }
+    );
+
+    await service.settleActivationCode(admin, 'YOR-ACT-00009004', 'externally-paid');
+
+    const code = await repo.findActivationCodeByCode('YOR-ACT-00009004');
+    expect(code?.paymentStatus).toBe('externally-paid');
+    expect((await repo.listWalletLedgerEntriesForUser('sponsor-user')).filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(0);
+    expect(await repo.listPendingCompensation(10)).toHaveLength(0);
+  });
+
+  it('settling an unused available code only flips payment status', async () => {
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')],
+      activationCodes: [seedCode({ code: 'YOR-ACT-00009005', paymentStatus: 'unpaid' })]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const settle = await service.settleActivationCode(
+      { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' },
+      'YOR-ACT-00009005',
+      'paid'
+    );
+    expect(settle.status).toBe('completed');
+
+    const code = await repo.findActivationCodeByCode('YOR-ACT-00009005');
+    expect(code?.paymentStatus).toBe('paid');
+    expect(await repo.listPendingCompensation(10)).toHaveLength(0);
   });
 
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {

@@ -8,7 +8,7 @@ export type PlacementSide = 'left' | 'right';
 
 export type ActivationCodeStatus = 'unreleased' | 'available' | 'assigned' | 'used' | 'disabled';
 export type ActivationCodePaymentStatus = 'unpaid' | 'paid' | 'externally-paid';
-export type ActivationCodeEventAction = 'generated' | 'released' | 'transferred' | 'consumed';
+export type ActivationCodeEventAction = 'generated' | 'released' | 'transferred' | 'consumed' | 'settled' | 'revoked' | 'restored';
 
 export type TreeLeg = 'left' | 'right' | 'self';
 export type ShadowAccountState = 'reserved_shadow' | 'activated_shadow' | 'converted_full';
@@ -184,6 +184,8 @@ export interface ActivationCodeRow {
   locked_binary_points: number;
   locked_get_five_amount: number;
   remarks: string;
+  settled_at: string | null;
+  settled_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }

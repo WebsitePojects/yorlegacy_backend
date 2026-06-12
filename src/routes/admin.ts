@@ -222,6 +222,32 @@ adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'c
   }));
 });
 
+// Settlement is a finance action: admin/BOD/superadmin only — cashier is
+// limited to release/transfer/name-correction per the approved role matrix.
+adminRouter.post('/api/admin/activation-codes/settle', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  const mode = req.body?.mode === 'externally-paid' ? 'externally-paid' : req.body?.mode === 'paid' ? 'paid' : null;
+  if (!code || !mode) {
+    res.status(400).json({ message: 'Provide a code and a settlement mode (paid or externally-paid).' });
+    return;
+  }
+
+  if (!isProductionMode()) {
+    res.status(400).json({ message: 'Code settlement is only available in production mode.' });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.settleActivationCode(req.authUser!, code, mode));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to settle activation code.' });
+  }
+});
+
 adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')

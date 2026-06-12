@@ -139,13 +139,15 @@ export type ProductionActivationCode = {
   lockedGetFiveAmount: number;
   processId: string;
   remarks: string;
+  settledAt: string | null;
+  settledByUserId: string | null;
 };
 
 export type ProductionActivationCodeEvent = {
   id: string;
   activationCodeId: string;
   code: string;
-  action: 'generated' | 'released' | 'transferred' | 'consumed';
+  action: 'generated' | 'released' | 'transferred' | 'consumed' | 'settled' | 'revoked' | 'restored';
   actorUserId: string | null;
   actorName: string;
   fromUserId: string | null;
@@ -1496,7 +1498,9 @@ export class ProductionEncodingService {
         lockedBinaryPoints: packageConfig.binaryPoints,
         lockedGetFiveAmount: packageConfig.getFiveAmount,
         processId: buildProcessId('code-generate', String(seq)),
-        remarks: input.remarks?.trim() || 'Generated for production encoding flow.'
+        remarks: input.remarks?.trim() || 'Generated for production encoding flow.',
+        settledAt: null,
+        settledByUserId: null
       };
       rows.push(row);
       events.push({
@@ -1603,6 +1607,102 @@ export class ProductionEncodingService {
       status: 'completed' as const,
       reason: `Transferred ${selected.length} activation code(s) to ${target.username}.`
     };
+  }
+
+  async settleActivationCode(actor: SessionUser, codeValue: string, mode: 'paid' | 'externally-paid') {
+    const code = await this.repo.findActivationCodeByCode(codeValue);
+    if (!code) {
+      throw new Error('Activation code not found.');
+    }
+    if (code.paymentStatus !== 'unpaid') {
+      return {
+        moneyMode: this.repo.getMoneyMode(),
+        action: 'admin-settle-activation-code',
+        status: 'completed' as const,
+        reason: `${code.code} is already settled.`
+      };
+    }
+
+    await this.applyCodeSettlement(code, mode, { actorUserId: actor.id, actorName: actor.name, note: `Payment settled (${mode}).` });
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      action: 'admin-settle-activation-code',
+      status: 'completed' as const,
+      reason: `Settled ${code.code} (${mode}).`
+    };
+  }
+
+  // Shared settlement effects, used by the admin settle action and by CD
+  // recovery completion during encashment. Fires the deferred DR and binary PV
+  // for consumed, non-FS entries using the same process keys as registration,
+  // so each posting happens at most once regardless of which path runs first.
+  private async applyCodeSettlement(
+    code: ProductionActivationCode,
+    mode: 'paid' | 'externally-paid',
+    audit: { actorUserId: string | null; actorName: string; note: string }
+  ) {
+    const settledAt = this.repo.now();
+    code.paymentStatus = mode;
+    code.settledAt = settledAt;
+    code.settledByUserId = audit.actorUserId;
+    await this.repo.saveActivationCodes([code]);
+    await this.repo.appendActivationCodeEvents([
+      {
+        id: crypto.randomUUID(),
+        activationCodeId: code.id,
+        code: code.code,
+        action: 'settled',
+        actorUserId: audit.actorUserId,
+        actorName: audit.actorName,
+        fromUserId: null,
+        toUserId: code.usedByUserId ?? code.assignedUserId,
+        notes: audit.note,
+        createdAt: settledAt
+      }
+    ]);
+
+    // GATE-BIN-PV-PDCD-20260612: FS stays FS forever — settlement never grants
+    // FS entries DR or binary PV rights.
+    if (code.status !== 'used' || !code.usedByUserId || code.accountType === 'FS') {
+      return;
+    }
+
+    const network = await this.repo.findNetworkAccountByUserId(code.usedByUserId);
+    const member = await this.repo.findMemberByUserId(code.usedByUserId);
+    if (!network || !member) {
+      return;
+    }
+
+    // Mark the obligation settled before posting so qualified-direct counting
+    // sees the new state (settled outside deduction keeps the recovery audit).
+    network.cdStatus = CD_STATUS_SETTLED;
+    network.cdTotal = Math.max(network.cdTotal, network.cdAmount);
+    await this.repo.saveNetworkAccount(network);
+
+    if (network.sponsorUserId) {
+      await this.postRegistrationDirectAndGetFive({
+        sponsorUserId: network.sponsorUserId,
+        newMemberUserId: code.usedByUserId,
+        newMemberUsername: member.username,
+        code,
+        packageTier: network.packageTier
+      });
+    }
+
+    if (network.placementParentUserId) {
+      await this.repo.enqueueCompensation(
+        this.buildPlacementSalesQueueItem({
+          newMemberUserId: code.usedByUserId,
+          newMemberUsername: member.username,
+          code,
+          placementParentUserId: network.placementParentUserId,
+          placementParentShadowSide: network.placementParentShadowSide ?? null,
+          placementSide: network.placementSide ?? 'left',
+          createdAt: settledAt
+        })
+      );
+    }
   }
 
   async buildMemberWalletData(userId: string, encashAmount?: number) {

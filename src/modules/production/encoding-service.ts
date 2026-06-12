@@ -8,7 +8,7 @@ import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
 export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR VISION';
-export type AccountType = 'PD' | 'FS';
+export type AccountType = 'PD' | 'FS' | 'CD';
 export type ActivationCodeStatus = 'unreleased' | 'available' | 'used' | 'disabled';
 export type PaymentStatus = 'unpaid' | 'paid' | 'externally-paid';
 export type PlacementSide = 'left' | 'right';
@@ -97,6 +97,7 @@ export type ProductionNetworkAccount = {
   registrationStatus: 'pending' | 'active' | 'disabled';
   leftPoints: number;
   rightPoints: number;
+  cdStatus: number;
   createdAt: string;
 };
 
@@ -344,7 +345,7 @@ type ProductionGenealogyNode = {
       note: string;
     };
   };
-  accountStateLabel: 'PD' | 'FS' | 'CD - Paid';
+  accountStateLabel: 'PD' | 'FS' | 'CD - Paid' | 'CD - Unpaid';
   children: ProductionGenealogyNode[];
 };
 
@@ -590,12 +591,11 @@ export class ProductionEncodingService {
       note: `Reserved ${placement} shadow support under ${owner.username}.`
     });
 
-    const toAccountStateLabel = (network: ProductionNetworkAccount | null): 'PD' | 'FS' | 'CD - Paid' => {
-      if (!network) {
-        return 'PD';
-      }
-      if (network.currentAccountType === 'FS') {
-        return 'FS';
+    const toAccountStateLabel = (network: ProductionNetworkAccount | null): 'PD' | 'FS' | 'CD - Paid' | 'CD - Unpaid' => {
+      if (!network) return 'PD';
+      if (network.currentAccountType === 'FS') return 'FS';
+      if (network.currentAccountType === 'CD') {
+        return network.cdStatus > 0 ? 'CD - Paid' : 'CD - Unpaid';
       }
       return 'PD';
     };
@@ -889,8 +889,9 @@ export class ProductionEncodingService {
   async buildAdminActivationCodeCenter(actorRole?: string) {
     const [codes, members] = await Promise.all([this.repo.listActivationCodes(), this.repo.listMembers()]);
     const memberByUserId = new Map(members.map((item) => [item.userId, item]));
-    const isLooseCode = (code: ProductionActivationCode) => code.status === 'unreleased' && !code.assignedUserId;
-    const filteredCodes = (actorRole === 'cashier') ? codes : codes.filter(code => !isLooseCode(code));
+    const isLooseRegistrationCode = (code: ProductionActivationCode) =>
+      code.codeFamily === 'YOR CODES' && code.status === 'unreleased' && !code.assignedUserId;
+    const filteredCodes = actorRole === 'cashier' ? codes : codes.filter((code) => !isLooseRegistrationCode(code));
     const inventory = filteredCodes
       .map((code) => {
         const assigned = code.assignedUserId ? memberByUserId.get(code.assignedUserId)?.username ?? 'Unassigned' : 'Unassigned';
@@ -1218,6 +1219,7 @@ export class ProductionEncodingService {
       registrationStatus: 'active',
       leftPoints: 0,
       rightPoints: 0,
+      cdStatus: 0,
       createdAt
     };
 
@@ -1268,9 +1270,10 @@ export class ProductionEncodingService {
       });
     }
 
-    // Only PD accounts with a paid code generate binary PV to uplines.
-    // FS accounts (Business/VIP on credit) and unpaid-code accounts do not propagate binary points.
-    const eligibleForBinaryPV = matchingCode.accountType !== 'FS' && matchingCode.paymentStatus !== 'unpaid';
+    // GATE-BIN-PV-FS-2026-06-12: FS paid/externally-paid accounts are eligible for binary pairing.
+    // Only unpaid codes (any account type — PD, FS, CD) are excluded from generating binary PV.
+    // Eligible pairings: PD+PD, FS+FS, CD Paid+FS, CD Paid+CD Paid, PD+FS, PD+CD Paid.
+    const eligibleForBinaryPV = matchingCode.paymentStatus !== 'unpaid';
     let queuedProcessIds: string[] = [];
 
     if (eligibleForBinaryPV) {
@@ -1311,7 +1314,7 @@ export class ProductionEncodingService {
       reason: 'Production registration committed and downstream compensation queued.',
       detail: eligibleForBinaryPV
         ? `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`
-        : `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral. Binary PV not queued: ${matchingCode.accountType === 'FS' ? 'FS account' : 'unpaid code'} is not eligible to generate binary points.`,
+        : `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral. Binary PV not queued: unpaid code is not eligible to generate binary points.`,
       placementReservationId: preview.placementReservationId,
       queuedCompensation: queuedProcessIds,
       createdMember: {
@@ -1404,6 +1407,10 @@ export class ProductionEncodingService {
             notes: `Salesmatch delta from ${item.payload.createdMemberUsername}.`
           });
 
+          // Binary cycle fires on the salesmatch delta. The upstream gate (eligibleForBinaryPV
+          // in submitRegistration) ensures only PD and CD Paid accounts generate the binary PV
+          // that produces the salesmatch delta in the first place. FS and CD Unpaid accounts
+          // never reach this path because they were never enqueued.
           const packageConfig = getPackageConfig(profile.packageTier);
           if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
             const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));

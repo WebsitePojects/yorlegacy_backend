@@ -2,16 +2,16 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-11T03:59:45.081Z",
-    "lastMutationAt": "2026-06-11T03:59:45.375Z"
+    "lastResetAt": "2026-06-11T21:34:06.123Z",
+    "lastMutationAt": "2026-06-11T21:34:06.382Z"
   },
   "users": [
     {
       "id": "yor-member-demo",
       "role": "member",
       "name": "Yor Member",
-      "email": "member@yor.local",
-      "passwordHash": "7b271baa5abfcfc78d2779cff2ea256332dfc4327d0d0dafcae60729d34d2229dddae52c17ead7e756767eb0a82345645108ce42eb504d5c382f019edc6e3505",
+      "email": "yor01@yor.local",
+      "passwordHash": "933fa181d6655628d37cdf50217769329ecb6a2d7355e62efe3edea741ccc19439900e57437f5a3349eaff419a23a1f0b82b95a725644b5fe22035ad4b67575f",
       "passwordSalt": "ba43c72b000c8a310deced20454ebeb2",
       "status": "active"
     },
@@ -19,8 +19,8 @@
       "id": "yor-admin-demo",
       "role": "admin",
       "name": "Yor Admin",
-      "email": "admin@yor.local",
-      "passwordHash": "a43b96a757b46a35ad953fb441614e801a64669c3203fb24746aa23c8c0bed3c1b8ecd1667cbfacdfeb2826ed89837df8927c6fbb615087e3b9fbb83668810d0",
+      "email": "yoradmin@yor.local",
+      "passwordHash": "eccab110e0008e45e9c331e32cf98746abc17c0cbe2b959edac015ffdd818c453699eb719f25c747cc4299b946dba274eda0c2dc90bdbe264ccbf5107b48bccf",
       "passwordSalt": "ca2e6d6a23f52dbc1de66ef9e105091a",
       "status": "active"
     },
@@ -28,8 +28,8 @@
       "id": "yor-cashier-demo",
       "role": "cashier",
       "name": "Yor Cashier",
-      "email": "cashier@yor.local",
-      "passwordHash": "d3b75ed04eb1125436cbb9b3df4c49f4342965785f5bee7a6868aa02487d4285d8fd4d6ae5bee023080b866740c4444b2687b0f51442da1471070145fa97136a",
+      "email": "yorcashier@yor.local",
+      "passwordHash": "f00f94161e2ce4e40181aae9d4f0ba624d6a350330df4eb27d9aa13774d986be8acac10b3f3629ed7c1a218968bc95c825c1d6f46488c136b8346fbfa19a5c30",
       "passwordSalt": "7d85fda79bc1f818d8d50f804f79ac1e",
       "status": "active"
     },
@@ -37,8 +37,8 @@
       "id": "yor-bod-demo",
       "role": "bod",
       "name": "Yoren Abihay - BOD",
-      "email": "bod@yor.local",
-      "passwordHash": "3d33201f37e3b811593698a2e771bfe9310472d5021c6329d0b65fd4cac970042bb0fc467e2636977d87921db8cb9b8dc83b7bcce6e6ba650e9ede8e43846326",
+      "email": "yorbod@yor.local",
+      "passwordHash": "a6ece2ee319d2401f1f75c765887969c9a6218ad4e2cf763e69659885e13acea98ae7efbae02078e9b4fbf6209b1bf218cb8c5ed93966c8edcfb19747cfe4aed",
       "passwordSalt": "89163257b38b2ef817bdbf4c149ce163",
       "status": "active"
     },
@@ -46,7 +46,7 @@
       "id": "yor-superadmin-demo",
       "role": "superadmin",
       "name": "Yor Super Admin",
-      "email": "yoradmin@gmail.com",
+      "email": "yorsuperadmin@yor.local",
       "passwordHash": "de03724d3e0a945fc1f8a1cb73d69ae16e445f7c92d0710e589de9196e806b433fff0fa683d7e2a1f19bc4373db76366e2fbe9269e6542659b9f55874117050a",
       "passwordSalt": "1ce26b792208c87bc68727308f18d209",
       "status": "active"
@@ -82,7 +82,7 @@
       "firstName": "Yor",
       "lastName": "Company01",
       "middleName": "",
-      "email": "member@yor.local",
+      "email": "yor01@yor.local",
       "phone": "+63 900 000 0001",
       "address": "Makati City, Metro Manila",
       "packageTier": "Standard",
@@ -485,7 +485,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-11T03:59:45.081Z"
+      "occurredAt": "2026-06-11T21:34:06.123Z"
     }
   ]
 }

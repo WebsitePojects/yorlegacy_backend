@@ -45,7 +45,17 @@ export const env =
         SUPABASE_PUBLISHABLE_KEY: undefined,
         SUPABASE_ANON_KEY: undefined,
         SUPABASE_SECRET_KEY: undefined,
-        SUPABASE_SERVICE_ROLE_KEY: undefined
+        SUPABASE_SERVICE_ROLE_KEY: undefined,
+        DEMO_MEMBER_EMAIL: 'yor01@yor.local',
+        DEMO_MEMBER_PASSWORD: '1',
+        DEMO_ADMIN_EMAIL: 'yoradmin@yor.local',
+        DEMO_ADMIN_PASSWORD: '1',
+        DEMO_CASHIER_EMAIL: 'yorcashier@yor.local',
+        DEMO_CASHIER_PASSWORD: '1',
+        DEMO_BOD_EMAIL: 'yorbod@yor.local',
+        DEMO_BOD_PASSWORD: '1',
+        DEMO_SUPERADMIN_EMAIL: 'yorsuperadmin@yor.local',
+        DEMO_SUPERADMIN_PASSWORD: '1'
       }
     : parsedEnv;
 

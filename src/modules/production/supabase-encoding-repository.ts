@@ -11,12 +11,71 @@ import type {
   ProductionSalesmatchBalance,
   ProductionWalletLedgerEntry
 } from './encoding-service.js';
+import type {
+  ActivationCodeEventRow,
+  ActivationCodeRow,
+  AppUserRow,
+  CompensationQueueRow,
+  MemberProfileRow,
+  NetworkAccountRow,
+  PlacementReservationRow,
+  SalesmatchBalanceRow,
+  WalletLedgerRow
+} from '../../types/db';
 
 function isoNow() {
   return new Date().toISOString();
 }
 
-function mapUserRow(row: any): ProductionAppUser {
+function mapDbText(value: string | null): string {
+  return value as string;
+}
+
+function mapMemberPackageTier(value: string | null): ProductionMemberProfile['packageTier'] {
+  return value as ProductionMemberProfile['packageTier'];
+}
+
+function mapMemberAccountStatus(value: string): ProductionMemberProfile['accountStatus'] {
+  return value as ProductionMemberProfile['accountStatus'];
+}
+
+function mapNetworkAccountType(value: string | null): ProductionNetworkAccount['currentAccountType'] {
+  return value as ProductionNetworkAccount['currentAccountType'];
+}
+
+function mapNetworkRegistrationStatus(value: NetworkAccountRow['registration_status']): ProductionNetworkAccount['registrationStatus'] {
+  return value as ProductionNetworkAccount['registrationStatus'];
+}
+
+function mapCodeFamily(value: string): ProductionActivationCode['codeFamily'] {
+  return value as ProductionActivationCode['codeFamily'];
+}
+
+function mapCodeAccountType(value: string | null): ProductionActivationCode['accountType'] {
+  return value as ProductionActivationCode['accountType'];
+}
+
+function mapCodeStatus(value: ActivationCodeRow['status']): ProductionActivationCode['status'] {
+  return value as ProductionActivationCode['status'];
+}
+
+function mapWalletType(value: string): ProductionWalletLedgerEntry['walletType'] {
+  return value as ProductionWalletLedgerEntry['walletType'];
+}
+
+function mapWalletEntryType(value: WalletLedgerRow['entry_type']): ProductionWalletLedgerEntry['entryType'] {
+  return value as ProductionWalletLedgerEntry['entryType'];
+}
+
+function mapWalletStatus(value: WalletLedgerRow['status']): ProductionWalletLedgerEntry['status'] {
+  return value as ProductionWalletLedgerEntry['status'];
+}
+
+function mapQueuePayload(value: CompensationQueueRow['payload']): ProductionCompensationQueueItem['payload'] {
+  return value as ProductionCompensationQueueItem['payload'];
+}
+
+function mapUserRow(row: AppUserRow): ProductionAppUser {
   return {
     id: row.id,
     email: row.email,
@@ -29,14 +88,14 @@ function mapUserRow(row: any): ProductionAppUser {
   };
 }
 
-function mapMemberRow(row: any): ProductionMemberProfile {
+function mapMemberRow(row: MemberProfileRow): ProductionMemberProfile {
   return {
     userId: row.user_id,
-    username: row.username,
-    referralCode: row.referral_code,
+    username: mapDbText(row.username),
+    referralCode: mapDbText(row.referral_code),
     sponsorCode: row.sponsor_code,
-    packageTier: row.package_tier,
-    accountStatus: row.account_status,
+    packageTier: mapMemberPackageTier(row.package_tier),
+    accountStatus: mapMemberAccountStatus(row.account_status),
     fullName:
       row.full_name ??
       [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
@@ -51,7 +110,7 @@ function mapMemberRow(row: any): ProductionMemberProfile {
   };
 }
 
-function mapNetworkRow(row: any): ProductionNetworkAccount {
+function mapNetworkRow(row: NetworkAccountRow): ProductionNetworkAccount {
   return {
     userId: row.user_id,
     sponsorUserId: row.sponsor_user_id,
@@ -60,24 +119,25 @@ function mapNetworkRow(row: any): ProductionNetworkAccount {
     placementParentShadowSide: row.placement_parent_shadow_side,
     placementSide: row.placement_side,
     currentAccountTypeCode: row.current_account_type_code ?? 0,
-    currentAccountType: row.current_account_type ?? 'PD',
-    packageTier: row.package_tier,
+    currentAccountType: mapNetworkAccountType(row.current_account_type ?? 'PD'),
+    packageTier: mapMemberPackageTier(row.package_tier),
     activationCode: row.activation_code,
-    registrationStatus: row.registration_status,
+    registrationStatus: mapNetworkRegistrationStatus(row.registration_status),
     leftPoints: row.left_points ?? 0,
     rightPoints: row.right_points ?? 0,
+    cdStatus: row.cd_status ?? 0,
     createdAt: row.created_at ?? isoNow()
   };
 }
 
-function mapCodeRow(row: any): ProductionActivationCode {
+function mapCodeRow(row: ActivationCodeRow): ProductionActivationCode {
   return {
     id: row.id,
     code: row.code,
-    codeFamily: row.code_family,
-    packageTier: row.package_tier,
-    accountType: row.account_type,
-    status: row.status,
+    codeFamily: mapCodeFamily(row.code_family),
+    packageTier: mapDbText(row.package_tier),
+    accountType: mapCodeAccountType(row.account_type),
+    status: mapCodeStatus(row.status),
     paymentStatus: row.payment_status,
     assignedUserId: row.assigned_user_id,
     generatedByUserId: row.generated_by_user_id,
@@ -96,7 +156,7 @@ function mapCodeRow(row: any): ProductionActivationCode {
   };
 }
 
-function mapCodeEventRow(row: any): ProductionActivationCodeEvent {
+function mapCodeEventRow(row: ActivationCodeEventRow): ProductionActivationCodeEvent {
   return {
     id: row.id,
     activationCodeId: row.activation_code_id,
@@ -111,12 +171,12 @@ function mapCodeEventRow(row: any): ProductionActivationCodeEvent {
   };
 }
 
-function mapWalletRow(row: any): ProductionWalletLedgerEntry {
+function mapWalletRow(row: WalletLedgerRow): ProductionWalletLedgerEntry {
   return {
     id: row.id,
     userId: row.user_id,
-    walletType: row.wallet_type ?? 'main',
-    entryType: row.entry_type,
+    walletType: mapWalletType(row.wallet_type ?? 'main'),
+    entryType: mapWalletEntryType(row.entry_type),
     sourceReference: row.source_reference ?? '',
     creditAmount: Number(row.credit_amount ?? 0),
     debitAmount: Number(row.debit_amount ?? 0),
@@ -124,11 +184,11 @@ function mapWalletRow(row: any): ProductionWalletLedgerEntry {
     processId: row.process_id ?? '',
     notes: row.notes ?? '',
     occurredAt: row.occurred_at ?? isoNow(),
-    status: row.status ?? 'posted'
+    status: mapWalletStatus(row.status ?? 'posted')
   };
 }
 
-function mapReservationRow(row: any): ProductionPlacementReservation {
+function mapReservationRow(row: PlacementReservationRow): ProductionPlacementReservation {
   return {
     id: row.id,
     sponsorUserId: row.sponsor_user_id,
@@ -144,7 +204,7 @@ function mapReservationRow(row: any): ProductionPlacementReservation {
   };
 }
 
-function mapSalesmatchRow(row: any): ProductionSalesmatchBalance {
+function mapSalesmatchRow(row: SalesmatchBalanceRow): ProductionSalesmatchBalance {
   return {
     userId: row.user_id,
     leftSales: Number(row.left_sales ?? 0),
@@ -157,13 +217,13 @@ function mapSalesmatchRow(row: any): ProductionSalesmatchBalance {
   };
 }
 
-function mapQueueRow(row: any): ProductionCompensationQueueItem {
+function mapQueueRow(row: CompensationQueueRow): ProductionCompensationQueueItem {
   return {
     id: row.id,
     processId: row.process_id,
     eventType: row.event_type,
     status: row.status,
-    payload: row.payload,
+    payload: mapQueuePayload(row.payload),
     createdAt: row.created_at ?? isoNow(),
     processedAt: row.processed_at
   };

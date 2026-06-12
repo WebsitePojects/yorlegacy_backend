@@ -68,6 +68,7 @@ function seedNetwork(
     registrationStatus: 'active',
     leftPoints: 0,
     rightPoints: 0,
+    cdStatus: 0,
     createdAt: '2026-06-08T09:00:00.000Z'
   };
 }
@@ -151,6 +152,7 @@ describe('Production encoding compensation matrix', () => {
         { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' },
         [generatedCode.code]
       );
+      await repo.saveActivationCodes([{ ...generatedCode, status: 'available', paymentStatus: 'paid' }]);
 
       const reservation = await service.createPlacementReservation(
         { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },

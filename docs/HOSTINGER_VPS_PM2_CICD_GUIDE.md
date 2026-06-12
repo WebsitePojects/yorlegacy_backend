@@ -17,6 +17,12 @@ Important:
 - the VPS cannot clone it anonymously over HTTPS
 - this guide uses a fine-grained GitHub token with read-only repo access
 
+## Related Guides
+
+For Supabase environment alignment and production-to-dev database mirroring, use:
+
+- [SUPABASE_PROD_DEV_MIRROR_GUIDE.md](C:/Users/Win10/Desktop/YorLegacyMLM/yor_backend/docs/SUPABASE_PROD_DEV_MIRROR_GUIDE.md)
+
 ## 1. Hostinger DNS
 
 Before the server commands, add this DNS record in Hostinger for `yorinternational.net`:

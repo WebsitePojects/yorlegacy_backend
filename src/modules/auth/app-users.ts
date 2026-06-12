@@ -7,31 +7,7 @@ import {
   isSandboxMode
 } from '../sandbox/dev-sandbox-store.js';
 import type { AppRole, SessionUser } from '../../types/auth';
-
-type AppUserRow = {
-  id: string;
-  email: string;
-  display_name: string;
-  role: AppRole;
-  status: string;
-  password_hash: string;
-  password_salt: string;
-};
-
-type MemberProfileRow = {
-  referral_code: string | null;
-  sponsor_code: string | null;
-  package_tier: string | null;
-  account_status: string | null;
-  username: string | null;
-  full_name: string | null;
-  payout_method: string | null;
-};
-
-type AdminProfileRow = {
-  access_scope: string | null;
-  office_title: string | null;
-};
+import type { AdminProfileRow, AppUserRow, MemberProfileRow } from '../../types/db';
 
 export type PersistedUser = SessionUser & {
   passwordHash: string;
@@ -168,7 +144,7 @@ export async function findAppUserByUsername(
       }
     }
 
-    // 3. Final fallback: match admin/staff users by email prefix (username@domain)
+    // 3. Match admin/staff users by email prefix (username@domain)
     const { data: prefixUser } = await supabase
       .from('app_users')
       .select('id,email,display_name,role,status,password_hash,password_salt')
@@ -177,6 +153,17 @@ export async function findAppUserByUsername(
 
     if (prefixUser) {
       return toSessionUser(prefixUser);
+    }
+
+    // 4. Exact email match — covers staff accounts stored with username-as-email (no domain)
+    const { data: exactUser } = await supabase
+      .from('app_users')
+      .select('id,email,display_name,role,status,password_hash,password_salt')
+      .ilike('email', username.trim())
+      .maybeSingle<AppUserRow>();
+
+    if (exactUser) {
+      return toSessionUser(exactUser);
     }
   } else {
     const { data: appUser, error: appUserError } = await supabase

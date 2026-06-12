@@ -59,6 +59,30 @@ const demoUsers: (DemoUserRecord & { username: string })[] = [
     email: 'yor01@gmail.com',
     username: 'yor01',
     password: '1'
+  },
+  {
+    id: 'yor-member-legacy-alias-demo',
+    role: 'member',
+    name: 'Yor Company01',
+    email: 'yormember@gmail.com',
+    username: 'yormember',
+    password: '1'
+  },
+  {
+    id: 'yor-cashier-legacy-demo',
+    role: 'cashier',
+    name: 'Yor Cashier',
+    email: 'yorcashier@gmail.com',
+    username: 'yorcashier_legacy',
+    password: '1'
+  },
+  {
+    id: 'yor-bod-legacy-demo',
+    role: 'bod',
+    name: 'Yor BOD',
+    email: 'yorbod@gmail.com',
+    username: 'yorbod_legacy',
+    password: '1'
   }
 ];
 

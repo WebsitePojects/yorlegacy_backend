@@ -68,14 +68,14 @@ describe('Yor MVP compensation APIs', () => {
       code: 'BASIC',
       name: 'Basic',
       price: 1998,
-      pv: 5,
+      pv: 1,
       directReferralBonus: 200
     });
     expect(response.body.packages[1]).toMatchObject({
       code: 'CLASSIC',
       name: 'Classic',
       price: 5998,
-      pv: 10,
+      pv: 2,
       directReferralBonus: 1000
     });
     expect(response.body.packages.find((pkg: { code: string }) => pkg.code === 'VIP').price).toBe(159998);
@@ -347,8 +347,10 @@ describe('Yor MVP compensation APIs', () => {
     expect(memberCodes.status).toBe(200);
     expect(
       memberCodes.body.inventory.some(
-        (item: { code: string; visibility: string }) =>
-          item.code === generatedCode.code && item.visibility === 'released-by-sponsor'
+        (item: { code: string; assignedTo: string; status: string }) =>
+          item.code === generatedCode.code &&
+          item.assignedTo === 'yor01' &&
+          item.status === 'available'
       )
     ).toBe(true);
 

@@ -823,7 +823,7 @@ export function findSandboxMemberByCode(code: string): MemberRecord | null {
   const directMatch =
     members.find(
       (member) =>
-        member.username.trim().toUpperCase() === normalized ||
+        matchesSandboxUsername(member, normalized) ||
         member.referralCode.trim().toUpperCase() === normalized
     ) ?? null;
 
@@ -833,15 +833,14 @@ export function findSandboxMemberByCode(code: string): MemberRecord | null {
 
   try {
     const decodedUsername = decodeReferralCode(normalized).trim().toUpperCase();
-    return members.find((member) => member.username.trim().toUpperCase() === decodedUsername) ?? null;
+    return findSandboxMemberByUsernameCandidates(members, decodedUsername);
   } catch {
     return null;
   }
 }
 
 export function findSandboxMemberByUsername(username: string): MemberRecord | null {
-  const normalized = username.trim().toUpperCase();
-  return readState().members.find((member) => member.username.trim().toUpperCase() === normalized) ?? null;
+  return findSandboxMemberByUsernameCandidates(readState().members, username);
 }
 
 function nextNumericId(values: string[], prefix: string): string {
@@ -881,6 +880,26 @@ function normalizeSandboxUsernameAlias(value: string): string | null {
   return `YOR${match[1].padStart(4, '0')}`;
 }
 
+function sandboxUsernameCandidates(value: string): string[] {
+  const normalized = value.trim().toUpperCase();
+  const normalizedAlias = normalizeSandboxUsernameAlias(value);
+  const candidates = [normalized, normalizedAlias].filter((candidate): candidate is string => Boolean(candidate));
+
+  if (normalizedAlias === 'YOR0001' || normalized === 'YOR0001') {
+    candidates.push('YOR01');
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+function matchesSandboxUsername(member: MemberRecord, value: string): boolean {
+  return sandboxUsernameCandidates(value).includes(member.username.trim().toUpperCase());
+}
+
+function findSandboxMemberByUsernameCandidates(members: MemberRecord[], value: string): MemberRecord | null {
+  return members.find((member) => matchesSandboxUsername(member, value)) ?? null;
+}
+
 function resolveSandboxAssignedMember(
   members: MemberRecord[],
   assignedTo?: string
@@ -894,7 +913,7 @@ function resolveSandboxAssignedMember(
   const directMatch =
     members.find(
       (member) =>
-        member.username.trim().toUpperCase() === normalized ||
+        matchesSandboxUsername(member, rawValue) ||
         member.referralCode.trim().toUpperCase() === normalized ||
         normalizeComparableName(member.fullName) === normalizeComparableName(rawValue)
     ) ?? null;
@@ -903,17 +922,9 @@ function resolveSandboxAssignedMember(
     return directMatch;
   }
 
-  const normalizedAlias = normalizeSandboxUsernameAlias(rawValue);
-  if (normalizedAlias) {
-    const aliasMatch = members.find((member) => member.username.trim().toUpperCase() === normalizedAlias);
-    if (aliasMatch) {
-      return aliasMatch;
-    }
-  }
-
   try {
     const decodedUsername = decodeReferralCode(normalized).trim().toUpperCase();
-    return members.find((member) => member.username.trim().toUpperCase() === decodedUsername) ?? null;
+    return findSandboxMemberByUsernameCandidates(members, decodedUsername);
   } catch {
     return null;
   }
@@ -1254,6 +1265,9 @@ function settleSandboxPlacementCompensation(
       );
       state.walletLedgerEntries.unshift(salesmatchLedger);
 
+      // Binary cycle fires on salesmatch delta. The upstream gate (GATE-BIN-PV-FS-2026-06-12)
+      // ensures only paid/externally-paid codes generate binary PV. Unpaid codes (any type)
+      // never reach this path, so they can't trigger binary cycle through the upline chain.
       const parentPolicy = resolvePackagePolicy(parent.packageTier);
       if ((parentPolicy.binaryCyclePercent ?? 0) > 0 && parent.packageTier.toUpperCase() !== 'BASIC') {
         const binaryCredit = Number(((salesmatchDelta * parentPolicy.binaryCyclePercent) / 100).toFixed(2));
@@ -1962,15 +1976,20 @@ export function commitSandboxRegistration(actor: string, input: {
       lastActivity: todayDate()
     });
 
-    settleSandboxPlacementCompensation(
-      state,
-      preview.placement.placementUsername,
-      preview.placement.placementParentShadowSide ?? null,
-      preferredSide,
-      policy.pv,
-      policy.salesmatchValue,
-      username
-    );
+    // GATE-BIN-PV-FS-2026-06-12: Only paid/externally-paid codes (any account type) generate binary PV.
+    // Unpaid codes do not flow salesmatch or binary cycle to uplines regardless of account type.
+    const eligibleForBinaryPV = code.paymentStatus !== 'unpaid';
+    if (eligibleForBinaryPV) {
+      settleSandboxPlacementCompensation(
+        state,
+        preview.placement.placementUsername,
+        preview.placement.placementParentShadowSide ?? null,
+        preferredSide,
+        policy.pv,
+        policy.salesmatchValue,
+        username
+      );
+    }
     addAuditEvent(state, actor, 'member_registration_committed', `${username} under ${sponsor.username}`);
 
     return {

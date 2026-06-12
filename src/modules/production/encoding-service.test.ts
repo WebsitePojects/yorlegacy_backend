@@ -69,6 +69,7 @@ function seedNetwork(
     registrationStatus: 'active',
     leftPoints: 0,
     rightPoints: 0,
+    cdStatus: 0,
     createdAt: '2026-06-08T09:00:00.000Z'
   };
 }

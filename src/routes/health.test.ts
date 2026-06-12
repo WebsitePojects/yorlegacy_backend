@@ -21,6 +21,7 @@ describe('GET /health', () => {
     expect(response.body.roleSurfaces.admin.map((module: { id: string }) => module.id)).toEqual([
       'dashboard',
       'member-management',
+      'account-details',
       'encashment-reports',
       'account-shadow-management',
       'account-genealogy',

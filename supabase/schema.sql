@@ -525,6 +525,12 @@ alter table earning_stream_policies enable row level security;
 alter table income_simulation_runs enable row level security;
 alter table shadow_accounts enable row level security;
 alter table admin_review_actions enable row level security;
+alter table if exists binary_tree_closure enable row level security;
+alter table if exists binary_point_events enable row level security;
+alter table if exists pairing_ledger enable row level security;
+alter table if exists encashments enable row level security;
+alter table if exists rankings enable row level security;
+alter table if exists repurchases enable row level security;
 
 revoke all on table activation_codes from anon, authenticated;
 revoke all on table activation_code_events from anon, authenticated;
@@ -535,6 +541,12 @@ revoke all on table wallet_ledger from anon, authenticated;
 revoke all on table network_accounts from anon, authenticated;
 revoke all on table member_profiles from anon, authenticated;
 revoke all on table app_users from anon, authenticated;
+revoke all on table binary_tree_closure from anon, authenticated;
+revoke all on table binary_point_events from anon, authenticated;
+revoke all on table pairing_ledger from anon, authenticated;
+revoke all on table encashments from anon, authenticated;
+revoke all on table rankings from anon, authenticated;
+revoke all on table repurchases from anon, authenticated;
 
 grant all on table activation_codes to service_role;
 grant all on table activation_code_events to service_role;
@@ -545,6 +557,12 @@ grant all on table wallet_ledger to service_role;
 grant all on table network_accounts to service_role;
 grant all on table member_profiles to service_role;
 grant all on table app_users to service_role;
+grant all on table binary_tree_closure to service_role;
+grant all on table binary_point_events to service_role;
+grant all on table pairing_ledger to service_role;
+grant all on table encashments to service_role;
+grant all on table rankings to service_role;
+grant all on table repurchases to service_role;
 grant select on table site_pages to anon, authenticated;
 grant select on table page_sections to anon, authenticated;
 grant select on table package_catalog to anon, authenticated;
@@ -595,3 +613,55 @@ on earning_stream_policies
 for select
 to anon, authenticated
 using (true);
+
+drop policy if exists "deny public access" on binary_tree_closure;
+create policy "deny public access"
+on binary_tree_closure
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+drop policy if exists "deny public access" on binary_point_events;
+create policy "deny public access"
+on binary_point_events
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+drop policy if exists "deny public access" on pairing_ledger;
+create policy "deny public access"
+on pairing_ledger
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+drop policy if exists "deny public access" on encashments;
+create policy "deny public access"
+on encashments
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+drop policy if exists "deny public access" on rankings;
+create policy "deny public access"
+on rankings
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+drop policy if exists "deny public access" on repurchases;
+create policy "deny public access"
+on repurchases
+for all
+to anon, authenticated
+using (false)
+with check (false);
+
+alter function public.set_row_updated_at() set search_path = public, pg_catalog;
+alter function public.yor_next_activation_code_sequence() set search_path = public, pg_catalog;
+alter function public.yor_next_member_sequence() set search_path = public, pg_catalog;

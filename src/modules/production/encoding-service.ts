@@ -615,6 +615,31 @@ function buildProcessId(scope: string, ...parts: string[]) {
   return [scope, ...parts].join(':');
 }
 
+// Serializes money-mutating operations per key. Service instances are created
+// per request, so the lock table lives at module scope. This guards the
+// single-process PM2 deployment against TOCTOU races (balance check vs debit,
+// concurrent status reviews, queue double-processing); a multi-node deployment
+// must replace this with a database-level lock.
+const moneyLocks = new Map<string, Promise<void>>();
+
+async function withMoneyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = moneyLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  moneyLocks.set(key, current);
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (moneyLocks.get(key) === current) {
+      moneyLocks.delete(key);
+    }
+  }
+}
+
 function randomToken(): string {
   return crypto.randomBytes(16).toString('hex');
 }
@@ -1401,6 +1426,13 @@ export class ProductionEncodingService {
   }
 
   async processCompensationQueue(limit = 50) {
+    // Single-flight: registration submits process the queue inline and the
+    // admin route can trigger it too — concurrent runs would double-accumulate
+    // leg volume. The lock serializes them in this process.
+    return withMoneyLock('compensation-queue', () => this.processCompensationQueueLocked(limit));
+  }
+
+  private async processCompensationQueueLocked(limit: number) {
     const pending = await this.repo.listPendingCompensation(limit);
     const processed: string[] = [];
 
@@ -1409,7 +1441,30 @@ export class ProductionEncodingService {
         continue;
       }
 
-      let currentParentUserId: string | null = item.payload.placementParentUserId;
+      // At-most-once: mark processed before applying. Leg accumulation is not
+      // idempotent, so a crash mid-walk must not replay the item (double pay);
+      // an under-credited item is recoverable from this log line, a double
+      // payout is not (AUD-01).
+      await this.repo.markCompensationProcessed(item.id, this.repo.now());
+      try {
+        await this.applyPlacementSalesItem(item);
+        processed.push(item.processId);
+      } catch (error) {
+        console.error(
+          `COMPENSATION_ITEM_FAILED process_id=${item.processId} payload=${JSON.stringify(item.payload)} — credited partially or not at all; replay manually after review.`,
+          error
+        );
+      }
+    }
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      processed
+    };
+  }
+
+  private async applyPlacementSalesItem(item: ProductionCompensationQueueItem) {
+    let currentParentUserId: string | null = item.payload.placementParentUserId;
       let currentSide: PlacementSide = item.payload.placementParentShadowSide ?? item.payload.placementSide;
 
       while (currentParentUserId) {
@@ -1536,15 +1591,6 @@ export class ProductionEncodingService {
         currentSide = network.placementParentShadowSide ?? currentSide;
         currentParentUserId = network.placementParentUserId;
       }
-
-      await this.repo.markCompensationProcessed(item.id, this.repo.now());
-      processed.push(item.processId);
-    }
-
-    return {
-      moneyMode: this.repo.getMoneyMode(),
-      processed
-    };
   }
 
   async generateActivationCodes(
@@ -1700,27 +1746,29 @@ export class ProductionEncodingService {
   }
 
   async settleActivationCode(actor: SessionUser, codeValue: string, mode: 'paid' | 'externally-paid') {
-    const code = await this.repo.findActivationCodeByCode(codeValue);
-    if (!code) {
-      throw new Error('Activation code not found.');
-    }
-    if (code.paymentStatus !== 'unpaid') {
+    return withMoneyLock(`settle:${codeValue.trim().toUpperCase()}`, async () => {
+      const code = await this.repo.findActivationCodeByCode(codeValue);
+      if (!code) {
+        throw new Error('Activation code not found.');
+      }
+      if (code.paymentStatus !== 'unpaid') {
+        return {
+          moneyMode: this.repo.getMoneyMode(),
+          action: 'admin-settle-activation-code',
+          status: 'completed' as const,
+          reason: `${code.code} is already settled.`
+        };
+      }
+
+      await this.applyCodeSettlement(code, mode, { actorUserId: actor.id, actorName: actor.name, note: `Payment settled (${mode}).` });
+
       return {
         moneyMode: this.repo.getMoneyMode(),
         action: 'admin-settle-activation-code',
         status: 'completed' as const,
-        reason: `${code.code} is already settled.`
+        reason: `Settled ${code.code} (${mode}).`
       };
-    }
-
-    await this.applyCodeSettlement(code, mode, { actorUserId: actor.id, actorName: actor.name, note: `Payment settled (${mode}).` });
-
-    return {
-      moneyMode: this.repo.getMoneyMode(),
-      action: 'admin-settle-activation-code',
-      status: 'completed' as const,
-      reason: `Settled ${code.code} (${mode}).`
-    };
+    });
   }
 
   // Shared settlement effects, used by the admin settle action and by CD
@@ -1797,103 +1845,94 @@ export class ProductionEncodingService {
 
   // ENC-01 deduction stack: PHP 50 processing fee, 10% tax, 5% System Retainer,
   // then CD recovery at 100% of the remaining net until the obligation clears.
+  // Submit only reserves the funds (gross ledger debit + pending row). CD
+  // recovery and its settlement side effects fire at mark-paid, never before —
+  // a rejected request must leave no money effect beyond the refunded debit.
   async submitEncashment(actor: SessionUser, requestedAmount: number) {
-    const amount = Number(requestedAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error('Enter a valid encashment amount.');
-    }
-    const member = await this.repo.findMemberByUserId(actor.id);
-    const network = await this.repo.findNetworkAccountByUserId(actor.id);
-    if (!member || !network) {
-      throw new Error('Member profile not found.');
-    }
-
-    const available = await this.repo.sumLedgerMainBalance(actor.id);
-    if (amount > available) {
-      throw new Error('Requested amount exceeds available balance.');
-    }
-
-    const requestId = crypto.randomUUID();
-    const processingFee = 50;
-    const tax = Number((amount * 0.1).toFixed(2));
-    const retainer = Number((amount * 0.05).toFixed(2));
-    const postFixedNet = Math.max(0, Number((amount - processingFee - tax - retainer).toFixed(2)));
-    const cdOutstanding = Math.max(0, Number((network.cdAmount - network.cdTotal).toFixed(2)));
-    const cdDeduction = Math.min(cdOutstanding, postFixedNet);
-    const totalDeductions = Number((processingFee + tax + retainer + cdDeduction).toFixed(2));
-    const net = Number((amount - totalDeductions).toFixed(2));
-    const processId = buildProcessId('encashment-submit', actor.id, requestId);
-    const createdAt = this.repo.now();
-
-    await this.repo.createEncashment({
-      id: requestId,
-      userId: actor.id,
-      processId,
-      grossAmount: amount,
-      processingFee,
-      taxAmount: tax,
-      systemRetainer: retainer,
-      cdDeduction,
-      totalDeductions,
-      netAmount: net,
-      status: 'pending',
-      payoutMethod: member.payoutMethod ?? null,
-      payoutDetails: member.payoutDetails ?? null,
-      reviewedByUserId: null,
-      reviewedAt: null,
-      paidAt: null,
-      remarks: 'Member-submitted encashment request.',
-      createdAt
-    });
-    await this.postLedgerIfNeeded({
-      userId: actor.id,
-      entryType: 'encashment',
-      sourceReference: requestId,
-      debitAmount: amount,
-      processId: `${processId}:debit`,
-      notes: `Encashment request ${requestId} (gross PHP ${amount}).`
-    });
-
-    if (cdDeduction > 0) {
-      network.cdTotal = Number((network.cdTotal + cdDeduction).toFixed(2));
-      if (network.cdTotal >= network.cdAmount) {
-        network.cdStatus = CD_STATUS_SETTLED;
+    return withMoneyLock(`encash:${actor.id}`, async () => {
+      const amount = Number(Number(requestedAmount).toFixed(2));
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error('Enter a valid encashment amount.');
       }
-      await this.repo.saveNetworkAccount(network);
-
-      // GATE-CD-SETTLE-20260612: clearing the CD obligation through recovery
-      // settles the originating code, which fires the deferred DR and binary PV.
-      if (network.cdStatus === CD_STATUS_SETTLED && network.activationCode) {
-        const originatingCode = await this.repo.findActivationCodeByCode(network.activationCode);
-        if (originatingCode && originatingCode.paymentStatus === 'unpaid') {
-          await this.applyCodeSettlement(originatingCode, 'paid', {
-            actorUserId: null,
-            actorName: 'System — CD recovery',
-            note: `CD obligation cleared via encashment recovery (${requestId}).`
-          });
-        }
+      const member = await this.repo.findMemberByUserId(actor.id);
+      const network = await this.repo.findNetworkAccountByUserId(actor.id);
+      if (!member || !network) {
+        throw new Error('Member profile not found.');
       }
-    }
 
-    return {
-      moneyMode: this.repo.getMoneyMode(),
-      action: 'member-wallet-encash',
-      status: 'completed' as const,
-      reason: 'Encashment request submitted for review.',
-      detail: `Gross PHP ${amount}: fee ${processingFee}, tax ${tax}, retainer ${retainer}, CD recovery ${cdDeduction}, net PHP ${net}.`,
-      encashment: {
+      // One open request per member: prevents double-reserving the CD
+      // obligation and shrinks the race surface on the balance check.
+      const existing = await this.repo.listEncashmentsForUser(actor.id);
+      if (existing.some((row) => row.status === 'pending' || row.status === 'queued' || row.status === 'approved')) {
+        throw new Error('You already have an encashment request under review. Wait for it to be settled first.');
+      }
+
+      const available = await this.repo.sumLedgerMainBalance(actor.id);
+      if (amount > available) {
+        throw new Error('Requested amount exceeds available balance.');
+      }
+
+      const requestId = crypto.randomUUID();
+      const processingFee = 50;
+      const tax = Number((amount * 0.1).toFixed(2));
+      const retainer = Number((amount * 0.05).toFixed(2));
+      const postFixedNet = Math.max(0, Number((amount - processingFee - tax - retainer).toFixed(2)));
+      const cdOutstanding = Math.max(0, Number((network.cdAmount - network.cdTotal).toFixed(2)));
+      const cdDeduction = Math.min(cdOutstanding, postFixedNet);
+      const totalDeductions = Number((processingFee + tax + retainer + cdDeduction).toFixed(2));
+      const net = Number((amount - totalDeductions).toFixed(2));
+      const processId = buildProcessId('encashment-submit', actor.id, requestId);
+      const createdAt = this.repo.now();
+
+      await this.repo.createEncashment({
         id: requestId,
+        userId: actor.id,
+        processId,
         grossAmount: amount,
         processingFee,
-        tax,
+        taxAmount: tax,
         systemRetainer: retainer,
         cdDeduction,
         totalDeductions,
-        netReceivable: net,
-        status: 'pending' as const,
-        payoutSchedule: 'Tuesday encashment / Friday payout'
-      }
-    };
+        netAmount: net,
+        status: 'pending',
+        payoutMethod: member.payoutMethod ?? null,
+        payoutDetails: member.payoutDetails ?? null,
+        reviewedByUserId: null,
+        reviewedAt: null,
+        paidAt: null,
+        remarks: 'Member-submitted encashment request.',
+        createdAt
+      });
+      await this.postLedgerIfNeeded({
+        userId: actor.id,
+        entryType: 'encashment',
+        sourceReference: requestId,
+        debitAmount: amount,
+        processId: `${processId}:debit`,
+        notes: `Encashment request ${requestId} (gross PHP ${amount}).`
+      });
+
+      return {
+        moneyMode: this.repo.getMoneyMode(),
+        action: 'member-wallet-encash',
+        status: 'completed' as const,
+        reason: 'Encashment request submitted for review.',
+        detail: `Gross PHP ${amount}: fee ${processingFee}, tax ${tax}, retainer ${retainer}, CD recovery ${cdDeduction}, net PHP ${net}.`,
+        encashment: {
+          id: requestId,
+          grossAmount: amount,
+          processingFee,
+          tax,
+          systemRetainer: retainer,
+          cdDeduction,
+          totalDeductions,
+          netReceivable: net,
+          status: 'pending' as const,
+          payoutSchedule: 'Tuesday encashment / Friday payout'
+        }
+      };
+    });
   }
 
   async reviewEncashment(
@@ -1902,53 +1941,106 @@ export class ProductionEncodingService {
     action: 'approve' | 'reject' | 'mark-paid',
     remarks?: string
   ) {
-    const row = await this.repo.findEncashmentById(encashmentId);
-    if (!row) {
-      throw new Error('Encashment request not found.');
-    }
-    const reviewedAt = this.repo.now();
+    // Per-request lock serializes concurrent reviews (approve vs reject race);
+    // the status is re-read inside the lock so the first transition wins.
+    return withMoneyLock(`encash-review:${encashmentId}`, async () => {
+      const row = await this.repo.findEncashmentById(encashmentId);
+      if (!row) {
+        throw new Error('Encashment request not found.');
+      }
+      const reviewedAt = this.repo.now();
 
-    if (action === 'approve') {
-      if (row.status !== 'pending' && row.status !== 'queued') {
-        throw new Error(`Cannot approve an encashment in ${row.status} status.`);
+      if (action === 'approve') {
+        if (row.status !== 'pending' && row.status !== 'queued') {
+          throw new Error(`Cannot approve an encashment in ${row.status} status.`);
+        }
+        row.status = 'approved';
+      } else if (action === 'reject') {
+        if (row.status !== 'pending' && row.status !== 'queued') {
+          throw new Error(`Cannot reject an encashment in ${row.status} status.`);
+        }
+        row.status = 'rejected';
+        // Compensating credit restores the gross debit — corrections are new
+        // ledger rows, never edits (AUD-01 append-only rule). No CD recovery
+        // or settlement was applied at submit, so nothing else to unwind.
+        await this.postLedgerIfNeeded({
+          userId: row.userId,
+          entryType: 'adjustment',
+          sourceReference: row.id,
+          creditAmount: row.grossAmount,
+          processId: `${row.processId}:refund`,
+          notes: `Encashment ${row.id} rejected — gross amount restored.`
+        });
+      } else {
+        if (row.status !== 'approved') {
+          throw new Error('Only approved encashments can be marked paid.');
+        }
+        row.status = 'paid';
+        row.paidAt = reviewedAt;
+        await this.applyEncashmentCdRecovery(row);
       }
-      row.status = 'approved';
-    } else if (action === 'reject') {
-      if (row.status !== 'pending' && row.status !== 'queued') {
-        throw new Error(`Cannot reject an encashment in ${row.status} status.`);
+
+      row.reviewedByUserId = actor.id;
+      row.reviewedAt = reviewedAt;
+      if (remarks?.trim()) {
+        row.remarks = remarks.trim();
       }
-      row.status = 'rejected';
-      // Compensating credit restores the gross debit — corrections are new
-      // ledger rows, never edits (AUD-01 append-only rule).
+      await this.repo.saveEncashment(row);
+
+      return {
+        moneyMode: this.repo.getMoneyMode(),
+        action: 'admin-review-encashment',
+        status: 'completed' as const,
+        reason: `Encashment ${row.id} is now ${row.status}.`
+      };
+    });
+  }
+
+  // CD recovery is applied only when the encashment is actually paid out.
+  // GATE-CD-SETTLE-20260612: clearing the obligation settles the originating
+  // code, which fires the deferred DR and binary PV.
+  private async applyEncashmentCdRecovery(row: ProductionEncashment) {
+    if (row.cdDeduction <= 0) {
+      return;
+    }
+    const network = await this.repo.findNetworkAccountByUserId(row.userId);
+    if (!network) {
+      return;
+    }
+    const outstanding = Math.max(0, Number((network.cdAmount - network.cdTotal).toFixed(2)));
+    const recovered = Math.min(row.cdDeduction, outstanding);
+    // If the obligation shrank between submit and payout (e.g. an admin
+    // settled the code directly), the over-withheld remainder goes back.
+    const overWithheld = Number((row.cdDeduction - recovered).toFixed(2));
+    if (overWithheld > 0) {
       await this.postLedgerIfNeeded({
         userId: row.userId,
         entryType: 'adjustment',
         sourceReference: row.id,
-        creditAmount: row.grossAmount,
-        processId: `${row.processId}:refund`,
-        notes: `Encashment ${row.id} rejected — gross amount restored.`
+        creditAmount: overWithheld,
+        processId: `${row.processId}:cd-over-recovery-refund`,
+        notes: `Encashment ${row.id}: CD obligation was already settled — over-withheld recovery restored.`
       });
-    } else {
-      if (row.status !== 'approved') {
-        throw new Error('Only approved encashments can be marked paid.');
+    }
+    if (recovered <= 0) {
+      return;
+    }
+    network.cdTotal = Number((network.cdTotal + recovered).toFixed(2));
+    if (network.cdTotal >= network.cdAmount) {
+      network.cdStatus = CD_STATUS_SETTLED;
+    }
+    await this.repo.saveNetworkAccount(network);
+
+    if (network.cdStatus === CD_STATUS_SETTLED && network.activationCode) {
+      const originatingCode = await this.repo.findActivationCodeByCode(network.activationCode);
+      if (originatingCode && originatingCode.paymentStatus === 'unpaid') {
+        await this.applyCodeSettlement(originatingCode, 'paid', {
+          actorUserId: null,
+          actorName: 'System — CD recovery',
+          note: `CD obligation cleared via paid encashment recovery (${row.id}).`
+        });
       }
-      row.status = 'paid';
-      row.paidAt = reviewedAt;
     }
-
-    row.reviewedByUserId = actor.id;
-    row.reviewedAt = reviewedAt;
-    if (remarks?.trim()) {
-      row.remarks = remarks.trim();
-    }
-    await this.repo.saveEncashment(row);
-
-    return {
-      moneyMode: this.repo.getMoneyMode(),
-      action: 'admin-review-encashment',
-      status: 'completed' as const,
-      reason: `Encashment ${row.id} is now ${row.status}.`
-    };
   }
 
   async buildAdminEncashmentCenter() {
@@ -2068,7 +2160,10 @@ export class ProductionEncodingService {
     const systemRetainer = payoutPreviewAmount * 0.05;
     const tax = payoutPreviewAmount * 0.10;
     const fee = processingFee + systemRetainer;
-    const cdDeduction = Math.min(cdBalance, payoutPreviewAmount);
+    // Mirrors submitEncashment: CD recovery applies to the net after the
+    // fixed deductions, not to the gross.
+    const previewPostFixedNet = Math.max(0, payoutPreviewAmount - processingFee - tax - systemRetainer);
+    const cdDeduction = Math.min(cdBalance, previewPostFixedNet);
     const totalDeductions = fee + tax + cdDeduction;
     const netReceivable = Math.max(0, payoutPreviewAmount - totalDeductions);
 

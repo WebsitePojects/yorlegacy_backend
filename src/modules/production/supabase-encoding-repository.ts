@@ -281,6 +281,12 @@ function mapEncashmentToRow(row: ProductionEncashment) {
   };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUniqueViolation(error: { code?: string } | null): boolean {
+  return error?.code === '23505';
+}
+
 function assertNoError(error: any, context: string): void {
   if (error) {
     throw Object.assign(new Error(`Supabase error in ${context}: ${error.message ?? JSON.stringify(error)}`), { cause: error });
@@ -417,6 +423,8 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return (data ?? []).map(mapWalletRow);
     },
     appendWalletLedgerEntry: async (entry) => {
+      // A unique violation on process_id means another caller already posted
+      // this exact event — idempotent replay, not a failure.
       const { error } = await client.from('wallet_ledger').insert({
         id: entry.id,
         user_id: entry.userId,
@@ -431,6 +439,9 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         occurred_at: entry.occurredAt,
         status: entry.status
       });
+      if (error && isUniqueViolation(error)) {
+        return;
+      }
       assertNoError(error, 'appendWalletLedgerEntry');
     },
     hasWalletLedgerProcess: async (processId) => {
@@ -506,7 +517,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return data ? mapNetworkRow(data) : null;
     },
     findActivationCodeByCode: async (code) => {
-      const { data } = await client.from('activation_codes').select('*').ilike('code', code.trim()).maybeSingle();
+      // Escape LIKE wildcards: code values are operator input and `%`/`_`
+      // patterns must never match (and settle) a different code.
+      const escaped = code.trim().replace(/([\\%_])/g, '\\$1');
+      const { data } = await client.from('activation_codes').select('*').ilike('code', escaped).maybeSingle();
       return data ? mapCodeRow(data) : null;
     },
     findActivationCodesByCodes: async (codes) => {
@@ -531,6 +545,11 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       return (data ?? []).map(mapUserRow);
     },
     listActivationCodeEventsForUser: async (userId, limit) => {
+      // The .or() filter is a string grammar — only a verified UUID may be
+      // interpolated, or a crafted id could widen the query.
+      if (!UUID_PATTERN.test(userId)) {
+        return [];
+      }
       const { data } = await client
         .from('activation_code_events')
         .select('*')
@@ -634,9 +653,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     createEncashment: async (row) => {
       const { error } = await client.from('encashments').insert(mapEncashmentToRow(row));
       // A duplicate process key means this request was already recorded — replay is a no-op.
-      if (error && !String(error.message ?? '').toLowerCase().includes('duplicate')) {
-        assertNoError(error, 'createEncashment');
+      if (error && isUniqueViolation(error)) {
+        return;
       }
+      assertNoError(error, 'createEncashment');
     },
     saveEncashment: async (row) => {
       const { error } = await client.from('encashments').upsert(mapEncashmentToRow(row), { onConflict: 'id' });

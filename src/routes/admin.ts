@@ -285,7 +285,9 @@ adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod',
       res.status(200).json(await service.buildAdminEncashmentCenter());
       return;
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to load encashments.' });
+      // Internal storage errors stay in the server log; clients get a safe message.
+      console.error('[admin-encashments] load failed:', error);
+      res.status(500).json({ message: 'Unable to load encashments.' });
       return;
     }
   }

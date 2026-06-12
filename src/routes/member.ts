@@ -392,7 +392,9 @@ memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'ad
       const data = await service.buildMemberWalletData(req.authUser!.id, amount);
       res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to preview encashment.' });
+      // Internal storage errors stay in the server log; clients get a safe message.
+      console.error('[preview-encash] failed:', error);
+      res.status(500).json({ message: 'Unable to preview encashment.' });
     }
     return;
   }

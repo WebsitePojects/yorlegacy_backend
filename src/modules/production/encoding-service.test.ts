@@ -882,19 +882,97 @@ describe('ProductionEncodingService', () => {
     const cdActor = { id: cdUser!.id, name: 'Credit Member', email: cdUser!.email, role: 'member' as const };
     const result = await service.submitEncashment(cdActor, 8000);
     // Gross 8000 - fee 50 - tax 800 - retainer 400 = 6750 post-fixed net;
-    // CD outstanding 5998 fully recovered, member nets 752.
+    // CD outstanding 5998 fully withheld, member nets 752.
     expect(result.encashment).toMatchObject({ cdDeduction: 5998, netReceivable: 752 });
+
+    // No money effects beyond the reserved debit until the payout is real:
+    // CD obligation untouched, no DR, no PV, code still unpaid.
+    expect(await repo.findNetworkAccountByUserId(cdUser!.id)).toMatchObject({ cdStatus: 1, cdTotal: 0 });
+    expect((await repo.listWalletLedgerEntriesForUser('sponsor-user')).filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(0);
+    expect(await repo.listPendingCompensation(10)).toHaveLength(0);
+    expect((await repo.findActivationCodeByCode('YOR-ACT-00009010'))?.paymentStatus).toBe('unpaid');
+
+    // Approve + mark-paid applies the recovery and fires the deferred DR/PV.
+    const sponsorActor = { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'admin' as const };
+    const [request] = await repo.listEncashmentsForUser(cdUser!.id);
+    await service.reviewEncashment(sponsorActor, request.id, 'approve');
+    await service.reviewEncashment(sponsorActor, request.id, 'mark-paid');
 
     const network = await repo.findNetworkAccountByUserId(cdUser!.id);
     expect(network).toMatchObject({ cdStatus: 2, cdTotal: 5998 });
 
-    // Settlement fired the deferred DR to the sponsor and queued binary PV.
     const sponsorLedger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(sponsorLedger.filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(1);
     expect(await repo.listPendingCompensation(10)).toHaveLength(1);
 
     const code = await repo.findActivationCodeByCode('YOR-ACT-00009010');
     expect(code?.paymentStatus).toBe('paid');
+  });
+
+  it('a rejected CD encashment leaves no settlement effects and restores the gross', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009011',
+          packageTier: 'Classic',
+          accountType: 'CD',
+          paymentStatus: 'unpaid',
+          lockedDirectReferralBonus: 1000,
+          lockedSalesmatchValue: 500,
+          lockedBinaryPoints: 2
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Reject Path Member',
+        username: 'YOR9011',
+        phone: '+63 999 100 0006',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009011',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+    const cdUser = await repo.findUserByUsername('YOR9011');
+    await repo.appendWalletLedgerEntry({
+      id: 'seed-ledger-6',
+      userId: cdUser!.id,
+      walletType: 'main',
+      entryType: 'direct_referral',
+      sourceReference: 'seed',
+      creditAmount: 10000,
+      debitAmount: 0,
+      balanceAfter: 10000,
+      processId: 'seed:dr:4',
+      notes: 'Seed balance.',
+      occurredAt: '2026-06-08T08:00:00.000Z',
+      status: 'posted'
+    });
+
+    const cdActor = { id: cdUser!.id, name: 'Reject Path Member', email: cdUser!.email, role: 'member' as const };
+    await service.submitEncashment(cdActor, 8000);
+    expect(await repo.sumLedgerMainBalance(cdUser!.id)).toBe(2000);
+
+    const adminActor = { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'admin' as const };
+    const [request] = await repo.listEncashmentsForUser(cdUser!.id);
+    await service.reviewEncashment(adminActor, request.id, 'reject', 'Payout details incomplete.');
+
+    // Gross restored; CD untouched; no DR; no PV; code still unpaid.
+    expect(await repo.sumLedgerMainBalance(cdUser!.id)).toBe(10000);
+    expect(await repo.findNetworkAccountByUserId(cdUser!.id)).toMatchObject({ cdStatus: 1, cdTotal: 0 });
+    expect((await repo.listWalletLedgerEntriesForUser('sponsor-user')).filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(0);
+    expect(await repo.listPendingCompensation(10)).toHaveLength(0);
+    expect((await repo.findActivationCodeByCode('YOR-ACT-00009011'))?.paymentStatus).toBe('unpaid');
   });
 
   it('reviewEncashment transitions approve -> mark-paid and reject restores the gross amount', async () => {
@@ -927,18 +1005,21 @@ describe('ProductionEncodingService', () => {
     const adminActor = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
 
     await service.submitEncashment(memberActor, 1000);
-    await service.submitEncashment(memberActor, 2000);
-    const [first, second] = await repo.listEncashmentsForUser('member-user');
+    // One open request per member: a second submit while pending is blocked.
+    await expect(service.submitEncashment(memberActor, 500)).rejects.toThrow(/already have an encashment/i);
 
+    const [first] = await repo.listEncashmentsForUser('member-user');
     await service.reviewEncashment(adminActor, first.id, 'approve');
     expect((await repo.findEncashmentById(first.id))?.status).toBe('approved');
     await expect(service.reviewEncashment(adminActor, first.id, 'approve')).rejects.toThrow(/cannot approve/i);
     await service.reviewEncashment(adminActor, first.id, 'mark-paid');
     expect((await repo.findEncashmentById(first.id))?.status).toBe('paid');
 
+    await service.submitEncashment(memberActor, 2000);
+    const second = (await repo.listEncashmentsForUser('member-user')).find((row) => row.status === 'pending');
     const balanceBeforeReject = await repo.sumLedgerMainBalance('member-user');
-    await service.reviewEncashment(adminActor, second.id, 'reject', 'Payout details incomplete.');
-    expect((await repo.findEncashmentById(second.id))?.status).toBe('rejected');
+    await service.reviewEncashment(adminActor, second!.id, 'reject', 'Payout details incomplete.');
+    expect((await repo.findEncashmentById(second!.id))?.status).toBe('rejected');
     expect(await repo.sumLedgerMainBalance('member-user')).toBe(balanceBeforeReject + 2000);
   });
 

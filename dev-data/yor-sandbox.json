@@ -2,14 +2,14 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-11T21:34:06.123Z",
-    "lastMutationAt": "2026-06-11T21:34:06.382Z"
+    "lastResetAt": "2026-06-12T14:20:16.168Z",
+    "lastMutationAt": "2026-06-12T14:20:16.471Z"
   },
   "users": [
     {
       "id": "yor-member-demo",
       "role": "member",
-      "name": "Yor Member",
+      "name": "Yor Company01",
       "email": "yor01@yor.local",
       "passwordHash": "933fa181d6655628d37cdf50217769329ecb6a2d7355e62efe3edea741ccc19439900e57437f5a3349eaff419a23a1f0b82b95a725644b5fe22035ad4b67575f",
       "passwordSalt": "ba43c72b000c8a310deced20454ebeb2",
@@ -36,7 +36,7 @@
     {
       "id": "yor-bod-demo",
       "role": "bod",
-      "name": "Yoren Abihay - BOD",
+      "name": "Yor BOD",
       "email": "yorbod@yor.local",
       "passwordHash": "a6ece2ee319d2401f1f75c765887969c9a6218ad4e2cf763e69659885e13acea98ae7efbae02078e9b4fbf6209b1bf218cb8c5ed93966c8edcfb19747cfe4aed",
       "passwordSalt": "89163257b38b2ef817bdbf4c149ce163",
@@ -485,7 +485,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-11T21:34:06.123Z"
+      "occurredAt": "2026-06-12T14:20:16.168Z"
     }
   ]
 }

@@ -625,6 +625,161 @@ describe('ProductionEncodingService', () => {
     expect(salesmatch[0].creditAmount).toBe(2500);
   });
 
+  it('caps weekly salesmatch payout at the package cap, forfeits the excess, and computes binary cycle on the paid amount', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Classic', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Classic', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009008',
+          packageTier: 'Classic',
+          accountType: 'PD',
+          paymentStatus: 'paid',
+          lockedDirectReferralBonus: 1000,
+          lockedSalesmatchValue: 500,
+          lockedBinaryPoints: 2,
+          lockedGetFiveAmount: 5998
+        })
+      ],
+      salesmatchBalances: [
+        {
+          userId: 'sponsor-user',
+          leftSales: 0,
+          rightSales: 500,
+          matchedSales: 0,
+          leftPoints: 0,
+          rightPoints: 2,
+          matchedPoints: 0,
+          updatedAt: '2026-06-08T09:00:00.000Z'
+        }
+      ],
+      // Classic weekly cap is PHP 20,000 — PHP 19,800 already paid this week.
+      walletLedger: [
+        {
+          id: 'seed-ledger-1',
+          userId: 'sponsor-user',
+          walletType: 'main',
+          entryType: 'salesmatch',
+          sourceReference: 'prior-pairings',
+          creditAmount: 19800,
+          debitAmount: 0,
+          balanceAfter: 19800,
+          processId: 'seed:salesmatch:prior',
+          notes: 'Prior pairing payouts this week.',
+          occurredAt: '2026-06-08T08:00:00.000Z',
+          status: 'posted'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Capped Prospect',
+        username: 'YOR9008',
+        phone: '+63 999 100 0003',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009008',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+    await service.processCompensationQueue();
+
+    const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    const salesmatch = ledger.filter((entry) => entry.entryType === 'salesmatch' && entry.processId !== 'seed:salesmatch:prior');
+    expect(salesmatch).toHaveLength(1);
+    expect(salesmatch[0].creditAmount).toBe(200);
+    expect(salesmatch[0].notes).toContain('forfeited at package cap');
+
+    const binaryCycle = ledger.filter((entry) => entry.entryType === 'binary_cycle');
+    expect(binaryCycle).toHaveLength(1);
+    expect(binaryCycle[0].creditAmount).toBe(4); // 2% of the capped 200, not the raw 500
+
+    const snapshots = await repo.listPairingSnapshotsForUser('sponsor-user');
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({ matchedSales: 500, paidSalesmatch: 200, forfeitedSalesmatch: 300 });
+  });
+
+  it('a member already at the weekly cap earns zero while legs still consume', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Classic', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Classic', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009009',
+          packageTier: 'Classic',
+          accountType: 'PD',
+          paymentStatus: 'paid',
+          lockedSalesmatchValue: 500,
+          lockedBinaryPoints: 2
+        })
+      ],
+      salesmatchBalances: [
+        {
+          userId: 'sponsor-user',
+          leftSales: 0,
+          rightSales: 500,
+          matchedSales: 0,
+          leftPoints: 0,
+          rightPoints: 2,
+          matchedPoints: 0,
+          updatedAt: '2026-06-08T09:00:00.000Z'
+        }
+      ],
+      walletLedger: [
+        {
+          id: 'seed-ledger-2',
+          userId: 'sponsor-user',
+          walletType: 'main',
+          entryType: 'salesmatch',
+          sourceReference: 'prior-pairings',
+          creditAmount: 20000,
+          debitAmount: 0,
+          balanceAfter: 20000,
+          processId: 'seed:salesmatch:cap',
+          notes: 'Weekly cap reached.',
+          occurredAt: '2026-06-08T08:00:00.000Z',
+          status: 'posted'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Over Cap Prospect',
+        username: 'YOR9009',
+        phone: '+63 999 100 0004',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009009',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+    await service.processCompensationQueue();
+
+    const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    expect(ledger.filter((entry) => entry.entryType === 'salesmatch' && entry.processId !== 'seed:salesmatch:cap')).toHaveLength(0);
+    expect(ledger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+
+    const balance = await repo.getSalesmatchBalance('sponsor-user');
+    expect(balance).toMatchObject({ leftSales: 0, rightSales: 0, matchedSales: 500 });
+
+    const snapshots = await repo.listPairingSnapshotsForUser('sponsor-user');
+    expect(snapshots[0]).toMatchObject({ matchedSales: 500, paidSalesmatch: 0, forfeitedSalesmatch: 500 });
+  });
+
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const leftUser = seedUser('left-user', 'Left Branch', 'left@yor.local');

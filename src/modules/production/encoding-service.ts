@@ -7,6 +7,7 @@ import {
   countsForPairingSource,
   type AccountStateInput
 } from '../compensation/account-state.js';
+import { manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from '../compensation/cap-windows.js';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
@@ -194,6 +195,15 @@ export type ProductionSalesmatchBalance = {
   rightPoints: number;
   matchedPoints: number;
   updatedAt: string;
+};
+
+export type ProductionPairingSnapshot = {
+  id: string;
+  userId: string;
+  snapshotDate: string;
+  matchedSales: number;
+  paidSalesmatch: number;
+  forfeitedSalesmatch: number;
 };
 
 export type ProductionCompensationQueueItem = {
@@ -399,6 +409,15 @@ export type ProductionEncodingRepository = {
   findPlacementChild(parentUserId: string, side: PlacementSide, shadowSide?: PlacementSide | null): Promise<ProductionNetworkAccount | null>;
   saveSalesmatchBalance(balance: ProductionSalesmatchBalance): Promise<void>;
   getSalesmatchBalance(userId: string): Promise<ProductionSalesmatchBalance | null>;
+  getPaidSalesmatchSince(userId: string, sinceIso: string): Promise<number>;
+  recordPairingSnapshot(input: {
+    userId: string;
+    snapshotDate: string;
+    matchedDelta: number;
+    paidDelta: number;
+    forfeitedDelta: number;
+  }): Promise<void>;
+  listPairingSnapshotsForUser(userId: string): Promise<ProductionPairingSnapshot[]>;
   enqueueCompensation(item: ProductionCompensationQueueItem): Promise<void>;
   listPendingCompensation(limit: number): Promise<ProductionCompensationQueueItem[]>;
   markCompensationProcessed(queueId: string, processedAt: string): Promise<void>;
@@ -1426,30 +1445,56 @@ export class ProductionEncodingService {
           await this.repo.saveSalesmatchBalance(balance);
 
           if (salesmatchDelta > 0) {
-            await this.postLedgerIfNeeded({
-              userId: profile.userId,
-              entryType: 'salesmatch',
-              sourceReference: item.payload.createdMemberUsername,
-              creditAmount: salesmatchDelta,
-              processId: `${item.processId}:salesmatch:${profile.userId}:${balance.matchedSales}`,
-              notes: `Salesmatch delta from ${item.payload.createdMemberUsername}.`
-            });
-
-            // Binary cycle fires on the salesmatch delta. Source eligibility is
-            // enforced upstream (only PD / settled-CD entries enqueue PV) and
-            // recipient eligibility above.
+            // GATE-SMB-CAP-20260612: weekly/monthly package caps apply to the
+            // payout, not the match — over-cap matched volume is forfeited per
+            // owner ruling (legs are already consumed above).
             const packageConfig = getPackageConfig(profile.packageTier);
-            if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
-              const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+            const nowIso = this.repo.now();
+            const weekPaid = await this.repo.getPaidSalesmatchSince(profile.userId, manilaWeekStartIso(nowIso));
+            const monthPaid = await this.repo.getPaidSalesmatchSince(profile.userId, manilaMonthStartIso(nowIso));
+            const payable = Math.min(
+              salesmatchDelta,
+              Math.max(0, packageConfig.weeklySalesmatchCap - weekPaid),
+              Math.max(0, packageConfig.monthlySalesmatchCap - monthPaid)
+            );
+            const forfeited = Number((salesmatchDelta - payable).toFixed(2));
+
+            if (payable > 0) {
               await this.postLedgerIfNeeded({
                 userId: profile.userId,
-                entryType: 'binary_cycle',
+                entryType: 'salesmatch',
                 sourceReference: item.payload.createdMemberUsername,
-                creditAmount: binaryCredit,
-                processId: `${item.processId}:binary:${profile.userId}:${balance.matchedPoints}:${pointsDelta}`,
-                notes: `Binary cycle delta from ${item.payload.createdMemberUsername}.`
+                creditAmount: payable,
+                processId: `${item.processId}:salesmatch:${profile.userId}:${balance.matchedSales}`,
+                notes:
+                  forfeited > 0
+                    ? `Salesmatch delta from ${item.payload.createdMemberUsername} (PHP ${forfeited} forfeited at package cap).`
+                    : `Salesmatch delta from ${item.payload.createdMemberUsername}.`
               });
+
+              // Binary cycle fires on the capped (paid) salesmatch amount.
+              // Source eligibility is enforced upstream (only PD / settled-CD
+              // entries enqueue PV) and recipient eligibility above.
+              if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
+                const binaryCredit = Number(((payable * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+                await this.postLedgerIfNeeded({
+                  userId: profile.userId,
+                  entryType: 'binary_cycle',
+                  sourceReference: item.payload.createdMemberUsername,
+                  creditAmount: binaryCredit,
+                  processId: `${item.processId}:binary:${profile.userId}:${balance.matchedPoints}:${pointsDelta}`,
+                  notes: `Binary cycle delta from ${item.payload.createdMemberUsername}.`
+                });
+              }
             }
+
+            await this.repo.recordPairingSnapshot({
+              userId: profile.userId,
+              snapshotDate: manilaDateKey(nowIso),
+              matchedDelta: salesmatchDelta,
+              paidDelta: payable,
+              forfeitedDelta: forfeited
+            });
           }
         }
 
@@ -2237,6 +2282,7 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     salesmatchBalances: [...(seed?.salesmatchBalances ?? [])],
     queue: [...(seed?.queue ?? [])],
     reservations: [...(seed?.reservations ?? [])],
+    pairingSnapshots: [] as ProductionPairingSnapshot[],
     activationCodeSequence: seed?.activationCodeSequence ?? 1000,
     memberSequence: seed?.memberSequence ?? 1000,
     now: seed?.now ?? '2026-06-08T09:00:00.000Z'
@@ -2340,6 +2386,30 @@ export function createInMemoryProductionEncodingRepository(seed?: {
       }
     },
     getSalesmatchBalance: async (userId) => state.salesmatchBalances.find((item) => item.userId === userId) ?? null,
+    getPaidSalesmatchSince: async (userId, sinceIso) =>
+      state.walletLedger
+        .filter((item) => item.userId === userId && item.entryType === 'salesmatch' && item.occurredAt >= sinceIso)
+        .reduce((sum, item) => sum + item.creditAmount, 0),
+    recordPairingSnapshot: async (input) => {
+      const existing = state.pairingSnapshots.find(
+        (item) => item.userId === input.userId && item.snapshotDate === input.snapshotDate
+      );
+      if (existing) {
+        existing.matchedSales += input.matchedDelta;
+        existing.paidSalesmatch += input.paidDelta;
+        existing.forfeitedSalesmatch += input.forfeitedDelta;
+      } else {
+        state.pairingSnapshots.push({
+          id: crypto.randomUUID(),
+          userId: input.userId,
+          snapshotDate: input.snapshotDate,
+          matchedSales: input.matchedDelta,
+          paidSalesmatch: input.paidDelta,
+          forfeitedSalesmatch: input.forfeitedDelta
+        });
+      }
+    },
+    listPairingSnapshotsForUser: async (userId) => state.pairingSnapshots.filter((item) => item.userId === userId),
     enqueueCompensation: async (item) => {
       if (!state.queue.some((row) => row.processId === item.processId)) {
         state.queue.push({ ...item });

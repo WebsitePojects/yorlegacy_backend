@@ -500,6 +500,53 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       const { data } = await client.from('salesmatch_balances').select('*').eq('user_id', userId).maybeSingle();
       return data ? mapSalesmatchRow(data) : null;
     },
+    getPaidSalesmatchSince: async (userId, sinceIso) => {
+      const { data, error } = await client
+        .from('wallet_ledger')
+        .select('credit_amount')
+        .eq('user_id', userId)
+        .eq('entry_type', 'salesmatch')
+        .gte('occurred_at', sinceIso);
+      assertNoError(error, 'getPaidSalesmatchSince');
+      return (data ?? []).reduce((sum, row) => sum + Number(row.credit_amount ?? 0), 0);
+    },
+    recordPairingSnapshot: async (input) => {
+      const { data: existing } = await client
+        .from('pairing_snapshots')
+        .select('id, matched_left_value, matched_right_value, paid_salesmatch, forfeited_salesmatch, total_binary_pay')
+        .eq('user_id', input.userId)
+        .eq('snapshot_date', input.snapshotDate)
+        .maybeSingle();
+      const { error } = await client.from('pairing_snapshots').upsert(
+        {
+          ...(existing?.id ? { id: existing.id } : {}),
+          user_id: input.userId,
+          snapshot_date: input.snapshotDate,
+          matched_left_value: Number(existing?.matched_left_value ?? 0) + input.matchedDelta,
+          matched_right_value: Number(existing?.matched_right_value ?? 0) + input.matchedDelta,
+          paid_salesmatch: Number(existing?.paid_salesmatch ?? 0) + input.paidDelta,
+          forfeited_salesmatch: Number(existing?.forfeited_salesmatch ?? 0) + input.forfeitedDelta,
+          total_binary_pay: Number(existing?.total_binary_pay ?? 0) + input.paidDelta
+        },
+        { onConflict: 'user_id,snapshot_date' }
+      );
+      assertNoError(error, 'recordPairingSnapshot');
+    },
+    listPairingSnapshotsForUser: async (userId) => {
+      const { data } = await client
+        .from('pairing_snapshots')
+        .select('id, user_id, snapshot_date, matched_left_value, paid_salesmatch, forfeited_salesmatch')
+        .eq('user_id', userId)
+        .order('snapshot_date', { ascending: false });
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        snapshotDate: row.snapshot_date,
+        matchedSales: Number(row.matched_left_value ?? 0),
+        paidSalesmatch: Number(row.paid_salesmatch ?? 0),
+        forfeitedSalesmatch: Number(row.forfeited_salesmatch ?? 0)
+      }));
+    },
     enqueueCompensation: async (item) => {
       const { error } = await client.from('compensation_queue').upsert(
         {

@@ -378,22 +378,39 @@ memberRouter.post('/api/member/placement-reservations', requireRole('member', 'a
 memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const amount = Number(req.body?.amount ?? 0);
   if (isProductionMode()) {
+    // No silent sandbox fallback in production mode: failing over to demo data
+    // would show members fake balances.
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        const data = await service.buildMemberWalletData(req.authUser!.id, amount);
-        res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
-        return;
-      } catch (err) {
-        console.error('[preview-encash] Production wallet data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
     }
+    try {
+      const data = await service.buildMemberWalletData(req.authUser!.id, amount);
+      res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to preview encashment.' });
+    }
+    return;
   }
   const payload = buildMemberWalletDetail(req.authUser!, amount);
   res.status(200).json({ moneyMode: payload.moneyMode, preview: payload.preview, requestedAmount: payload.preview.requestedAmount });
 });
 
-memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.submitEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit encashment.' });
+    }
+    return;
+  }
   res.status(200).json(runMemberEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
 });
 

@@ -780,6 +780,168 @@ describe('ProductionEncodingService', () => {
     expect(snapshots[0]).toMatchObject({ matchedSales: 500, paidSalesmatch: 0, forfeitedSalesmatch: 500 });
   });
 
+  it('submitEncashment debits the ledger with the full deduction stack and rejects over-balance requests', async () => {
+    const memberUser = seedUser('member-user', 'Member', 'member@yor.local');
+    const memberProfile = seedMember('member-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Member One');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [memberUser],
+      members: [memberProfile],
+      networkAccounts: [seedNetwork('member-user', 'Standard', null, null, null)],
+      walletLedger: [
+        {
+          id: 'seed-ledger-3',
+          userId: 'member-user',
+          walletType: 'main',
+          entryType: 'direct_referral',
+          sourceReference: 'seed',
+          creditAmount: 10000,
+          debitAmount: 0,
+          balanceAfter: 10000,
+          processId: 'seed:dr:1',
+          notes: 'Seed balance.',
+          occurredAt: '2026-06-08T08:00:00.000Z',
+          status: 'posted'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const actor = { id: 'member-user', name: 'Member', email: 'member@yor.local', role: 'member' as const };
+
+    await expect(service.submitEncashment(actor, 99999)).rejects.toThrow(/exceeds available/i);
+
+    const result = await service.submitEncashment(actor, 1000);
+    expect(result.encashment).toMatchObject({
+      grossAmount: 1000,
+      processingFee: 50,
+      tax: 100,
+      systemRetainer: 50,
+      cdDeduction: 0,
+      totalDeductions: 200,
+      netReceivable: 800,
+      status: 'pending'
+    });
+
+    expect(await repo.sumLedgerMainBalance('member-user')).toBe(9000);
+    const requests = await repo.listEncashmentsForUser('member-user');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].status).toBe('pending');
+  });
+
+  it('CD member encashment recovers 100% of the post-deduction net and settles the obligation when cleared', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009010',
+          packageTier: 'Classic',
+          accountType: 'CD',
+          paymentStatus: 'unpaid',
+          lockedDirectReferralBonus: 1000,
+          lockedSalesmatchValue: 500,
+          lockedBinaryPoints: 2
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Credit Member',
+        username: 'YOR9010',
+        phone: '+63 999 100 0005',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009010',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+
+    const cdUser = await repo.findUserByUsername('YOR9010');
+    // Fund the CD member enough to clear the Classic obligation (5998) in one recovery.
+    await repo.appendWalletLedgerEntry({
+      id: 'seed-ledger-4',
+      userId: cdUser!.id,
+      walletType: 'main',
+      entryType: 'direct_referral',
+      sourceReference: 'seed',
+      creditAmount: 10000,
+      debitAmount: 0,
+      balanceAfter: 10000,
+      processId: 'seed:dr:2',
+      notes: 'Seed balance.',
+      occurredAt: '2026-06-08T08:00:00.000Z',
+      status: 'posted'
+    });
+
+    const cdActor = { id: cdUser!.id, name: 'Credit Member', email: cdUser!.email, role: 'member' as const };
+    const result = await service.submitEncashment(cdActor, 8000);
+    // Gross 8000 - fee 50 - tax 800 - retainer 400 = 6750 post-fixed net;
+    // CD outstanding 5998 fully recovered, member nets 752.
+    expect(result.encashment).toMatchObject({ cdDeduction: 5998, netReceivable: 752 });
+
+    const network = await repo.findNetworkAccountByUserId(cdUser!.id);
+    expect(network).toMatchObject({ cdStatus: 2, cdTotal: 5998 });
+
+    // Settlement fired the deferred DR to the sponsor and queued binary PV.
+    const sponsorLedger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    expect(sponsorLedger.filter((entry) => entry.entryType === 'direct_referral')).toHaveLength(1);
+    expect(await repo.listPendingCompensation(10)).toHaveLength(1);
+
+    const code = await repo.findActivationCodeByCode('YOR-ACT-00009010');
+    expect(code?.paymentStatus).toBe('paid');
+  });
+
+  it('reviewEncashment transitions approve -> mark-paid and reject restores the gross amount', async () => {
+    const memberUser = seedUser('member-user', 'Member', 'member@yor.local');
+    const memberProfile = seedMember('member-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Member One');
+    const adminUser = seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [memberUser, adminUser],
+      members: [memberProfile],
+      networkAccounts: [seedNetwork('member-user', 'Standard', null, null, null)],
+      walletLedger: [
+        {
+          id: 'seed-ledger-5',
+          userId: 'member-user',
+          walletType: 'main',
+          entryType: 'direct_referral',
+          sourceReference: 'seed',
+          creditAmount: 5000,
+          debitAmount: 0,
+          balanceAfter: 5000,
+          processId: 'seed:dr:3',
+          notes: 'Seed balance.',
+          occurredAt: '2026-06-08T08:00:00.000Z',
+          status: 'posted'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const memberActor = { id: 'member-user', name: 'Member', email: 'member@yor.local', role: 'member' as const };
+    const adminActor = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    await service.submitEncashment(memberActor, 1000);
+    await service.submitEncashment(memberActor, 2000);
+    const [first, second] = await repo.listEncashmentsForUser('member-user');
+
+    await service.reviewEncashment(adminActor, first.id, 'approve');
+    expect((await repo.findEncashmentById(first.id))?.status).toBe('approved');
+    await expect(service.reviewEncashment(adminActor, first.id, 'approve')).rejects.toThrow(/cannot approve/i);
+    await service.reviewEncashment(adminActor, first.id, 'mark-paid');
+    expect((await repo.findEncashmentById(first.id))?.status).toBe('paid');
+
+    const balanceBeforeReject = await repo.sumLedgerMainBalance('member-user');
+    await service.reviewEncashment(adminActor, second.id, 'reject', 'Payout details incomplete.');
+    expect((await repo.findEncashmentById(second.id))?.status).toBe('rejected');
+    expect(await repo.sumLedgerMainBalance('member-user')).toBe(balanceBeforeReject + 2000);
+  });
+
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const leftUser = seedUser('left-user', 'Left Branch', 'left@yor.local');

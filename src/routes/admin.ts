@@ -262,17 +262,72 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
   );
 });
 
-adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
-  res.status(200).json(buildAdminEncashmentCenter(_req.authUser!));
+adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.buildAdminEncashmentCenter());
+      return;
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to load encashments.' });
+      return;
+    }
+  }
+  res.status(200).json(buildAdminEncashmentCenter(req.authUser!));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.reviewEncashment(req.authUser!, encashmentId, 'approve'));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to approve encashment.' });
+    }
+    return;
+  }
   res.status(200).json(runAdminApproveEncashment(req.authUser!, encashmentId));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    const action =
+      req.body?.action === 'approve' || req.body?.action === 'reject' || req.body?.action === 'mark-paid'
+        ? req.body.action
+        : null;
+    if (!action) {
+      res.status(400).json({ message: 'Provide a review action: approve, reject, or mark-paid.' });
+      return;
+    }
+    try {
+      res.status(200).json(
+        await service.reviewEncashment(
+          req.authUser!,
+          encashmentId,
+          action,
+          typeof req.body?.remarks === 'string' ? req.body.remarks : undefined
+        )
+      );
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to review encashment.' });
+    }
+    return;
+  }
   res.status(200).json(
     runAdminReviewEncashment(req.authUser!, encashmentId, {
       action: req.body?.action,

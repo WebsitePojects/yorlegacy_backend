@@ -190,6 +190,28 @@ export interface ActivationCodeRow {
   updated_at: string;
 }
 
+export interface EncashmentRow {
+  id: string;
+  user_id: string;
+  process_id: string;
+  gross_amount: number;
+  processing_fee: number;
+  tax_amount: number;
+  system_retainer: number;
+  cd_deduction: number;
+  total_deductions: number;
+  net_amount: number;
+  status: 'pending' | 'queued' | 'approved' | 'paid' | 'cancelled' | 'rejected';
+  payout_method: string | null;
+  payout_details: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_at: string | null;
+  paid_at: string | null;
+  remarks: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ActivationCodeEventRow {
   id: string;
   activation_code_id: string;
@@ -245,28 +267,6 @@ export interface WalletLedgerRow {
   status: WalletLedgerStatus;
   occurred_at: string;
   created_at: string;
-}
-
-export interface EncashmentRow {
-  id: string;
-  encashment_uid: string;
-  process_key: string;
-  beneficiary_id: string;
-  requested_amount: number;
-  tax_amount: number;
-  processing_fee: number;
-  cd_deduction: number;
-  system_retainer: number;
-  maintenance_fee: number;
-  net_payout: number;
-  payout_option: string | null;
-  payout_details_masked: string | null;
-  status: EncashmentStatus;
-  request_id: string;
-  reviewed_by_id: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface PayoutTransactionRow {

@@ -4,6 +4,7 @@ import type {
   ProductionActivationCodeEvent,
   ProductionAppUser,
   ProductionCompensationQueueItem,
+  ProductionEncashment,
   ProductionEncodingRepository,
   ProductionMemberProfile,
   ProductionNetworkAccount,
@@ -16,6 +17,7 @@ import type {
   ActivationCodeRow,
   AppUserRow,
   CompensationQueueRow,
+  EncashmentRow,
   MemberProfileRow,
   NetworkAccountRow,
   PlacementReservationRow,
@@ -230,6 +232,52 @@ function mapQueueRow(row: CompensationQueueRow): ProductionCompensationQueueItem
     payload: mapQueuePayload(row.payload),
     createdAt: row.created_at ?? isoNow(),
     processedAt: row.processed_at
+  };
+}
+
+function mapEncashmentRow(row: EncashmentRow): ProductionEncashment {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    processId: row.process_id,
+    grossAmount: Number(row.gross_amount ?? 0),
+    processingFee: Number(row.processing_fee ?? 0),
+    taxAmount: Number(row.tax_amount ?? 0),
+    systemRetainer: Number(row.system_retainer ?? 0),
+    cdDeduction: Number(row.cd_deduction ?? 0),
+    totalDeductions: Number(row.total_deductions ?? 0),
+    netAmount: Number(row.net_amount ?? 0),
+    status: row.status,
+    payoutMethod: row.payout_method,
+    payoutDetails: row.payout_details,
+    reviewedByUserId: row.reviewed_by_user_id,
+    reviewedAt: row.reviewed_at,
+    paidAt: row.paid_at,
+    remarks: row.remarks ?? '',
+    createdAt: row.created_at ?? isoNow()
+  };
+}
+
+function mapEncashmentToRow(row: ProductionEncashment) {
+  return {
+    id: row.id,
+    user_id: row.userId,
+    process_id: row.processId,
+    gross_amount: row.grossAmount,
+    processing_fee: row.processingFee,
+    tax_amount: row.taxAmount,
+    system_retainer: row.systemRetainer,
+    cd_deduction: row.cdDeduction,
+    total_deductions: row.totalDeductions,
+    net_amount: row.netAmount,
+    status: row.status,
+    payout_method: row.payoutMethod,
+    payout_details: row.payoutDetails,
+    reviewed_by_user_id: row.reviewedByUserId,
+    reviewed_at: row.reviewedAt,
+    paid_at: row.paidAt,
+    remarks: row.remarks,
+    created_at: row.createdAt
   };
 }
 
@@ -531,6 +579,42 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         { onConflict: 'user_id,snapshot_date' }
       );
       assertNoError(error, 'recordPairingSnapshot');
+    },
+    sumLedgerMainBalance: async (userId) => {
+      const { data, error } = await client
+        .from('wallet_ledger')
+        .select('credit_amount, debit_amount')
+        .eq('user_id', userId)
+        .eq('wallet_type', 'main');
+      assertNoError(error, 'sumLedgerMainBalance');
+      return (data ?? []).reduce((sum, row) => sum + Number(row.credit_amount ?? 0) - Number(row.debit_amount ?? 0), 0);
+    },
+    createEncashment: async (row) => {
+      const { error } = await client.from('encashments').insert(mapEncashmentToRow(row));
+      // A duplicate process key means this request was already recorded — replay is a no-op.
+      if (error && !String(error.message ?? '').toLowerCase().includes('duplicate')) {
+        assertNoError(error, 'createEncashment');
+      }
+    },
+    saveEncashment: async (row) => {
+      const { error } = await client.from('encashments').upsert(mapEncashmentToRow(row), { onConflict: 'id' });
+      assertNoError(error, 'saveEncashment');
+    },
+    findEncashmentById: async (encashmentId) => {
+      const { data } = await client.from('encashments').select('*').eq('id', encashmentId).maybeSingle();
+      return data ? mapEncashmentRow(data) : null;
+    },
+    listEncashments: async (filter, limit) => {
+      let query = client.from('encashments').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (filter.status) {
+        query = query.eq('status', filter.status);
+      }
+      const { data } = await query;
+      return (data ?? []).map(mapEncashmentRow);
+    },
+    listEncashmentsForUser: async (userId) => {
+      const { data } = await client.from('encashments').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      return (data ?? []).map(mapEncashmentRow);
     },
     listPairingSnapshotsForUser: async (userId) => {
       const { data } = await client

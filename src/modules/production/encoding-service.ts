@@ -175,7 +175,20 @@ export type ProductionWalletLedgerEntry = {
   id: string;
   userId: string;
   walletType: 'main' | 'lifestyle' | 'product' | 'pending' | 'encashment';
-  entryType: 'direct_referral' | 'salesmatch' | 'binary_cycle' | 'get_five' | 'lifestyle_rewards' | 'unilevel' | 'global_bonus';
+  entryType:
+    | 'direct_referral'
+    | 'salesmatch'
+    | 'binary_cycle'
+    | 'get_five'
+    | 'lifestyle_rewards'
+    | 'unilevel'
+    | 'global_bonus'
+    | 'encashment'
+    | 'encashment_fee'
+    | 'withholding_tax'
+    | 'system_retainer'
+    | 'cd_deduction'
+    | 'adjustment';
   sourceReference: string;
   creditAmount: number;
   debitAmount: number;
@@ -195,6 +208,29 @@ export type ProductionSalesmatchBalance = {
   rightPoints: number;
   matchedPoints: number;
   updatedAt: string;
+};
+
+export type ProductionEncashmentStatus = 'pending' | 'queued' | 'approved' | 'paid' | 'cancelled' | 'rejected';
+
+export type ProductionEncashment = {
+  id: string;
+  userId: string;
+  processId: string;
+  grossAmount: number;
+  processingFee: number;
+  taxAmount: number;
+  systemRetainer: number;
+  cdDeduction: number;
+  totalDeductions: number;
+  netAmount: number;
+  status: ProductionEncashmentStatus;
+  payoutMethod: string | null;
+  payoutDetails: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  paidAt: string | null;
+  remarks: string;
+  createdAt: string;
 };
 
 export type ProductionPairingSnapshot = {
@@ -418,6 +454,12 @@ export type ProductionEncodingRepository = {
     forfeitedDelta: number;
   }): Promise<void>;
   listPairingSnapshotsForUser(userId: string): Promise<ProductionPairingSnapshot[]>;
+  sumLedgerMainBalance(userId: string): Promise<number>;
+  createEncashment(row: ProductionEncashment): Promise<void>;
+  saveEncashment(row: ProductionEncashment): Promise<void>;
+  findEncashmentById(encashmentId: string): Promise<ProductionEncashment | null>;
+  listEncashments(filter: { status?: ProductionEncashmentStatus }, limit: number): Promise<ProductionEncashment[]>;
+  listEncashmentsForUser(userId: string): Promise<ProductionEncashment[]>;
   enqueueCompensation(item: ProductionCompensationQueueItem): Promise<void>;
   listPendingCompensation(limit: number): Promise<ProductionCompensationQueueItem[]>;
   markCompensationProcessed(queueId: string, processedAt: string): Promise<void>;
@@ -1762,6 +1804,201 @@ export class ProductionEncodingService {
     }
   }
 
+  // ENC-01 deduction stack: PHP 50 processing fee, 10% tax, 5% System Retainer,
+  // then CD recovery at 100% of the remaining net until the obligation clears.
+  async submitEncashment(actor: SessionUser, requestedAmount: number) {
+    const amount = Number(requestedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error('Enter a valid encashment amount.');
+    }
+    const member = await this.repo.findMemberByUserId(actor.id);
+    const network = await this.repo.findNetworkAccountByUserId(actor.id);
+    if (!member || !network) {
+      throw new Error('Member profile not found.');
+    }
+
+    const available = await this.repo.sumLedgerMainBalance(actor.id);
+    if (amount > available) {
+      throw new Error('Requested amount exceeds available balance.');
+    }
+
+    const requestId = crypto.randomUUID();
+    const processingFee = 50;
+    const tax = Number((amount * 0.1).toFixed(2));
+    const retainer = Number((amount * 0.05).toFixed(2));
+    const postFixedNet = Math.max(0, Number((amount - processingFee - tax - retainer).toFixed(2)));
+    const cdOutstanding = Math.max(0, Number((network.cdAmount - network.cdTotal).toFixed(2)));
+    const cdDeduction = Math.min(cdOutstanding, postFixedNet);
+    const totalDeductions = Number((processingFee + tax + retainer + cdDeduction).toFixed(2));
+    const net = Number((amount - totalDeductions).toFixed(2));
+    const processId = buildProcessId('encashment-submit', actor.id, requestId);
+    const createdAt = this.repo.now();
+
+    await this.repo.createEncashment({
+      id: requestId,
+      userId: actor.id,
+      processId,
+      grossAmount: amount,
+      processingFee,
+      taxAmount: tax,
+      systemRetainer: retainer,
+      cdDeduction,
+      totalDeductions,
+      netAmount: net,
+      status: 'pending',
+      payoutMethod: member.payoutMethod ?? null,
+      payoutDetails: member.payoutDetails ?? null,
+      reviewedByUserId: null,
+      reviewedAt: null,
+      paidAt: null,
+      remarks: 'Member-submitted encashment request.',
+      createdAt
+    });
+    await this.postLedgerIfNeeded({
+      userId: actor.id,
+      entryType: 'encashment',
+      sourceReference: requestId,
+      debitAmount: amount,
+      processId: `${processId}:debit`,
+      notes: `Encashment request ${requestId} (gross PHP ${amount}).`
+    });
+
+    if (cdDeduction > 0) {
+      network.cdTotal = Number((network.cdTotal + cdDeduction).toFixed(2));
+      if (network.cdTotal >= network.cdAmount) {
+        network.cdStatus = CD_STATUS_SETTLED;
+      }
+      await this.repo.saveNetworkAccount(network);
+
+      // GATE-CD-SETTLE-20260612: clearing the CD obligation through recovery
+      // settles the originating code, which fires the deferred DR and binary PV.
+      if (network.cdStatus === CD_STATUS_SETTLED && network.activationCode) {
+        const originatingCode = await this.repo.findActivationCodeByCode(network.activationCode);
+        if (originatingCode && originatingCode.paymentStatus === 'unpaid') {
+          await this.applyCodeSettlement(originatingCode, 'paid', {
+            actorUserId: null,
+            actorName: 'System — CD recovery',
+            note: `CD obligation cleared via encashment recovery (${requestId}).`
+          });
+        }
+      }
+    }
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      action: 'member-wallet-encash',
+      status: 'completed' as const,
+      reason: 'Encashment request submitted for review.',
+      detail: `Gross PHP ${amount}: fee ${processingFee}, tax ${tax}, retainer ${retainer}, CD recovery ${cdDeduction}, net PHP ${net}.`,
+      encashment: {
+        id: requestId,
+        grossAmount: amount,
+        processingFee,
+        tax,
+        systemRetainer: retainer,
+        cdDeduction,
+        totalDeductions,
+        netReceivable: net,
+        status: 'pending' as const,
+        payoutSchedule: 'Tuesday encashment / Friday payout'
+      }
+    };
+  }
+
+  async reviewEncashment(
+    actor: SessionUser,
+    encashmentId: string,
+    action: 'approve' | 'reject' | 'mark-paid',
+    remarks?: string
+  ) {
+    const row = await this.repo.findEncashmentById(encashmentId);
+    if (!row) {
+      throw new Error('Encashment request not found.');
+    }
+    const reviewedAt = this.repo.now();
+
+    if (action === 'approve') {
+      if (row.status !== 'pending' && row.status !== 'queued') {
+        throw new Error(`Cannot approve an encashment in ${row.status} status.`);
+      }
+      row.status = 'approved';
+    } else if (action === 'reject') {
+      if (row.status !== 'pending' && row.status !== 'queued') {
+        throw new Error(`Cannot reject an encashment in ${row.status} status.`);
+      }
+      row.status = 'rejected';
+      // Compensating credit restores the gross debit — corrections are new
+      // ledger rows, never edits (AUD-01 append-only rule).
+      await this.postLedgerIfNeeded({
+        userId: row.userId,
+        entryType: 'adjustment',
+        sourceReference: row.id,
+        creditAmount: row.grossAmount,
+        processId: `${row.processId}:refund`,
+        notes: `Encashment ${row.id} rejected — gross amount restored.`
+      });
+    } else {
+      if (row.status !== 'approved') {
+        throw new Error('Only approved encashments can be marked paid.');
+      }
+      row.status = 'paid';
+      row.paidAt = reviewedAt;
+    }
+
+    row.reviewedByUserId = actor.id;
+    row.reviewedAt = reviewedAt;
+    if (remarks?.trim()) {
+      row.remarks = remarks.trim();
+    }
+    await this.repo.saveEncashment(row);
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      action: 'admin-review-encashment',
+      status: 'completed' as const,
+      reason: `Encashment ${row.id} is now ${row.status}.`
+    };
+  }
+
+  async buildAdminEncashmentCenter() {
+    const rows = await this.repo.listEncashments({}, 200);
+    const memberNames = new Map<string, string>();
+    for (const row of rows) {
+      if (!memberNames.has(row.userId)) {
+        const member = await this.repo.findMemberByUserId(row.userId);
+        memberNames.set(row.userId, member ? `${member.fullName} (${member.username})` : row.userId);
+      }
+    }
+    const peso = (value: number) =>
+      `PHP ${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      encashments: rows.map((row, index) => ({
+        id: row.id,
+        queueOrder: index + 1,
+        member: memberNames.get(row.userId) ?? row.userId,
+        gross: peso(row.grossAmount),
+        fee: peso(row.processingFee),
+        tax: peso(row.taxAmount),
+        systemRetainer: peso(row.systemRetainer),
+        cdDeduction: peso(row.cdDeduction),
+        net: peso(row.netAmount),
+        method: row.payoutMethod ?? '—',
+        status: row.status,
+        remarks: row.remarks
+      })),
+      totals: {
+        gross: rows.reduce((sum, row) => sum + row.grossAmount, 0),
+        net: rows.reduce((sum, row) => sum + row.netAmount, 0),
+        awaitingReview: rows.filter((row) => row.status === 'pending' || row.status === 'queued').length
+      },
+      processNotes: [
+        'Production encashments are ledger-backed with deterministic process keys.',
+        'Approve moves a request to approved; mark-paid finalizes; reject restores the gross amount to the member wallet.'
+      ]
+    };
+  }
+
   async buildMemberWalletData(userId: string, encashAmount?: number) {
     const [member, ledgerEntries, networkAccount, allActivationCodes] = await Promise.all([
       this.repo.findMemberByUserId(userId),
@@ -2165,23 +2402,26 @@ export class ProductionEncodingService {
     userId: string;
     entryType: ProductionWalletLedgerEntry['entryType'];
     sourceReference: string;
-    creditAmount: number;
+    creditAmount?: number;
+    debitAmount?: number;
+    walletType?: ProductionWalletLedgerEntry['walletType'];
     processId: string;
     notes: string;
   }) {
     if (await this.repo.hasWalletLedgerProcess(input.processId)) {
       return;
     }
-    const previous = await this.repo.listWalletLedgerEntriesForUser(input.userId);
-    const balanceAfter = previous.reduce((sum, row) => sum + row.creditAmount - row.debitAmount, 0) + input.creditAmount;
+    const creditAmount = input.creditAmount ?? 0;
+    const debitAmount = input.debitAmount ?? 0;
+    const balanceAfter = (await this.repo.sumLedgerMainBalance(input.userId)) + creditAmount - debitAmount;
     await this.repo.appendWalletLedgerEntry({
       id: crypto.randomUUID(),
       userId: input.userId,
-      walletType: 'main',
+      walletType: input.walletType ?? 'main',
       entryType: input.entryType,
       sourceReference: input.sourceReference,
-      creditAmount: input.creditAmount,
-      debitAmount: 0,
+      creditAmount,
+      debitAmount,
       balanceAfter,
       processId: input.processId,
       notes: input.notes,
@@ -2283,6 +2523,7 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     queue: [...(seed?.queue ?? [])],
     reservations: [...(seed?.reservations ?? [])],
     pairingSnapshots: [] as ProductionPairingSnapshot[],
+    encashments: [] as ProductionEncashment[],
     activationCodeSequence: seed?.activationCodeSequence ?? 1000,
     memberSequence: seed?.memberSequence ?? 1000,
     now: seed?.now ?? '2026-06-08T09:00:00.000Z'
@@ -2410,6 +2651,28 @@ export function createInMemoryProductionEncodingRepository(seed?: {
       }
     },
     listPairingSnapshotsForUser: async (userId) => state.pairingSnapshots.filter((item) => item.userId === userId),
+    sumLedgerMainBalance: async (userId) =>
+      state.walletLedger
+        .filter((item) => item.userId === userId && item.walletType === 'main')
+        .reduce((sum, item) => sum + item.creditAmount - item.debitAmount, 0),
+    createEncashment: async (row) => {
+      if (state.encashments.some((item) => item.processId === row.processId)) {
+        return;
+      }
+      state.encashments.push({ ...row });
+    },
+    saveEncashment: async (row) => {
+      const index = state.encashments.findIndex((item) => item.id === row.id);
+      if (index >= 0) {
+        state.encashments[index] = { ...row };
+      } else {
+        state.encashments.push({ ...row });
+      }
+    },
+    findEncashmentById: async (encashmentId) => state.encashments.find((item) => item.id === encashmentId) ?? null,
+    listEncashments: async (filter, limit) =>
+      state.encashments.filter((item) => (filter.status ? item.status === filter.status : true)).slice(0, limit),
+    listEncashmentsForUser: async (userId) => state.encashments.filter((item) => item.userId === userId),
     enqueueCompensation: async (item) => {
       if (!state.queue.some((row) => row.processId === item.processId)) {
         state.queue.push({ ...item });

@@ -509,6 +509,48 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       const { data } = await client.from('activation_codes').select('*').ilike('code', code.trim()).maybeSingle();
       return data ? mapCodeRow(data) : null;
     },
+    findActivationCodesByCodes: async (codes) => {
+      if (codes.length === 0) {
+        return [];
+      }
+      const { data } = await client
+        .from('activation_codes')
+        .select('*')
+        .in('code', codes.map((code) => code.trim()));
+      return (data ?? []).map(mapCodeRow);
+    },
+    listMembersBySponsorCode: async (sponsorCode) => {
+      const { data } = await client.from('member_profiles').select('*').eq('sponsor_code', sponsorCode);
+      return (data ?? []).map(mapMemberRow);
+    },
+    findUsersByIds: async (userIds) => {
+      if (userIds.length === 0) {
+        return [];
+      }
+      const { data } = await client.from('app_users').select('*').in('id', userIds);
+      return (data ?? []).map(mapUserRow);
+    },
+    listActivationCodeEventsForUser: async (userId, limit) => {
+      const { data } = await client
+        .from('activation_code_events')
+        .select('*')
+        .or(`from_user_id.eq.${userId},to_user_id.eq.${userId},actor_user_id.eq.${userId}`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      return (data ?? []).map(mapCodeEventRow);
+    },
+    listRecentActivationCodeEvents: async (limit) => {
+      const { data } = await client
+        .from('activation_code_events')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      return (data ?? []).map(mapCodeEventRow);
+    },
+    listNetworkAccounts: async () => {
+      const { data } = await client.from('network_accounts').select('*');
+      return (data ?? []).map(mapNetworkRow);
+    },
     listDirectsBySponsor: async (sponsorUserId) => {
       const { data } = await client.from('network_accounts').select('*').eq('sponsor_user_id', sponsorUserId);
       return (data ?? []).map(mapNetworkRow);

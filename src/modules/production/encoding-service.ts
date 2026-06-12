@@ -441,6 +441,12 @@ export type ProductionEncodingRepository = {
   saveNetworkAccount(account: ProductionNetworkAccount): Promise<void>;
   findNetworkAccountByUserId(userId: string): Promise<ProductionNetworkAccount | null>;
   findActivationCodeByCode(code: string): Promise<ProductionActivationCode | null>;
+  findActivationCodesByCodes(codes: string[]): Promise<ProductionActivationCode[]>;
+  listMembersBySponsorCode(sponsorCode: string): Promise<ProductionMemberProfile[]>;
+  findUsersByIds(userIds: string[]): Promise<ProductionAppUser[]>;
+  listActivationCodeEventsForUser(userId: string, limit: number): Promise<ProductionActivationCodeEvent[]>;
+  listRecentActivationCodeEvents(limit: number): Promise<ProductionActivationCodeEvent[]>;
+  listNetworkAccounts(): Promise<ProductionNetworkAccount[]>;
   listDirectsBySponsor(sponsorUserId: string): Promise<ProductionNetworkAccount[]>;
   findPlacementChild(parentUserId: string, side: PlacementSide, shadowSide?: PlacementSide | null): Promise<ProductionNetworkAccount | null>;
   saveSalesmatchBalance(balance: ProductionSalesmatchBalance): Promise<void>;
@@ -618,12 +624,9 @@ export class ProductionEncodingService {
 
   async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string) {
     const signedInMember = await this.requireMemberByUserId(user.id);
-    const members = await this.repo.listMembers();
-    const networks = await Promise.all(members.map((member) => this.repo.findNetworkAccountByUserId(member.userId)));
+    const [members, networks] = await Promise.all([this.repo.listMembers(), this.repo.listNetworkAccounts()]);
     const membersByUserId = new Map(members.map((member) => [member.userId, member]));
-    const networksByUserId = new Map(
-      networks.filter((network): network is ProductionNetworkAccount => Boolean(network)).map((network) => [network.userId, network])
-    );
+    const networksByUserId = new Map(networks.map((network) => [network.userId, network]));
     const membersByUsername = new Map(members.map((member) => [member.username, member]));
     const directReferralCounts = new Map<string, number>();
 
@@ -853,16 +856,13 @@ export class ProductionEncodingService {
       VIP: 159998
     };
 
-    const [member, allMembers, allLedger] = await Promise.all([
+    const [member, allLedger] = await Promise.all([
       this.repo.findMemberByUserId(userId),
-      this.repo.listMembers(),
       this.repo.listWalletLedgerEntriesForUser(userId)
     ]);
 
     const memberReferralCode = member?.referralCode ?? '';
-    const directs = allMembers.filter(
-      (m) => m.sponsorCode != null && m.sponsorCode === memberReferralCode
-    );
+    const directs = memberReferralCode ? await this.repo.listMembersBySponsorCode(memberReferralCode) : [];
 
     const tierProgress = ELIGIBLE_TIERS.map((tier) => {
       const count = directs.filter((d) => d.packageTier === tier).length;
@@ -912,8 +912,6 @@ export class ProductionEncodingService {
   async buildMemberActivationCodeCenter(user: SessionUser) {
     const member = await this.requireMemberByUserId(user.id);
     const codes = await this.repo.listActivationCodesForUser(user.id);
-    const users = await this.repo.listUsers();
-    const userById = new Map(users.map((item) => [item.id, item]));
 
     const inventory = codes
       .map((code) => mapCodeRow(code, member.username))
@@ -926,29 +924,27 @@ export class ProductionEncodingService {
       visionCodes: inventory.filter((item) => item.codeFamily === 'YOR VISION')
     };
 
-    const history = (await this.repo.listActivationCodeEvents())
-      .filter((event) => event.fromUserId === user.id || event.toUserId === user.id || event.actorUserId === user.id)
-      .slice(-12)
-      .reverse()
-      .map((event) => ({
-        id: event.id,
-        code: event.code,
-        action: event.action,
-        counterparty:
-          (event.toUserId ? userById.get(event.toUserId)?.displayName : null) ??
-          (event.fromUserId ? userById.get(event.fromUserId)?.displayName : null) ??
-          event.actorName,
-        occurredAt: event.createdAt,
-        status: event.action === 'consumed' ? 'used' : event.action
-      }));
+    const recentEvents = await this.repo.listActivationCodeEventsForUser(user.id, 12);
+    const counterpartyIds = Array.from(
+      new Set(recentEvents.flatMap((event) => [event.toUserId, event.fromUserId]).filter((id): id is string => Boolean(id)))
+    );
+    const userById = new Map((await this.repo.findUsersByIds(counterpartyIds)).map((item) => [item.id, item]));
 
-    const transferTargets = (await this.repo.listMembers())
-      .filter((candidate) => candidate.userId !== user.id)
-      .map((candidate) => ({
-        username: candidate.username,
-        fullName: candidate.fullName,
-        packageTier: candidate.packageTier
-      }));
+    const history = recentEvents.map((event) => ({
+      id: event.id,
+      code: event.code,
+      action: event.action,
+      counterparty:
+        (event.toUserId ? userById.get(event.toUserId)?.displayName : null) ??
+        (event.fromUserId ? userById.get(event.fromUserId)?.displayName : null) ??
+        event.actorName,
+      occurredAt: event.createdAt,
+      status: event.action === 'consumed' ? 'used' : event.action
+    }));
+
+    // Transfer recipients resolve through search-first username lookup; the
+    // full-member dropdown list is intentionally no longer shipped.
+    const transferTargets: Array<{ username: string; fullName: string; packageTier: string }> = [];
 
     return {
       moneyMode: this.repo.getMoneyMode(),
@@ -1001,17 +997,14 @@ export class ProductionEncodingService {
         lostCodes: 0,
         paidCodes: inventory.filter((item) => item.paymentStatus === 'paid' || item.paymentStatus === 'externally-paid').length
       },
-      auditTrail: (await this.repo.listActivationCodeEvents()).slice(-20).reverse().map((event) => ({
+      auditTrail: (await this.repo.listRecentActivationCodeEvents(20)).map((event) => ({
         actor: event.actorName,
         action: event.action,
         target: event.code,
         occurredAt: event.createdAt
       })),
-      transferTargets: members.map((candidate) => ({
-        username: candidate.username,
-        fullName: candidate.fullName,
-        packageTier: candidate.packageTier
-      })),
+      // Transfer recipients resolve through search-first username lookup.
+      transferTargets: [] as Array<{ username: string; fullName: string; packageTier: string }>,
       hints: [
         'Generate, release, and transfer always append activation-code event history.',
         'Registration eligibility is controlled by the backend code-family and lifecycle flags, not by frontend labels.'
@@ -1629,8 +1622,7 @@ export class ProductionEncodingService {
   }
 
   async releaseActivationCodes(actor: SessionUser, codes: string[]) {
-    const allCodes = await this.repo.listActivationCodes();
-    const selected = allCodes.filter((row) => codes.includes(row.code));
+    const selected = await this.repo.findActivationCodesByCodes(codes);
     if (selected.length === 0) {
       throw new Error('Select at least one activation code.');
     }
@@ -1668,8 +1660,7 @@ export class ProductionEncodingService {
 
   async transferActivationCodes(actor: SessionUser, targetUsername: string, codes: string[]) {
     const target = await this.requireMemberByUsername(targetUsername);
-    const allCodes = await this.repo.listActivationCodes();
-    const selected = allCodes.filter((row) => codes.includes(row.code));
+    const selected = await this.repo.findActivationCodesByCodes(codes);
     if (selected.length === 0) {
       throw new Error('Select at least one activation code.');
     }
@@ -2000,24 +1991,17 @@ export class ProductionEncodingService {
   }
 
   async buildMemberWalletData(userId: string, encashAmount?: number) {
-    const [member, ledgerEntries, networkAccount, allActivationCodes] = await Promise.all([
+    const [member, ledgerEntries, networkAccount] = await Promise.all([
       this.repo.findMemberByUserId(userId),
       this.repo.listWalletLedgerEntriesForUser(userId),
-      this.repo.findNetworkAccountByUserId(userId),
-      this.repo.listActivationCodes()
+      this.repo.findNetworkAccountByUserId(userId)
     ]);
 
     if (!member) {
       throw new Error('Member profile not found.');
     }
 
-    const memberCode = allActivationCodes.find(
-      c => c.code === networkAccount?.activationCode && c.status === 'used'
-    );
-    const packagePrice = packagePolicies.find(
-      p => p.name.toLowerCase() === member.packageTier.toLowerCase()
-    )?.price ?? 0;
-    const cdBalance = memberCode?.paymentStatus === 'unpaid' ? packagePrice : 0;
+    const cdBalance = networkAccount ? Math.max(0, networkAccount.cdAmount - networkAccount.cdTotal) : 0;
 
     // Sum balances per wallet type
     const mainBalance = ledgerEntries
@@ -2609,6 +2593,22 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     findNetworkAccountByUserId: async (userId) => state.networkAccounts.find((item) => item.userId === userId) ?? null,
     findActivationCodeByCode: async (code) =>
       state.activationCodes.find((item) => item.code.trim().toUpperCase() === code.trim().toUpperCase()) ?? null,
+    findActivationCodesByCodes: async (codes) => {
+      const wanted = new Set(codes.map((code) => code.trim().toUpperCase()));
+      return state.activationCodes.filter((item) => wanted.has(item.code.trim().toUpperCase()));
+    },
+    listMembersBySponsorCode: async (sponsorCode) => state.members.filter((item) => item.sponsorCode === sponsorCode),
+    findUsersByIds: async (userIds) => {
+      const wanted = new Set(userIds);
+      return state.users.filter((item) => wanted.has(item.id));
+    },
+    listActivationCodeEventsForUser: async (userId, limit) =>
+      state.codeEvents
+        .filter((event) => event.fromUserId === userId || event.toUserId === userId || event.actorUserId === userId)
+        .slice(-limit)
+        .reverse(),
+    listRecentActivationCodeEvents: async (limit) => [...state.codeEvents].slice(-limit).reverse(),
+    listNetworkAccounts: async () => [...state.networkAccounts],
     listDirectsBySponsor: async (sponsorUserId) => state.networkAccounts.filter((item) => item.sponsorUserId === sponsorUserId),
     findPlacementChild: async (parentUserId, side, shadowSide) =>
       state.networkAccounts.find(

@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import { rateLimit } from '../lib/rate-limit.js';
+import { moneyAmountSchema, parseBody } from '../lib/validate.js';
 import { buildMemberOffice } from '../modules/member/office-service.js';
 import { buildMemberSummary } from '../modules/member/summary-service.js';
 import { requireRole } from '../modules/auth/request-auth.js';
@@ -397,22 +400,37 @@ memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'ad
   res.status(200).json({ moneyMode: payload.moneyMode, preview: payload.preview, requestedAmount: payload.preview.requestedAmount });
 });
 
-memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
-  if (isProductionMode()) {
-    const service = getProductionEncodingService();
-    if (!service) {
-      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+const encashRateLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: 'encash-submit' });
+
+memberRouter.post(
+  '/api/member/wallet/encash',
+  requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'),
+  encashRateLimit,
+  async (req, res) => {
+    let amount: number;
+    try {
+      amount = parseBody(z.object({ amount: moneyAmountSchema }), { amount: req.body?.amount }).amount;
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Enter a valid encashment amount.' });
       return;
     }
-    try {
-      res.status(200).json(await service.submitEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
-    } catch (error) {
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit encashment.' });
+
+    if (isProductionMode()) {
+      const service = getProductionEncodingService();
+      if (!service) {
+        res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+        return;
+      }
+      try {
+        res.status(200).json(await service.submitEncashment(req.authUser!, amount));
+      } catch (error) {
+        res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit encashment.' });
+      }
+      return;
     }
-    return;
+    res.status(200).json(runMemberEncashment(req.authUser!, amount));
   }
-  res.status(200).json(runMemberEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
-});
+);
 
 memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const payoutOption = typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '';

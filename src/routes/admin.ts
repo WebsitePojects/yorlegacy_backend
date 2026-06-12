@@ -1,4 +1,7 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
+import { z } from 'zod';
+import { rateLimit } from '../lib/rate-limit.js';
+import { codeQuantitySchema, parseBody } from '../lib/validate.js';
 import { buildAdminOffice } from '../modules/admin/office-service.js';
 import { buildAdminSummary } from '../modules/admin/summary-service.js';
 import { findAdminProfileByUserId } from '../modules/auth/app-users.js';
@@ -135,8 +138,17 @@ adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', '
   res.status(200).json(buildAdminActivationCodeCenter());
 });
 
-adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+const generateRateLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'code-generate' });
+
+adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), generateRateLimit, async (req, res) => {
   const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.slice(0, 200) : '';
+  let quantity: number;
+  try {
+    quantity = parseBody(z.object({ quantity: codeQuantitySchema }), { quantity: Number(req.body?.quantity ?? 1) }).quantity;
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Enter a valid quantity (1-100).' });
+    return;
+  }
 
   if (isProductionMode()) {
     const service = getProductionEncodingService();
@@ -147,7 +159,7 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'b
     try {
       res.status(200).json(
         await service.generateActivationCodes(req.authUser!, {
-          quantity: Number(req.body?.quantity ?? 1),
+          quantity,
           packageTier: req.body?.packageTier,
           assignedTo: req.body?.assignedTo,
           accountType: req.body?.accountType,
@@ -162,7 +174,7 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'b
   }
 
   res.status(200).json(runAdminGenerateActivationCodes(req.authUser!, {
-    quantity: Number(req.body?.quantity ?? 1),
+    quantity,
     packageTier: req.body?.packageTier,
     assignedTo: req.body?.assignedTo,
     accountType: req.body?.accountType,
@@ -222,7 +234,7 @@ adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'c
   }));
 });
 
-// Settlement is a finance action: admin/BOD/superadmin only — cashier is
+// Settlement is a finance action: admin/BOD/superadmin only â€” cashier is
 // limited to release/transfer/name-correction per the approved role matrix.
 adminRouter.post('/api/admin/activation-codes/settle', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
@@ -432,3 +444,4 @@ adminRouter.get('/api/admin/modules/:moduleId', requireRole('admin', 'cashier', 
 
   res.status(200).json(module);
 });
+

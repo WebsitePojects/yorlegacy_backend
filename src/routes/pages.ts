@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit } from '../lib/rate-limit.js';
 import { getPageBySlug } from '../modules/pages/page-service.js';
 import {
   buildPublicRegistrationPreview,
@@ -72,7 +73,9 @@ pagesRouter.post('/api/registration/preview', async (request, response) => {
   response.status(200).json(buildPublicRegistrationPreview(request.authUser ?? null, payload));
 });
 
-pagesRouter.post('/api/registration/submit', async (request, response) => {
+const registrationSubmitRateLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: 'registration-submit' });
+
+pagesRouter.post('/api/registration/submit', registrationSubmitRateLimit, async (request, response) => {
   const payload = {
     origin: request.body?.origin,
     fullName: request.body?.fullName,

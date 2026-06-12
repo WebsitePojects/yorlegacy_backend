@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { rateLimit } from '../lib/rate-limit.js';
 import { authenticateUser } from '../modules/auth/auth-service.js';
 import { getDemoCredentials } from '../modules/auth/demo-users.js';
 import { isProductionMode } from '../modules/production/runtime.js';
@@ -43,7 +44,9 @@ authRouter.get('/api/auth/me', (req, res) => {
   });
 });
 
-authRouter.post('/api/auth/login', async (req, res) => {
+const loginRateLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'login' });
+
+authRouter.post('/api/auth/login', loginRateLimit, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
 
   if (!parsed.success) {

@@ -61,9 +61,9 @@ export const env =
 
 type ProductionEnvCheck = {
   YOR_RUNTIME_MODE: string;
-  SUPABASE_URL: string | undefined;
-  SUPABASE_SECRET_KEY: string | undefined;
-  SUPABASE_SERVICE_ROLE_KEY: string | undefined;
+  SUPABASE_URL?: string | undefined;
+  SUPABASE_SECRET_KEY?: string | undefined;
+  SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
   APP_SESSION_SECRET: string;
 };
 

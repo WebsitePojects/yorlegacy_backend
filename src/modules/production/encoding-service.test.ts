@@ -70,6 +70,8 @@ function seedNetwork(
     leftPoints: 0,
     rightPoints: 0,
     cdStatus: 0,
+    cdAmount: 0,
+    cdTotal: 0,
     createdAt: '2026-06-08T09:00:00.000Z'
   };
 }
@@ -306,6 +308,96 @@ describe('ProductionEncodingService', () => {
 
     const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(ledger.find((entry) => entry.entryType === 'get_five')?.creditAmount).toBe(25998);
+  });
+
+  it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009001',
+          packageTier: 'Business',
+          accountType: 'FS',
+          paymentStatus: 'paid',
+          lockedDirectReferralBonus: 7000,
+          lockedSalesmatchValue: 5000,
+          lockedBinaryPoints: 20,
+          lockedGetFiveAmount: 50998
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const submit = await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Free Slot Prospect',
+        username: 'YOR9001',
+        phone: '+63 999 555 5555',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009001',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'left'
+      }
+    );
+
+    expect(submit.queuedCompensation).toEqual([]);
+    expect(submit.detail).toContain('FS entries never generate');
+
+    const sponsorLedger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    expect(sponsorLedger.find((entry) => entry.entryType === 'direct_referral')).toBeUndefined();
+
+    const createdUser = await repo.findUserByUsername('YOR9001');
+    const createdNetwork = await repo.findNetworkAccountByUserId(createdUser!.id);
+    expect(createdNetwork).toMatchObject({ currentAccountType: 'FS', cdAmount: 0, cdTotal: 0, cdStatus: 0 });
+  });
+
+  it('CD unpaid registration defers DR and PV and records the CD obligation', async () => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser],
+      members: [sponsorMember],
+      networkAccounts: [seedNetwork('sponsor-user', 'Standard', null, null, null)],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00009002',
+          packageTier: 'Standard',
+          accountType: 'CD',
+          paymentStatus: 'unpaid'
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const submit = await service.submitRegistration(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      {
+        origin: 'genealogy-slot',
+        fullName: 'Credit Prospect',
+        username: 'YOR9002',
+        phone: '+63 999 666 6666',
+        password: 'Password123!',
+        activationCode: 'YOR-ACT-00009002',
+        placementParentUsername: 'YOR0001',
+        placementSide: 'right'
+      }
+    );
+
+    expect(submit.queuedCompensation).toEqual([]);
+    expect(submit.detail).toContain('deferred until the entry payment is settled');
+
+    const sponsorLedger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    expect(sponsorLedger.find((entry) => entry.entryType === 'direct_referral')).toBeUndefined();
+
+    const createdUser = await repo.findUserByUsername('YOR9002');
+    const createdNetwork = await repo.findNetworkAccountByUserId(createdUser!.id);
+    expect(createdNetwork).toMatchObject({ currentAccountType: 'CD', cdAmount: 25998, cdTotal: 0, cdStatus: 1 });
   });
 
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {

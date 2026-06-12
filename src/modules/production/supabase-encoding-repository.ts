@@ -126,6 +126,8 @@ function mapNetworkRow(row: NetworkAccountRow): ProductionNetworkAccount {
     leftPoints: row.left_points ?? 0,
     rightPoints: row.right_points ?? 0,
     cdStatus: row.cd_status ?? 0,
+    cdAmount: Number(row.cd_amount ?? 0),
+    cdTotal: Number(row.cd_total ?? 0),
     createdAt: row.created_at ?? isoNow()
   };
 }
@@ -438,6 +440,9 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           registration_status: account.registrationStatus,
           left_points: account.leftPoints,
           right_points: account.rightPoints,
+          cd_status: account.cdStatus,
+          cd_amount: account.cdAmount,
+          cd_total: account.cdTotal,
           created_at: account.createdAt
         },
         { onConflict: 'user_id' }
@@ -447,6 +452,14 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     findNetworkAccountByUserId: async (userId) => {
       const { data } = await client.from('network_accounts').select('*').eq('user_id', userId).maybeSingle();
       return data ? mapNetworkRow(data) : null;
+    },
+    findActivationCodeByCode: async (code) => {
+      const { data } = await client.from('activation_codes').select('*').ilike('code', code.trim()).maybeSingle();
+      return data ? mapCodeRow(data) : null;
+    },
+    listDirectsBySponsor: async (sponsorUserId) => {
+      const { data } = await client.from('network_accounts').select('*').eq('sponsor_user_id', sponsorUserId);
+      return (data ?? []).map(mapNetworkRow);
     },
     findPlacementChild: async (parentUserId, side, shadowSide) => {
       let query = client

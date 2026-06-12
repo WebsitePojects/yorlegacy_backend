@@ -1,4 +1,12 @@
 import crypto from 'node:crypto';
+import {
+  CD_STATUS_NONE,
+  CD_STATUS_OUTSTANDING,
+  CD_STATUS_SETTLED,
+  countsForDirectReferralSource,
+  countsForPairingSource,
+  type AccountStateInput
+} from '../compensation/account-state.js';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
@@ -27,12 +35,15 @@ export const UNILEVEL_MAX_LEVELS = 10;
 export type PackageConfig = {
   packageTier: PackageTier;
   accountType: AccountType;
+  price: number;
   directReferralBonus: number;
   salesmatchValue: number;
   salesmatchBinaryPoints: number;
   binaryCyclePercent: number;
   getFiveAmount: number;
   binaryPoints: number;
+  weeklySalesmatchCap: number;
+  monthlySalesmatchCap: number;
 };
 
 const PACKAGE_CONFIGS = new Map<string, PackageConfig>(
@@ -43,12 +54,15 @@ const PACKAGE_CONFIGS = new Map<string, PackageConfig>(
       {
         packageTier,
         accountType: packageTier === 'Business' || packageTier === 'VIP' ? 'FS' : 'PD',
+        price: policy.price,
         directReferralBonus: policy.directReferralBonus,
         salesmatchValue: policy.salesmatchValue,
         salesmatchBinaryPoints: policy.salesmatchValue / PV_PESO_RATE,
         binaryCyclePercent: policy.binaryCyclePercent ?? 0,
         getFiveAmount: packageTier === 'Basic' ? 0 : policy.price,
-        binaryPoints: policy.pv
+        binaryPoints: policy.pv,
+        weeklySalesmatchCap: policy.weeklySalesmatchCap,
+        monthlySalesmatchCap: policy.monthlySalesmatchCap
       }
     ];
   })
@@ -98,6 +112,8 @@ export type ProductionNetworkAccount = {
   leftPoints: number;
   rightPoints: number;
   cdStatus: number;
+  cdAmount: number;
+  cdTotal: number;
   createdAt: string;
 };
 
@@ -376,6 +392,8 @@ export type ProductionEncodingRepository = {
   saveMemberProfile(profile: ProductionMemberProfile): Promise<void>;
   saveNetworkAccount(account: ProductionNetworkAccount): Promise<void>;
   findNetworkAccountByUserId(userId: string): Promise<ProductionNetworkAccount | null>;
+  findActivationCodeByCode(code: string): Promise<ProductionActivationCode | null>;
+  listDirectsBySponsor(sponsorUserId: string): Promise<ProductionNetworkAccount[]>;
   findPlacementChild(parentUserId: string, side: PlacementSide, shadowSide?: PlacementSide | null): Promise<ProductionNetworkAccount | null>;
   saveSalesmatchBalance(balance: ProductionSalesmatchBalance): Promise<void>;
   getSalesmatchBalance(userId: string): Promise<ProductionSalesmatchBalance | null>;
@@ -1205,6 +1223,14 @@ export class ProductionEncodingService {
       payoutMethod: (input.payoutOption ?? '').trim() || undefined,
       payoutDetails: (input.payoutDetails ?? '').trim() || undefined
     };
+    // CD obligation tracking (owner ruling 2026-06-12): any non-FS unpaid entry
+    // carries a Commission Deduction obligation equal to the package price,
+    // recovered at 100% of encashment net until cleared. FS carries no obligation
+    // because FS never gains earning rights (it is not a debt state).
+    const packagePrice = getPackageConfig(selectedPackageTier).price;
+    const entryUnpaid = matchingCode.paymentStatus === 'unpaid';
+    const carriesCdObligation = matchingCode.accountType !== 'FS' && entryUnpaid;
+    const settledCdEntry = matchingCode.accountType === 'CD' && !entryUnpaid;
     const network: ProductionNetworkAccount = {
       userId,
       sponsorUserId: sponsor.userId,
@@ -1219,7 +1245,9 @@ export class ProductionEncodingService {
       registrationStatus: 'active',
       leftPoints: 0,
       rightPoints: 0,
-      cdStatus: 0,
+      cdStatus: carriesCdObligation ? CD_STATUS_OUTSTANDING : settledCdEntry ? CD_STATUS_SETTLED : CD_STATUS_NONE,
+      cdAmount: carriesCdObligation || settledCdEntry ? packagePrice : 0,
+      cdTotal: settledCdEntry ? packagePrice : 0,
       createdAt
     };
 
@@ -1247,54 +1275,37 @@ export class ProductionEncodingService {
       }
     ]);
 
-    const directProcessId = buildProcessId('registration-direct', sponsor.userId, userId, matchingCode.code);
-    const getFiveProcessId = buildProcessId('registration-get-five', sponsor.userId, selectedPackageTier.toUpperCase());
-    await this.postLedgerIfNeeded({
-      userId: sponsor.userId,
-      entryType: 'direct_referral',
-      sourceReference: finalUsername,
-      creditAmount: matchingCode.lockedDirectReferralBonus,
-      processId: directProcessId,
-      notes: `Direct referral bonus from ${finalUsername}.`
-    });
+    // GATE-BIN-PV-PDCD-20260612: owner ruling — only PD (settled payment) and
+    // fully-settled CD accounts generate Direct Referral or binary PV. FS never
+    // does, even when paid (FS stays FS forever). Unpaid entries defer DR/PV to
+    // the settlement trigger (settleActivationCode), which reuses these exact
+    // process keys so each posting happens at most once.
+    // Reverts GATE-BIN-PV-FS-2026-06-12, which wrongly allowed paid FS entries.
+    const entryState = this.codeEntryState(matchingCode, network);
+    const drEligible = countsForDirectReferralSource(entryState);
+    const pvEligible = countsForPairingSource(entryState);
 
-    const qualifiedSamePackageDirects = await this.countQualifiedDirectsBySponsorAndPackage(sponsor.userId, selectedPackageTier);
-    if (matchingCode.lockedGetFiveAmount > 0 && qualifiedSamePackageDirects % 5 === 0) {
-      await this.postLedgerIfNeeded({
-        userId: sponsor.userId,
-        entryType: 'get_five',
-        sourceReference: `${matchingCode.packageTier} package threshold`,
-        creditAmount: matchingCode.lockedGetFiveAmount,
-        processId: getFiveProcessId,
-        notes: `Get Yor Five bonus on ${qualifiedSamePackageDirects} same-package directs.`
+    if (drEligible) {
+      await this.postRegistrationDirectAndGetFive({
+        sponsorUserId: sponsor.userId,
+        newMemberUserId: userId,
+        newMemberUsername: finalUsername,
+        code: matchingCode,
+        packageTier: selectedPackageTier
       });
     }
 
-    // GATE-BIN-PV-FS-2026-06-12: FS paid/externally-paid accounts are eligible for binary pairing.
-    // Only unpaid codes (any account type — PD, FS, CD) are excluded from generating binary PV.
-    // Eligible pairings: PD+PD, FS+FS, CD Paid+FS, CD Paid+CD Paid, PD+FS, PD+CD Paid.
-    const eligibleForBinaryPV = matchingCode.paymentStatus !== 'unpaid';
     let queuedProcessIds: string[] = [];
-
-    if (eligibleForBinaryPV) {
-      const queueItem: ProductionCompensationQueueItem = {
-        id: crypto.randomUUID(),
-        processId: buildProcessId('registration-placement-sales', userId, matchingCode.code),
-        eventType: 'placement-sales',
-        status: 'pending',
-        payload: {
-          placementParentUserId: placementParent.userId,
-          placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
-          placementSide: preview.placement.placementSide,
-          salesmatchValue: matchingCode.lockedSalesmatchValue,
-          binaryPoints: matchingCode.lockedBinaryPoints,
-          createdMemberUserId: userId,
-          createdMemberUsername: finalUsername,
-          activationCode: matchingCode.code
-        },
-        createdAt,
-        processedAt: null
-      };
+    if (pvEligible) {
+      const queueItem = this.buildPlacementSalesQueueItem({
+        newMemberUserId: userId,
+        newMemberUsername: finalUsername,
+        code: matchingCode,
+        placementParentUserId: placementParent.userId,
+        placementParentShadowSide: preview.placement.placementParentShadowSide ?? null,
+        placementSide: preview.placement.placementSide,
+        createdAt
+      });
       await this.repo.enqueueCompensation(queueItem);
       queuedProcessIds = [queueItem.processId];
     }
@@ -1312,9 +1323,12 @@ export class ProductionEncodingService {
       action: 'production-registration-submit',
       status: 'completed',
       reason: 'Production registration committed and downstream compensation queued.',
-      detail: eligibleForBinaryPV
-        ? `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`
-        : `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral. Binary PV not queued: unpaid code is not eligible to generate binary points.`,
+      detail:
+        drEligible && pvEligible
+          ? `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`
+          : matchingCode.accountType === 'FS'
+            ? `Created ${finalUsername}, consumed ${matchingCode.code}. FS entries never generate direct referral or binary PV.`
+            : `Created ${finalUsername}, consumed ${matchingCode.code}. Direct referral and binary PV are deferred until the entry payment is settled (PD/paid-CD rule).`,
       placementReservationId: preview.placementReservationId,
       queuedCompensation: queuedProcessIds,
       createdMember: {
@@ -1850,15 +1864,110 @@ export class ProductionEncodingService {
     };
   }
 
+  // Entry state at registration time, derived from the consumed code plus the
+  // freshly built network account (CD obligation fields).
+  private codeEntryState(code: ProductionActivationCode, network: ProductionNetworkAccount): AccountStateInput {
+    return {
+      accountType: code.accountType,
+      paymentStatus: code.paymentStatus,
+      cdAmount: network.cdAmount,
+      cdTotal: network.cdTotal,
+      cdStatus: network.cdStatus
+    };
+  }
+
+  // Effective state of an existing account, derived from its network row. An
+  // outstanding CD obligation marks the entry payment as not yet settled.
+  private networkAccountState(network: ProductionNetworkAccount): AccountStateInput {
+    return {
+      accountType: network.currentAccountType,
+      paymentStatus: network.cdStatus === CD_STATUS_OUTSTANDING ? 'unpaid' : 'paid',
+      cdAmount: network.cdAmount,
+      cdTotal: network.cdTotal,
+      cdStatus: network.cdStatus
+    };
+  }
+
+  // Posts the sponsor Direct Referral and, when a same-package group of five
+  // completes, the Get Yor Five bonus. Shared by registration (eligible entries)
+  // and the settlement trigger (deferred entries) — process keys are identical
+  // on both paths so each posting happens at most once.
+  private async postRegistrationDirectAndGetFive(input: {
+    sponsorUserId: string;
+    newMemberUserId: string;
+    newMemberUsername: string;
+    code: ProductionActivationCode;
+    packageTier: PackageTier;
+  }) {
+    const directProcessId = buildProcessId('registration-direct', input.sponsorUserId, input.newMemberUserId, input.code.code);
+    await this.postLedgerIfNeeded({
+      userId: input.sponsorUserId,
+      entryType: 'direct_referral',
+      sourceReference: input.newMemberUsername,
+      creditAmount: input.code.lockedDirectReferralBonus,
+      processId: directProcessId,
+      notes: `Direct referral bonus from ${input.newMemberUsername}.`
+    });
+
+    const qualifiedSamePackageDirects = await this.countQualifiedDirectsBySponsorAndPackage(input.sponsorUserId, input.packageTier);
+    if (input.code.lockedGetFiveAmount > 0 && qualifiedSamePackageDirects > 0 && qualifiedSamePackageDirects % 5 === 0) {
+      // Group index keeps the process key unique per completed group of five —
+      // a single shared key would silently block the 10th, 15th, ... payouts.
+      const groupIndex = qualifiedSamePackageDirects / 5;
+      const getFiveProcessId = buildProcessId(
+        'registration-get-five',
+        input.sponsorUserId,
+        input.packageTier.toUpperCase(),
+        String(groupIndex)
+      );
+      await this.postLedgerIfNeeded({
+        userId: input.sponsorUserId,
+        entryType: 'get_five',
+        sourceReference: `${input.code.packageTier} package threshold`,
+        creditAmount: input.code.lockedGetFiveAmount,
+        processId: getFiveProcessId,
+        notes: `Get Yor Five bonus on ${qualifiedSamePackageDirects} same-package directs.`
+      });
+    }
+  }
+
+  private buildPlacementSalesQueueItem(input: {
+    newMemberUserId: string;
+    newMemberUsername: string;
+    code: ProductionActivationCode;
+    placementParentUserId: string;
+    placementParentShadowSide: PlacementSide | null;
+    placementSide: PlacementSide;
+    createdAt: string;
+  }): ProductionCompensationQueueItem {
+    return {
+      id: crypto.randomUUID(),
+      processId: buildProcessId('registration-placement-sales', input.newMemberUserId, input.code.code),
+      eventType: 'placement-sales',
+      status: 'pending',
+      payload: {
+        placementParentUserId: input.placementParentUserId,
+        placementParentShadowSide: input.placementParentShadowSide,
+        placementSide: input.placementSide,
+        salesmatchValue: input.code.lockedSalesmatchValue,
+        binaryPoints: input.code.lockedBinaryPoints,
+        createdMemberUserId: input.newMemberUserId,
+        createdMemberUsername: input.newMemberUsername,
+        activationCode: input.code.code
+      },
+      createdAt: input.createdAt,
+      processedAt: null
+    };
+  }
+
+  // Counts only eligibility-qualified same-package directs (PD / fully-settled CD).
   private async countQualifiedDirectsBySponsorAndPackage(sponsorUserId: string, packageTier: PackageTier) {
-    const members = await this.repo.listMembers();
-    const networks = await Promise.all(members.map((member) => this.repo.findNetworkAccountByUserId(member.userId)));
-    return networks.filter(
+    const directs = await this.repo.listDirectsBySponsor(sponsorUserId);
+    return directs.filter(
       (network) =>
-        network &&
-        network.sponsorUserId === sponsorUserId &&
         network.registrationStatus === 'active' &&
-        network.packageTier === packageTier
+        network.packageTier === packageTier &&
+        countsForDirectReferralSource(this.networkAccountState(network))
     ).length;
   }
 
@@ -2066,6 +2175,9 @@ export function createInMemoryProductionEncodingRepository(seed?: {
       }
     },
     findNetworkAccountByUserId: async (userId) => state.networkAccounts.find((item) => item.userId === userId) ?? null,
+    findActivationCodeByCode: async (code) =>
+      state.activationCodes.find((item) => item.code.trim().toUpperCase() === code.trim().toUpperCase()) ?? null,
+    listDirectsBySponsor: async (sponsorUserId) => state.networkAccounts.filter((item) => item.sponsorUserId === sponsorUserId),
     findPlacementChild: async (parentUserId, side, shadowSide) =>
       state.networkAccounts.find(
         (item) =>

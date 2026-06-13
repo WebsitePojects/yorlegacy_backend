@@ -526,6 +526,45 @@ memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cas
   });
 });
 
+memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        res.status(200).json(await service.getMemberRank(req.authUser!.id));
+        return;
+      } catch (err) {
+        console.error('[rank] Production data error:', err);
+      }
+    }
+  }
+  res.status(200).json({
+    moneyMode: 'sandbox',
+    level: 0,
+    rankName: 'Unranked',
+    totalIncome: 0,
+    currentThreshold: 0,
+    nextRankName: 'Manager',
+    nextThreshold: 50000,
+    remainingToNext: 50000
+  });
+});
+
+memberRouter.get('/api/member/leaderboard', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        res.status(200).json(await service.getLeaderboard());
+        return;
+      } catch (err) {
+        console.error('[leaderboard] Production data error:', err);
+      }
+    }
+  }
+  res.status(200).json({ moneyMode: 'sandbox', entries: [] });
+});
+
 memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const moduleId = Array.isArray(req.params.moduleId)
     ? req.params.moduleId[0]

@@ -108,7 +108,10 @@ function mapMemberRow(row: MemberProfileRow): ProductionMemberProfile {
     normalizedFullName: row.normalized_full_name ?? '',
     createdAt: row.created_at ?? isoNow(),
     payoutMethod: row.payout_method ?? undefined,
-    payoutDetails: row.payout_details ?? undefined
+    payoutDetails: row.payout_details ?? undefined,
+    isCompanyAccount: row.is_company_account ?? false,
+    isLeaderboardExcluded: row.is_leaderboard_excluded ?? false,
+    companyAccountTag: row.company_account_tag ?? null
   };
 }
 

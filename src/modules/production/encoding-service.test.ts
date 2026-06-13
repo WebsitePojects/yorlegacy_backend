@@ -432,6 +432,56 @@ describe('ProductionEncodingService', () => {
     expect(data.summary.payoutDetails).toBeNull();
   });
 
+  it('computes member rank from lifetime gross wallet credits (item 8)', async () => {
+    const user = seedUser('rank-m1', 'Ranker One', 'rank1@yor.local');
+    const member = seedMember('rank-m1', 'RANKM1', 'YOR-MEMBER-9101', 'VIP', 'Ranker One');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [user],
+      members: [member],
+      networkAccounts: [seedNetwork('rank-m1', 'VIP', null, null, null)],
+      walletLedger: [
+        { id: 'r1', userId: 'rank-m1', walletType: 'main', entryType: 'direct_referral', sourceReference: 'x', creditAmount: 100000, debitAmount: 0, balanceAfter: 100000, processId: 'r:1', notes: '', occurredAt: '2026-06-01T00:00:00.000Z', status: 'posted' },
+        { id: 'r2', userId: 'rank-m1', walletType: 'main', entryType: 'salesmatch', sourceReference: 'y', creditAmount: 20000, debitAmount: 0, balanceAfter: 120000, processId: 'r:2', notes: '', occurredAt: '2026-06-02T00:00:00.000Z', status: 'posted' },
+        { id: 'r3', userId: 'rank-m1', walletType: 'main', entryType: 'encashment', sourceReference: 'z', creditAmount: 0, debitAmount: 50000, balanceAfter: 70000, processId: 'r:3', notes: '', occurredAt: '2026-06-03T00:00:00.000Z', status: 'posted' }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const rank = await service.getMemberRank('rank-m1');
+    // gross credits = 120000 (debits ignored) -> Bronze Director
+    expect(rank.totalIncome).toBe(120000);
+    expect(rank.rankName).toBe('Bronze Director');
+    expect(rank.level).toBe(2);
+    expect(rank.nextRankName).toBe('Silver Director');
+  });
+
+  it('leaderboard ranks true members by income and excludes company-tagged accounts (item 8)', async () => {
+    const mkLedger = (userId: string, amount: number) => ({
+      id: `l-${userId}`, userId, walletType: 'main' as const, entryType: 'direct_referral' as const,
+      sourceReference: 'x', creditAmount: amount, debitAmount: 0, balanceAfter: amount,
+      processId: `p:${userId}`, notes: '', occurredAt: '2026-06-01T00:00:00.000Z', status: 'posted' as const
+    });
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('lb1', 'A', 'a@yor.local'), seedUser('lb2', 'B', 'b@yor.local'), seedUser('lb3', 'C', 'c@yor.local')],
+      members: [
+        seedMember('lb1', 'LB1', 'YOR-MEMBER-9201', 'Standard', 'Member A'),
+        seedMember('lb2', 'LB2', 'YOR-MEMBER-9202', 'Classic', 'Member B'),
+        // Company-tagged whale — must be excluded despite the highest income.
+        { ...seedMember('lb3', 'Yorintl', 'YOR-MEMBER-9203', 'VIP', 'Company Account'), isCompanyAccount: true, isLeaderboardExcluded: true }
+      ],
+      networkAccounts: [
+        seedNetwork('lb1', 'Standard', null, null, null),
+        seedNetwork('lb2', 'Classic', null, null, null),
+        seedNetwork('lb3', 'VIP', null, null, null)
+      ],
+      walletLedger: [mkLedger('lb1', 300000), mkLedger('lb2', 60000), mkLedger('lb3', 5000000)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const board = await service.getLeaderboard();
+    expect(board.entries.map((e) => e.username)).toEqual(['LB1', 'LB2']); // lb3 excluded
+    expect(board.entries[0]).toMatchObject({ position: 1, username: 'LB1', totalIncome: 300000, rankName: 'Silver Director' });
+    expect(board.entries[1]).toMatchObject({ position: 2, username: 'LB2', totalIncome: 60000, rankName: 'Manager' });
+  });
+
   it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');

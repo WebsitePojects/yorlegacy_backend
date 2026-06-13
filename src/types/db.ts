@@ -106,6 +106,10 @@ export interface MemberProfileRow {
   facebook_account: string | null;
   reference_number: string | null;
   tos_accepted: boolean;
+  // Company-account tagging (migration 0005, owner item 8).
+  is_company_account: boolean | null;
+  is_leaderboard_excluded: boolean | null;
+  company_account_tag: string | null;
   created_at: string;
   updated_at: string;
 }

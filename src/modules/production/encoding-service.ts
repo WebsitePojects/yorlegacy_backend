@@ -9,6 +9,7 @@ import {
 } from '../compensation/account-state.js';
 import { manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from '../compensation/cap-windows.js';
 import { computeGetYorFiveGroups, type GyfDirect } from '../compensation/get-yor-five.js';
+import { rankForIncome, type RankProgress } from '../compensation/rank-ladder.js';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
@@ -97,6 +98,11 @@ export type ProductionMemberProfile = {
   createdAt: string;
   payoutMethod?: string;
   payoutDetails?: string;
+  // Company/owner accounts (owner sign-off item 8) — excluded from leaderboards
+  // even after a username/full-name change, keyed by the immutable row.
+  isCompanyAccount?: boolean;
+  isLeaderboardExcluded?: boolean;
+  companyAccountTag?: string | null;
 };
 
 export type ProductionNetworkAccount = {
@@ -849,6 +855,58 @@ export class ProductionEncodingService {
       rightPoints: network?.rightPoints ?? balance?.rightPoints ?? 0,
       matchedPoints: balance?.matchedPoints ?? 0,
       matchedSales: Number(balance?.matchedSales ?? 0)
+    };
+  }
+
+  // Unilevel rank (owner item 8): determined solely by lifetime TOTAL INCOME =
+  // gross sum of every wallet credit (no debits/deductions), mapped onto the
+  // image-2 rank ladder.
+  async getMemberRank(userId: string): Promise<RankProgress & { moneyMode: MoneyMode }> {
+    const ledger = await this.repo.listWalletLedgerEntriesForUser(userId);
+    const totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+    return { moneyMode: this.repo.getMoneyMode(), ...rankForIncome(totalIncome) };
+  }
+
+  // Income leaderboard (owner item 8). Ranks true members by lifetime total
+  // income. Company/owner-tagged accounts are excluded (rename-stable flag);
+  // office-role accounts are not members and never appear here.
+  async getLeaderboard(limit = 100): Promise<{
+    moneyMode: MoneyMode;
+    entries: Array<{
+      position: number;
+      userId: string;
+      username: string;
+      fullName: string;
+      packageTier: string;
+      totalIncome: number;
+      rankName: string;
+      rankLevel: number;
+    }>;
+  }> {
+    const members = await this.repo.listMembers();
+    const eligible = members.filter(
+      (member) => member.accountStatus === 'active' && !member.isCompanyAccount && !member.isLeaderboardExcluded
+    );
+    const ranked = await Promise.all(
+      eligible.map(async (member) => {
+        const ledger = await this.repo.listWalletLedgerEntriesForUser(member.userId);
+        const totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+        const rank = rankForIncome(totalIncome);
+        return {
+          userId: member.userId,
+          username: member.username,
+          fullName: member.fullName,
+          packageTier: member.packageTier,
+          totalIncome,
+          rankName: rank.rankName,
+          rankLevel: rank.level
+        };
+      })
+    );
+    ranked.sort((a, b) => b.totalIncome - a.totalIncome || a.username.localeCompare(b.username));
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      entries: ranked.slice(0, limit).map((entry, index) => ({ position: index + 1, ...entry }))
     };
   }
 

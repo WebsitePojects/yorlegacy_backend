@@ -167,16 +167,26 @@ export const earningStreams: EarningStreamPolicy[] = [
     label: 'Unilevel Bonus / Rank',
     source: 'Direct sponsor genealogy',
     basis: '10 sponsor levels with 200 PV monthly maintenance from product repurchases and Nogatu-style repeat-purchase rank race logic',
+    // GATE-UNI-20260612: production posting stays disabled until the rank/maintenance
+    // engine receives finance sign-off; figures shown are simulations.
     writeStatus: moneyMode,
-    unresolved: ['Separate production, staging, and dev ledger environments remain a deployment prerequisite.']
+    unresolved: [
+      'Pending finance sign-off — calculations shown are simulations, no wallet posting occurs.',
+      'Separate production, staging, and dev ledger environments remain a deployment prerequisite.'
+    ]
   },
   {
     id: 'global',
     label: 'Global Bonus',
     source: 'Yearly global sales pool',
     basis: '2% yearly global sales pool with Nogatu-style annual pool distribution adapted to Yor qualifier tiers and maintenance continuity',
+    // GATE-GLO-20260612: production posting stays disabled until the qualifier and
+    // yearly closeout engine receives finance sign-off; figures shown are simulations.
     writeStatus: moneyMode,
-    unresolved: ['Final Yor qualifier-tier mapping still needs full engineering port confirmation from the Nogatu reference logic.']
+    unresolved: [
+      'Pending finance sign-off — calculations shown are simulations, no wallet posting occurs.',
+      'Final Yor qualifier-tier mapping still needs full engineering port confirmation from the Nogatu reference logic.'
+    ]
   }
 ];
 

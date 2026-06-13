@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { z } from 'zod';
+import { rateLimit } from '../lib/rate-limit.js';
+import { moneyAmountSchema, parseBody } from '../lib/validate.js';
 import { buildMemberOffice } from '../modules/member/office-service.js';
 import { buildMemberSummary } from '../modules/member/summary-service.js';
 import { requireRole } from '../modules/auth/request-auth.js';
@@ -57,6 +60,14 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
         res.status(200).json({
           ...office,
           metrics: updatedMetrics,
+          // Item 8: surface the member's real saved payout method + details on
+          // Account Details (no GCash default, and the saved account number is
+          // returned so the field fetches/displays it).
+          profile: {
+            ...office.profile,
+            payoutMethod: walletData.summary.payoutMethod ?? '',
+            payoutDetails: walletData.summary.payoutDetails ?? ''
+          },
           wallet: {
             ...office.wallet,
             availableBalance: `PHP ${available.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -163,7 +174,11 @@ memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'adm
     return;
   }
 
-  res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
+  try {
+    res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build binary genealogy tree.' });
+  }
 });
 
 memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
@@ -172,6 +187,21 @@ memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'ad
 
 memberRouter.get('/api/member/shadow-accounts', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const ownerUsername = typeof req.query.ownerUsername === 'string' ? req.query.ownerUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+
+    void service.buildMemberShadowAccountCenter(req.authUser!, ownerUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build shadow account center.' });
+    });
+    return;
+  }
+
   res.status(200).json(buildShadowAccounts(ownerUsername));
 });
 
@@ -202,6 +232,22 @@ memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 
   } else {
     res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
   }
+});
+
+memberRouter.get('/api/member/direct-referrals', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const rows = await service.buildMemberDirectReferrals(req.authUser!.id);
+        res.status(200).json({ rows });
+        return;
+      } catch (err) {
+        console.error('[direct-referrals] Production error:', err);
+      }
+    }
+  }
+  res.status(200).json({ rows: [] });
 });
 
 memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
@@ -266,7 +312,24 @@ memberRouter.post('/api/member/activation-codes/transfer', requireRole('member',
   }));
 });
 
-memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode() && typeof req.body?.shadowCode === 'string' && req.body.shadowCode.trim()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.activateShadowAccount(req.authUser!, {
+        code: req.body?.code ?? '',
+        shadowCode: req.body.shadowCode
+      }));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to activate shadow account.' });
+    }
+    return;
+  }
+
   res.status(200).json(
     runMemberUpgradeActivationCode(req.authUser!, {
       code: req.body?.code ?? ''
@@ -274,13 +337,17 @@ memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 
   );
 });
 
-memberRouter.post('/api/member/activation-codes/maintenance', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(
-    runMemberMaintenanceCode(req.authUser!, {
+memberRouter.post('/api/member/activation-codes/maintenance', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  try {
+    const result = await runMemberMaintenanceCode(req.authUser!, {
       code: req.body?.code ?? '',
       transType: Number(req.body?.transType ?? 1)
-    })
-  );
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Maintenance code error.';
+    res.status(400).json({ error: { code: 'MAINTENANCE_CODE_ERROR', message } });
+  }
 });
 
 memberRouter.get('/api/member/transactions', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
@@ -378,24 +445,58 @@ memberRouter.post('/api/member/placement-reservations', requireRole('member', 'a
 memberRouter.post('/api/member/wallet/preview-encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const amount = Number(req.body?.amount ?? 0);
   if (isProductionMode()) {
+    // No silent sandbox fallback in production mode: failing over to demo data
+    // would show members fake balances.
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        const data = await service.buildMemberWalletData(req.authUser!.id, amount);
-        res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
-        return;
-      } catch (err) {
-        console.error('[preview-encash] Production wallet data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
     }
+    try {
+      const data = await service.buildMemberWalletData(req.authUser!.id, amount);
+      res.status(200).json({ moneyMode: data.moneyMode, preview: data.preview, requestedAmount: data.preview.requestedAmount });
+    } catch (error) {
+      // Internal storage errors stay in the server log; clients get a safe message.
+      console.error('[preview-encash] failed:', error);
+      res.status(500).json({ message: 'Unable to preview encashment.' });
+    }
+    return;
   }
   const payload = buildMemberWalletDetail(req.authUser!, amount);
   res.status(200).json({ moneyMode: payload.moneyMode, preview: payload.preview, requestedAmount: payload.preview.requestedAmount });
 });
 
-memberRouter.post('/api/member/wallet/encash', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(runMemberEncashment(req.authUser!, Number(req.body?.amount ?? 0)));
-});
+const encashRateLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: 'encash-submit' });
+
+memberRouter.post(
+  '/api/member/wallet/encash',
+  requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'),
+  encashRateLimit,
+  async (req, res) => {
+    let amount: number;
+    try {
+      amount = parseBody(z.object({ amount: moneyAmountSchema }), { amount: req.body?.amount }).amount;
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Enter a valid encashment amount.' });
+      return;
+    }
+
+    if (isProductionMode()) {
+      const service = getProductionEncodingService();
+      if (!service) {
+        res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+        return;
+      }
+      try {
+        res.status(200).json(await service.submitEncashment(req.authUser!, amount));
+      } catch (error) {
+        res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit encashment.' });
+      }
+      return;
+    }
+    res.status(200).json(runMemberEncashment(req.authUser!, amount));
+  }
+);
 
 memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const payoutOption = typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '';
@@ -445,17 +546,19 @@ memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admi
 memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        const data = await service.getMemberGetYorFiveData(req.authUser!.id);
-        res.status(200).json(data);
-        return;
-      } catch (err) {
-        console.error('[get-yor-five] Production data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
     }
+    try {
+      res.status(200).json(await service.getMemberGetYorFiveData(req.authUser!.id));
+    } catch (err) {
+      console.error('[get-yor-five] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load Get Yor Five data.' });
+    }
+    return;
   }
-  // Sandbox fallback: derive from hybrid operational data
+  // Non-production path
   const { getMemberModule: getModule, getHybridMemberForUser } = await import('../modules/operations/hybrid-operational-data.js');
   const mod = getModule(req.authUser!, 'get-five-bonus');
   const member = getHybridMemberForUser(req.authUser!);
@@ -478,6 +581,75 @@ memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cas
     ledgerEntries: [],
     totalEarned: 0,
     completedGroupsTotal: completedGroups
+  });
+});
+
+memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.getMemberRank(req.authUser!.id));
+    } catch (err) {
+      console.error('[rank] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load rank data.' });
+    }
+    return;
+  }
+  res.status(200).json({
+    moneyMode: 'sandbox',
+    level: 0,
+    rankName: 'Unranked',
+    totalIncome: 0,
+    currentThreshold: 0,
+    nextRankName: 'Manager',
+    nextThreshold: 50000,
+    remainingToNext: 50000
+  });
+});
+
+memberRouter.get('/api/member/leaderboard', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.getLeaderboard());
+    } catch (err) {
+      console.error('[leaderboard] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load leaderboard.' });
+    }
+    return;
+  }
+  res.status(200).json({ moneyMode: 'sandbox', entries: [] });
+});
+
+memberRouter.get('/api/member/unilevel', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.getMemberUnilevelData(req.authUser!.id));
+    } catch (err) {
+      console.error('[unilevel] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load unilevel data.' });
+    }
+    return;
+  }
+  res.status(200).json({
+    moneyMode: 'sandbox',
+    levelPercentages: [10, 8, 5, 5, 3, 3, 2, 1, 1, 1],
+    totalEarned: 0,
+    byLevel: [],
+    entries: []
   });
 });
 
@@ -535,10 +707,12 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
       try {
         const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [
           { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
           { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
-          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} more in ${myTierProgress.remainingDays}d` : 'ready now', tone: 'neutral' as const },
+          { label: 'Voided Groups', value: String(myVoidedGroups), tone: myVoidedGroups > 0 ? ('warning' as const) : ('neutral' as const) }
         ];
         module.table = {
           title: 'Get Yor Five progress',
@@ -547,6 +721,7 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
             { key: 'directSamePackage', label: 'Direct Same Package' },
             { key: 'completedGroups', label: 'Completed Groups' },
             { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'daysLeft', label: 'Days Left' },
             { key: 'target', label: 'Target' },
             { key: 'status', label: 'Status' }
           ],
@@ -557,8 +732,9 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
               directSamePackage: t.referralCount,
               completedGroups: t.completedGroups,
               remainingToNextGroup: t.remainingToNext,
+              daysLeft: t.remainingDays > 0 ? `${t.remainingDays}d` : '—',
               target: 5,
-              status: t.referralCount >= 5 ? 'qualified' : 'building'
+              status: t.completedGroups > 0 ? 'qualified' : t.remainingDays > 0 ? 'in window' : 'building'
             }))
         };
       } catch (err) {
@@ -574,10 +750,12 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
       try {
         const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [
           { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
           { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
-          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} more in ${myTierProgress.remainingDays}d` : 'ready now', tone: 'neutral' as const },
+          { label: 'Voided Groups', value: String(myVoidedGroups), tone: myVoidedGroups > 0 ? ('warning' as const) : ('neutral' as const) }
         ];
         module.table = {
           title: 'Get Yor Five overview',
@@ -586,6 +764,7 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
             { key: 'directSamePackage', label: 'Direct Same Package' },
             { key: 'completedGroups', label: 'Completed Groups' },
             { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'daysLeft', label: 'Days Left' },
             { key: 'target', label: 'Target' },
             { key: 'status', label: 'Status' }
           ],
@@ -596,8 +775,9 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
               directSamePackage: t.referralCount,
               completedGroups: t.completedGroups,
               remainingToNextGroup: t.remainingToNext,
+              daysLeft: t.remainingDays > 0 ? `${t.remainingDays}d` : '—',
               target: 5,
-              status: t.referralCount >= 5 ? 'qualified' : 'building'
+              status: t.completedGroups > 0 ? 'qualified' : t.remainingDays > 0 ? 'in window' : 'building'
             }))
         };
       } catch (err) {

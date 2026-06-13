@@ -4,6 +4,8 @@ import type {
   SessionUser
 } from '../../types/auth.js';
 import { buildGatedWriteResponse, getWalletLedger, getMoneyMode } from '../compensation/mvp-service.js';
+import { findProductByCodeFamily } from '../compensation/repurchase-product-catalog.js';
+import { getProductionEncodingService, isProductionMode } from '../production/runtime.js';
 import { encodeReferralCode, decodeReferralCode } from '../../lib/referral-utils.js';
 import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 import {
@@ -1032,11 +1034,55 @@ export function runMemberUpgradeActivationCode(user: SessionUser, payload: { cod
     : buildGatedParityAction('member-upgrade-with-activation-code');
 }
 
-export function runMemberMaintenanceCode(user: SessionUser, payload: { code: string; transType: number }) {
+export async function runMemberMaintenanceCode(
+  user: SessionUser,
+  payload: { code: string; transType: number }
+): Promise<unknown> {
   void payload.transType;
-  return isSandboxMode()
-    ? applySandboxMaintenanceCode(user, payload.code)
-    : buildGatedParityAction('member-maintenance-code-use');
+  if (isSandboxMode()) {
+    return applySandboxMaintenanceCode(user, payload.code);
+  }
+
+  if (!isProductionMode()) {
+    return buildGatedParityAction('member-maintenance-code-use');
+  }
+
+  const svc = getProductionEncodingService();
+  if (!svc) {
+    return buildGatedParityAction('member-maintenance-code-use');
+  }
+
+  // Load the activation code from the repo via the service's internal repo accessor.
+  // We call the public encoding service method which validates ownership + family.
+  const codeValue = payload.code.trim().toUpperCase();
+  const member = await svc.getMemberProfileForUser(user.id);
+  if (!member) {
+    throw new Error('Member profile not found.');
+  }
+
+  // Use repo directly for the code lookup — svc exposes this via findActivationCodeForUser.
+  const code = await svc.findOwnedMaintenanceCode(user.id, codeValue);
+  if (!code) {
+    throw new Error('Maintenance or refill code not found, not assigned to your account, or already used.');
+  }
+
+  const product = findProductByCodeFamily(code.codeFamily);
+  if (!product) {
+    throw new Error(`No product catalog entry for code family: ${code.codeFamily}`);
+  }
+
+  // Consume the code + fire unilevel + lifestyle credits.
+  const result = await svc.consumeMaintenanceCode(user.id, codeValue, product.sku, member.packageTier);
+
+  return {
+    moneyMode: 'production' as const,
+    action: 'member-maintenance-code-use',
+    status: 'completed' as const,
+    reason: 'Maintenance code consumed. Lifestyle and unilevel rewards posted.',
+    detail: `Code ${codeValue} consumed. Lifestyle credited: PHP ${result.lifestyle.credited}. Unilevel levels: ${result.unilevel.levelsCredited}.`,
+    lifestyle: result.lifestyle,
+    unilevel: result.unilevel
+  };
 }
 
 export function runMemberEncashment(user: SessionUser, amount: number) {

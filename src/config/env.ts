@@ -59,6 +59,39 @@ export const env =
       }
     : parsedEnv;
 
+type ProductionEnvCheck = {
+  YOR_RUNTIME_MODE: string;
+  SUPABASE_URL?: string | undefined;
+  SUPABASE_SECRET_KEY?: string | undefined;
+  SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
+  APP_SESSION_SECRET: string;
+};
+
+const DEFAULT_SESSION_SECRET = 'yor-dev-session-secret-change-me';
+const MIN_SESSION_SECRET_LENGTH = 24;
+
+export function assertProductionEnv(check: ProductionEnvCheck): void {
+  if (check.YOR_RUNTIME_MODE !== 'production') {
+    return;
+  }
+  if (!check.SUPABASE_URL) {
+    throw new Error('Production mode requires SUPABASE_URL.');
+  }
+  if (!check.SUPABASE_SECRET_KEY && !check.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+      'Production mode requires a Supabase server key (SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY).'
+    );
+  }
+  if (
+    check.APP_SESSION_SECRET === DEFAULT_SESSION_SECRET ||
+    check.APP_SESSION_SECRET.length < MIN_SESSION_SECRET_LENGTH
+  ) {
+    throw new Error(
+      `Production mode requires a non-default session secret: set APP_SESSION_SECRET (min ${MIN_SESSION_SECRET_LENGTH} chars).`
+    );
+  }
+}
+
 export function getSupabaseServerKey(): string | null {
   return env.SUPABASE_SECRET_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY ?? null;
 }

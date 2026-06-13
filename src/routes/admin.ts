@@ -1,4 +1,7 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
+import { z } from 'zod';
+import { rateLimit } from '../lib/rate-limit.js';
+import { codeQuantitySchema, parseBody } from '../lib/validate.js';
 import { buildAdminOffice } from '../modules/admin/office-service.js';
 import { buildAdminSummary } from '../modules/admin/summary-service.js';
 import { findAdminProfileByUserId } from '../modules/auth/app-users.js';
@@ -38,6 +41,20 @@ adminRouter.get('/api/admin/summary', requireRole('admin', 'cashier', 'bod', 'su
 
 adminRouter.get('/api/admin/office', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const office = await buildAdminOffice(req.authUser!);
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const prodMetrics = await service.buildAdminDashboardMetrics();
+        const existingLabels = new Set(prodMetrics.map((m) => m.label.toLowerCase()));
+        const baseMetrics = office.metrics.filter((m) => !existingLabels.has(m.label.toLowerCase()));
+        res.status(200).json({ ...office, metrics: [...prodMetrics, ...baseMetrics] });
+        return;
+      } catch {
+        // fall through to sandbox office
+      }
+    }
+  }
   res.status(200).json(office);
 });
 
@@ -45,25 +62,33 @@ adminRouter.get('/api/admin/dashboard', requireRole('admin', 'cashier', 'bod', '
   res.status(200).json(await buildAdminMvpDashboard(req.authUser!));
 });
 
-adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.query === 'string' ? req.query.query : '';
   const username = typeof req.query.username === 'string' ? req.query.username : '';
   const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
   const pageSize = typeof req.query.pageSize === 'string' ? Number(req.query.pageSize) : 10;
-  const payload = buildAdminMemberManagementCenter({
-    query,
-    username,
-    page,
-    pageSize
-  });
 
-  res.status(200).json({
-    ...payload,
-    members: payload.rows
-  });
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ error: 'Production service unavailable.' });
+      return;
+    }
+    try {
+      const payload = await service.listAdminMembersForManagement({ query, username, page, pageSize });
+      res.status(200).json({ ...payload, members: payload.rows });
+      return;
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch members from database.' });
+      return;
+    }
+  }
+
+  const payload = buildAdminMemberManagementCenter({ query, username, page, pageSize });
+  res.status(200).json({ ...payload, members: payload.rows });
 });
 
-adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
   if (query.length < 3) {
@@ -71,12 +96,29 @@ adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bo
     return;
   }
 
-  const payload = buildAdminMemberManagementCenter({
-    query,
-    page: 1,
-    pageSize: 20
-  });
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ results: [] });
+      return;
+    }
+    try {
+      const payload = await service.listAdminMembersForManagement({ query, page: 1, pageSize: 20 });
+      res.status(200).json({
+        results: payload.rows.slice(0, 20).map((member) => ({
+          username: member.username,
+          displayName: member.fullName,
+          packageTier: member.packageTier
+        }))
+      });
+      return;
+    } catch {
+      res.status(200).json({ results: [] });
+      return;
+    }
+  }
 
+  const payload = buildAdminMemberManagementCenter({ query, page: 1, pageSize: 20 });
   res.status(200).json({
     results: payload.rows.slice(0, 20).map((member) => ({
       username: member.username,
@@ -135,8 +177,17 @@ adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', '
   res.status(200).json(buildAdminActivationCodeCenter());
 });
 
-adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+const generateRateLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'code-generate' });
+
+adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), generateRateLimit, async (req, res) => {
   const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.slice(0, 200) : '';
+  let quantity: number;
+  try {
+    quantity = parseBody(z.object({ quantity: codeQuantitySchema }), { quantity: Number(req.body?.quantity ?? 1) }).quantity;
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Enter a valid quantity (1-100).' });
+    return;
+  }
 
   if (isProductionMode()) {
     const service = getProductionEncodingService();
@@ -147,7 +198,7 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'b
     try {
       res.status(200).json(
         await service.generateActivationCodes(req.authUser!, {
-          quantity: Number(req.body?.quantity ?? 1),
+          quantity,
           packageTier: req.body?.packageTier,
           assignedTo: req.body?.assignedTo,
           accountType: req.body?.accountType,
@@ -162,7 +213,7 @@ adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'b
   }
 
   res.status(200).json(runAdminGenerateActivationCodes(req.authUser!, {
-    quantity: Number(req.body?.quantity ?? 1),
+    quantity,
     packageTier: req.body?.packageTier,
     assignedTo: req.body?.assignedTo,
     accountType: req.body?.accountType,
@@ -222,6 +273,32 @@ adminRouter.post('/api/admin/activation-codes/transfer', requireRole('admin', 'c
   }));
 });
 
+// Settlement is a finance action: admin/BOD/superadmin only â€” cashier is
+// limited to release/transfer/name-correction per the approved role matrix.
+adminRouter.post('/api/admin/activation-codes/settle', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  const mode = req.body?.mode === 'externally-paid' ? 'externally-paid' : req.body?.mode === 'paid' ? 'paid' : null;
+  if (!code || !mode) {
+    res.status(400).json({ message: 'Provide a code and a settlement mode (paid or externally-paid).' });
+    return;
+  }
+
+  if (!isProductionMode()) {
+    res.status(400).json({ message: 'Code settlement is only available in production mode.' });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.settleActivationCode(req.authUser!, code, mode));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to settle activation code.' });
+  }
+});
+
 adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
   const codes = Array.isArray(req.body?.codes)
     ? req.body.codes.filter((code: unknown): code is string => typeof code === 'string')
@@ -236,17 +313,74 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
   );
 });
 
-adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
-  res.status(200).json(buildAdminEncashmentCenter(_req.authUser!));
+adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.buildAdminEncashmentCenter());
+      return;
+    } catch (error) {
+      // Internal storage errors stay in the server log; clients get a safe message.
+      console.error('[admin-encashments] load failed:', error);
+      res.status(500).json({ message: 'Unable to load encashments.' });
+      return;
+    }
+  }
+  res.status(200).json(buildAdminEncashmentCenter(req.authUser!));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/approve', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.reviewEncashment(req.authUser!, encashmentId, 'approve'));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to approve encashment.' });
+    }
+    return;
+  }
   res.status(200).json(runAdminApproveEncashment(req.authUser!, encashmentId));
 });
 
-adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.post('/api/admin/encashments/:encashmentId/review', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const encashmentId = Array.isArray(req.params.encashmentId) ? req.params.encashmentId[0] : req.params.encashmentId;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    const action =
+      req.body?.action === 'approve' || req.body?.action === 'reject' || req.body?.action === 'mark-paid'
+        ? req.body.action
+        : null;
+    if (!action) {
+      res.status(400).json({ message: 'Provide a review action: approve, reject, or mark-paid.' });
+      return;
+    }
+    try {
+      res.status(200).json(
+        await service.reviewEncashment(
+          req.authUser!,
+          encashmentId,
+          action,
+          typeof req.body?.remarks === 'string' ? req.body.remarks : undefined
+        )
+      );
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to review encashment.' });
+    }
+    return;
+  }
   res.status(200).json(
     runAdminReviewEncashment(req.authUser!, encashmentId, {
       action: req.body?.action,
@@ -327,12 +461,45 @@ adminRouter.post('/api/admin/members/:username/status', requireRole('admin', 'bo
 
 adminRouter.get('/api/admin/genealogy/binary-tree', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
   const rootUsername = typeof _req.query.rootUsername === 'string' ? _req.query.rootUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    void service.buildAdminBinaryGenealogyCenter(rootUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build admin binary genealogy tree.' });
+    });
+    return;
+  }
   res.status(200).json(buildAdminGenealogyCenter('binary-placement', rootUsername));
 });
 
 adminRouter.get('/api/admin/genealogy/sponsor-tree', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
   res.status(200).json(buildAdminGenealogyCenter('sponsor', rootUsername));
+});
+
+adminRouter.get('/api/admin/shadow-accounts', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const ownerUsername = typeof req.query.ownerUsername === 'string' ? req.query.ownerUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+
+    void service.buildMemberShadowAccountCenter(req.authUser!, ownerUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build admin shadow account center.' });
+    });
+    return;
+  }
+
+  res.status(404).json({ message: 'Shadow account center is only available in production mode.' });
 });
 
 adminRouter.get('/api/admin/modules/:moduleId', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
@@ -351,3 +518,4 @@ adminRouter.get('/api/admin/modules/:moduleId', requireRole('admin', 'cashier', 
 
   res.status(200).json(module);
 });
+

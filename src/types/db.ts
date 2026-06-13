@@ -8,7 +8,7 @@ export type PlacementSide = 'left' | 'right';
 
 export type ActivationCodeStatus = 'unreleased' | 'available' | 'assigned' | 'used' | 'disabled';
 export type ActivationCodePaymentStatus = 'unpaid' | 'paid' | 'externally-paid';
-export type ActivationCodeEventAction = 'generated' | 'released' | 'transferred' | 'consumed';
+export type ActivationCodeEventAction = 'generated' | 'released' | 'transferred' | 'consumed' | 'settled' | 'revoked' | 'restored';
 
 export type TreeLeg = 'left' | 'right' | 'self';
 export type ShadowAccountState = 'reserved_shadow' | 'activated_shadow' | 'converted_full';
@@ -106,6 +106,10 @@ export interface MemberProfileRow {
   facebook_account: string | null;
   reference_number: string | null;
   tos_accepted: boolean;
+  // Company-account tagging (migration 0005, owner item 8).
+  is_company_account: boolean | null;
+  is_leaderboard_excluded: boolean | null;
+  company_account_tag: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -184,6 +188,30 @@ export interface ActivationCodeRow {
   locked_binary_points: number;
   locked_get_five_amount: number;
   remarks: string;
+  settled_at: string | null;
+  settled_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EncashmentRow {
+  id: string;
+  user_id: string;
+  process_id: string;
+  gross_amount: number;
+  processing_fee: number;
+  tax_amount: number;
+  system_retainer: number;
+  cd_deduction: number;
+  total_deductions: number;
+  net_amount: number;
+  status: 'pending' | 'queued' | 'approved' | 'paid' | 'cancelled' | 'rejected';
+  payout_method: string | null;
+  payout_details: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_at: string | null;
+  paid_at: string | null;
+  remarks: string;
   created_at: string;
   updated_at: string;
 }
@@ -225,6 +253,13 @@ export interface ShadowAccountRow {
   unilevel_enabled: boolean;
   binary_cycle_enabled: boolean;
   notes: string | null;
+  package_tier: string | null;
+  account_type: string | null;
+  activation_code: string | null;
+  pv_value: number | null;
+  salesmatch_value: number | null;
+  activated_at: string | null;
+  last_upgraded_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -243,28 +278,6 @@ export interface WalletLedgerRow {
   status: WalletLedgerStatus;
   occurred_at: string;
   created_at: string;
-}
-
-export interface EncashmentRow {
-  id: string;
-  encashment_uid: string;
-  process_key: string;
-  beneficiary_id: string;
-  requested_amount: number;
-  tax_amount: number;
-  processing_fee: number;
-  cd_deduction: number;
-  system_retainer: number;
-  maintenance_fee: number;
-  net_payout: number;
-  payout_option: string | null;
-  payout_details_masked: string | null;
-  status: EncashmentStatus;
-  request_id: string;
-  reviewed_by_id: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface PayoutTransactionRow {

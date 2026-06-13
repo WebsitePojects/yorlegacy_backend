@@ -1,6 +1,8 @@
 import { app } from './app.js';
-import { env, getAllowedFrontendOrigins } from './config/env.js';
+import { assertProductionEnv, env, getAllowedFrontendOrigins } from './config/env.js';
 import { getSupabaseClient, getSupabaseStatus } from './lib/supabase.js';
+
+assertProductionEnv(env);
 
 app.listen(env.PORT, () => {
   const supabase = getSupabaseStatus();

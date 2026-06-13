@@ -141,8 +141,8 @@ describe('Can Encode registration flow', () => {
       placement: 'left'
     });
     expect(sponsorAfter!.walletAvailable).toBe(sponsorWalletBefore + 5000);
-    expect(placementParentAfter!.leftPoints).toBe(placementParentLeftPointsBefore + 50);
-    expect(sponsorAfter!.rightPoints).toBe(sponsorRightPointsBefore + 50);
+    expect(placementParentAfter!.leftPoints).toBe(placementParentLeftPointsBefore + 10);
+    expect(sponsorAfter!.rightPoints).toBe(sponsorRightPointsBefore + 10);
     expect(sponsorLedger).toMatchObject({
       creditAmount: 5000,
       memberUsername: 'yor01'

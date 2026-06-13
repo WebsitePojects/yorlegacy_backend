@@ -1,5 +1,29 @@
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
+// Canonical identity standards (BUSINESSRULE.md glossary):
+//   username      YOR + zero-padded sequence            e.g. YOR0001
+//   referral code YOR-MEMBER- + zero-padded sequence    e.g. YOR-MEMBER-0001
+// Legacy base32-encoded referral tokens remain decodable for old links, but
+// are no longer generated.
+export const USERNAME_PATTERN = /^YOR\d{4,}$/i;
+export const REFERRAL_CODE_PATTERN = /^YOR-MEMBER-\d{3,}$/i;
+
+export function isCanonicalUsername(value: string): boolean {
+  return USERNAME_PATTERN.test(value.trim());
+}
+
+export function isCanonicalReferralCode(value: string): boolean {
+  return REFERRAL_CODE_PATTERN.test(value.trim());
+}
+
+export function buildCanonicalReferralCode(username: string): string {
+  const match = username.trim().toUpperCase().match(/^YOR0*(\d+)$/);
+  if (!match) {
+    throw new Error(`Cannot derive a referral code from non-canonical username: ${username}`);
+  }
+  return `YOR-MEMBER-${match[1].padStart(4, '0')}`;
+}
+
 export function encodeReferralCode(username: string): string {
   if (!username) return '';
   const upperUsername = username.toUpperCase().trim();

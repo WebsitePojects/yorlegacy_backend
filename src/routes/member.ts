@@ -60,6 +60,14 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
         res.status(200).json({
           ...office,
           metrics: updatedMetrics,
+          // Item 8: surface the member's real saved payout method + details on
+          // Account Details (no GCash default, and the saved account number is
+          // returned so the field fetches/displays it).
+          profile: {
+            ...office.profile,
+            payoutMethod: walletData.summary.payoutMethod ?? '',
+            payoutDetails: walletData.summary.payoutDetails ?? ''
+          },
           wallet: {
             ...office.wallet,
             availableBalance: `PHP ${available.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`

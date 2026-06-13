@@ -1313,6 +1313,7 @@ export function buildMemberOfficeSnapshot(
     username?: string;
     fullName?: string;
     payoutMethod?: string;
+    payoutDetails?: string;
   } | null
 ) {
   const member = currentMemberFor(user);
@@ -1336,7 +1337,8 @@ export function buildMemberOfficeSnapshot(
       accountStatus: mergedMember.accountStatus,
       username: mergedMember.username,
       fullName: mergedMember.fullName,
-      payoutMethod: profile?.payoutMethod ?? 'GCash'
+      payoutMethod: profile?.payoutMethod ?? '',
+      payoutDetails: profile?.payoutDetails ?? ''
     },
     wallet: {
       availableBalance: money(mergedMember.walletAvailable),

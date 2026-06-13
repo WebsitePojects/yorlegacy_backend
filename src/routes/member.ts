@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../lib/rate-limit.js';
 import { moneyAmountSchema, parseBody } from '../lib/validate.js';
+import { submitSupportMessage } from '../modules/support/support-service.js';
 import { buildMemberOffice } from '../modules/member/office-service.js';
 import { buildMemberSummary } from '../modules/member/summary-service.js';
 import { requireRole } from '../modules/auth/request-auth.js';
@@ -787,4 +788,38 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
   }
 
   res.status(200).json(module);
+});
+
+const supportMessageRateLimit = rateLimit({ windowMs: 300_000, max: 5, keyPrefix: 'support-message' });
+
+memberRouter.post('/api/member/support/message', supportMessageRateLimit, requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  const user = req.authUser!;
+  let payload: { category: string; subject: string; message: string };
+  try {
+    payload = parseBody(
+      z.object({
+        category: z.enum(['general', 'account', 'technical', 'encashment']),
+        subject: z.string().min(3).max(120),
+        message: z.string().min(10).max(2000)
+      }),
+      req.body
+    );
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid request.' });
+    return;
+  }
+  try {
+    const submitted = await submitSupportMessage({
+      userId: user.id,
+      username: user.id,
+      displayName: user.name ?? 'Unknown',
+      email: user.email ?? '',
+      category: payload.category as 'general' | 'account' | 'technical' | 'encashment',
+      subject: payload.subject,
+      message: payload.message
+    });
+    res.status(200).json({ status: 'submitted', id: submitted.id });
+  } catch {
+    res.status(500).json({ message: 'Unable to submit support message.' });
+  }
 });

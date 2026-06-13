@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { rateLimit } from '../lib/rate-limit.js';
 import { codeQuantitySchema, parseBody } from '../lib/validate.js';
+import { listSupportMessages, updateSupportMessageStatus } from '../modules/support/support-service.js';
 import { buildAdminOffice } from '../modules/admin/office-service.js';
 import { buildAdminSummary } from '../modules/admin/summary-service.js';
 import { findAdminProfileByUserId } from '../modules/auth/app-users.js';
@@ -517,5 +518,34 @@ adminRouter.get('/api/admin/modules/:moduleId', requireRole('admin', 'cashier', 
   }
 
   res.status(200).json(module);
+});
+
+adminRouter.get('/api/admin/contact-messages', requireRole('admin', 'bod', 'superadmin'), async (_req, res) => {
+  try {
+    const messages = await listSupportMessages();
+    res.status(200).json({ messages });
+  } catch {
+    res.status(500).json({ message: 'Unable to load contact messages.' });
+  }
+});
+
+adminRouter.patch('/api/admin/contact-messages/:id/status', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  let status: string;
+  try {
+    ({ status } = parseBody(
+      z.object({ status: z.enum(['unread', 'read', 'done', 'blocked']) }),
+      req.body
+    ));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Invalid status.' });
+    return;
+  }
+  try {
+    await updateSupportMessageStatus(id, status as 'unread' | 'read' | 'done' | 'blocked');
+    res.status(200).json({ status: 'updated' });
+  } catch {
+    res.status(500).json({ message: 'Unable to update message status.' });
+  }
 });
 

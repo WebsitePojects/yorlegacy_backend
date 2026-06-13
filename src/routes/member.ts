@@ -565,6 +565,27 @@ memberRouter.get('/api/member/leaderboard', requireRole('member', 'admin', 'cash
   res.status(200).json({ moneyMode: 'sandbox', entries: [] });
 });
 
+memberRouter.get('/api/member/unilevel', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        res.status(200).json(await service.getMemberUnilevelData(req.authUser!.id));
+        return;
+      } catch (err) {
+        console.error('[unilevel] Production data error:', err);
+      }
+    }
+  }
+  res.status(200).json({
+    moneyMode: 'sandbox',
+    levelPercentages: [10, 8, 5, 5, 3, 3, 2, 1, 1, 1],
+    totalEarned: 0,
+    byLevel: [],
+    entries: []
+  });
+});
+
 memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const moduleId = Array.isArray(req.params.moduleId)
     ? req.params.moduleId[0]

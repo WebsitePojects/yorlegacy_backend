@@ -910,6 +910,124 @@ export class ProductionEncodingService {
     };
   }
 
+  // Unilevel bonus (owner sign-off item 8). A member's product repurchase credits
+  // their SPONSOR bloodline up to 10 levels, amplified per level by
+  // UNILEVEL_PERCENTAGES (L1 10% .. L10 1%). Sponsor tree only (network.sponsorUserId),
+  // never binary placement. Each level posts at most once per repurchase event via a
+  // deterministic process key. Recipient eligibility is intentionally NOT gated here —
+  // every sponsor in the bloodline is credited per the owner ruling.
+  // GATE-UNI-20260613. (200-PV monthly maintenance gating is recorded as a pending
+  // decision and intentionally NOT enforced yet.)
+  async applyRepurchaseUnilevel(input: {
+    repurchasingUserId: string;
+    repurchasePv: number;
+    repurchaseRef: string;
+    sourceLabel: string;
+  }): Promise<{ levelsCredited: number; totalCredited: number }> {
+    if (input.repurchasePv <= 0) {
+      return { levelsCredited: 0, totalCredited: 0 };
+    }
+    let current = await this.repo.findNetworkAccountByUserId(input.repurchasingUserId);
+    let level = 1;
+    let totalCredited = 0;
+    let levelsCredited = 0;
+    const visited = new Set<string>([input.repurchasingUserId]);
+
+    while (current?.sponsorUserId && level <= UNILEVEL_MAX_LEVELS) {
+      const recipientUserId = current.sponsorUserId;
+      if (visited.has(recipientUserId)) {
+        break; // cycle guard
+      }
+      visited.add(recipientUserId);
+
+      const percent = UNILEVEL_PERCENTAGES[level] ?? 0;
+      if (percent > 0) {
+        const credit = Number(((input.repurchasePv * percent) / 100).toFixed(2));
+        if (credit > 0) {
+          await this.postLedgerIfNeeded({
+            userId: recipientUserId,
+            entryType: 'unilevel',
+            sourceReference: input.sourceLabel,
+            creditAmount: credit,
+            processId: `${input.repurchaseRef}:unilevel:L${level}:${recipientUserId}`,
+            notes: `Unilevel L${level} (${percent}%) from ${input.sourceLabel}.`
+          });
+          totalCredited += credit;
+          levelsCredited += 1;
+        }
+      }
+
+      current = await this.repo.findNetworkAccountByUserId(recipientUserId);
+      level += 1;
+    }
+
+    return { levelsCredited, totalCredited: Number(totalCredited.toFixed(2)) };
+  }
+
+  // Resolves a repurchase product from the catalog and credits the sponsor
+  // bloodline. The repurchase ref makes each posting idempotent per event.
+  async creditUnilevelForRepurchase(input: {
+    repurchasingUserId: string;
+    sku: string;
+    repurchaseRef: string;
+  }): Promise<{ levelsCredited: number; totalCredited: number; repurchasePv: number }> {
+    const product = repeatPurchaseProductCatalog.find((item) => item.sku === input.sku);
+    if (!product || !product.unilevelEligible) {
+      return { levelsCredited: 0, totalCredited: 0, repurchasePv: 0 };
+    }
+    const member = await this.repo.findMemberByUserId(input.repurchasingUserId);
+    const result = await this.applyRepurchaseUnilevel({
+      repurchasingUserId: input.repurchasingUserId,
+      repurchasePv: product.repurchasePv,
+      repurchaseRef: input.repurchaseRef,
+      sourceLabel: member?.username ? `${member.username} · ${product.label}` : product.label
+    });
+    return { ...result, repurchasePv: product.repurchasePv };
+  }
+
+  // Member unilevel earnings view: total + per-level breakdown + recent entries.
+  async getMemberUnilevelData(userId: string): Promise<{
+    moneyMode: MoneyMode;
+    levelPercentages: number[];
+    totalEarned: number;
+    byLevel: Array<{ level: number; percent: number; amount: number; count: number }>;
+    entries: Array<{ id: string; level: number; sourceReference: string; creditAmount: number; occurredAt: string; status: string }>;
+  }> {
+    const ledger = await this.repo.listWalletLedgerEntriesForUser(userId);
+    const unilevelEntries = ledger.filter((entry) => entry.entryType === 'unilevel');
+
+    const levelOf = (processId: string): number => {
+      const match = /:unilevel:L(\d+):/.exec(processId);
+      return match ? Number(match[1]) : 0;
+    };
+
+    const byLevel = Array.from({ length: UNILEVEL_MAX_LEVELS }, (_, index) => {
+      const level = index + 1;
+      const levelEntries = unilevelEntries.filter((entry) => levelOf(entry.processId) === level);
+      return {
+        level,
+        percent: UNILEVEL_PERCENTAGES[level] ?? 0,
+        amount: Number(levelEntries.reduce((sum, entry) => sum + entry.creditAmount, 0).toFixed(2)),
+        count: levelEntries.length
+      };
+    });
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      levelPercentages: [...UNILEVEL_PERCENTAGES].slice(1),
+      totalEarned: Number(unilevelEntries.reduce((sum, entry) => sum + entry.creditAmount, 0).toFixed(2)),
+      byLevel,
+      entries: unilevelEntries.map((entry) => ({
+        id: entry.id,
+        level: levelOf(entry.processId),
+        sourceReference: entry.sourceReference,
+        creditAmount: entry.creditAmount,
+        occurredAt: entry.occurredAt,
+        status: entry.status
+      }))
+    };
+  }
+
   async getMemberGetYorFiveData(userId: string): Promise<{
     moneyMode: MoneyMode;
     memberPackageTier: string;

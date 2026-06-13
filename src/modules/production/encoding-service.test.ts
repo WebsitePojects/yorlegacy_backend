@@ -482,6 +482,50 @@ describe('ProductionEncodingService', () => {
     expect(board.entries[1]).toMatchObject({ position: 2, username: 'LB2', totalIncome: 60000, rankName: 'Manager' });
   });
 
+  it('unilevel credits the sponsor bloodline up to 10 levels at the published percentages (item 8)', async () => {
+    // Sponsor chain: C -> B -> A -> root (via network.sponsorUserId).
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('uni-root', 'Root', 'root@yor.local'), seedUser('uni-a', 'A', 'a@yor.local'), seedUser('uni-b', 'B', 'b@yor.local'), seedUser('uni-c', 'C', 'c@yor.local')],
+      networkAccounts: [
+        seedNetwork('uni-root', 'VIP', null, null, null),
+        seedNetwork('uni-a', 'VIP', 'uni-root', null, null),
+        seedNetwork('uni-b', 'VIP', 'uni-a', null, null),
+        seedNetwork('uni-c', 'VIP', 'uni-b', null, null)
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const res = await service.applyRepurchaseUnilevel({ repurchasingUserId: 'uni-c', repurchasePv: 500, repurchaseRef: 'rp-1', sourceLabel: 'C · Perfume' });
+    expect(res.levelsCredited).toBe(3); // B(L1), A(L2), root(L3); root has no sponsor
+    expect(res.totalCredited).toBe(115); // 50 + 40 + 25
+
+    const bUni = await service.getMemberUnilevelData('uni-b');
+    expect(bUni.totalEarned).toBe(50); // L1 10% of 500
+    expect(bUni.byLevel[0]).toMatchObject({ level: 1, percent: 10, amount: 50, count: 1 });
+
+    const aLedger = await repo.listWalletLedgerEntriesForUser('uni-a');
+    expect(aLedger.find((e) => e.entryType === 'unilevel')?.creditAmount).toBe(40); // L2 8%
+    const rootLedger = await repo.listWalletLedgerEntriesForUser('uni-root');
+    expect(rootLedger.find((e) => e.entryType === 'unilevel')?.creditAmount).toBe(25); // L3 5%
+
+    // Re-running the same repurchase event must not double-credit.
+    await service.applyRepurchaseUnilevel({ repurchasingUserId: 'uni-c', repurchasePv: 500, repurchaseRef: 'rp-1', sourceLabel: 'C · Perfume' });
+    const bUniAgain = await service.getMemberUnilevelData('uni-b');
+    expect(bUniAgain.totalEarned).toBe(50);
+  });
+
+  it('creditUnilevelForRepurchase resolves repurchase PV from the catalog (item 8)', async () => {
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('uni-s', 'Sponsor', 's@yor.local'), seedUser('uni-m', 'Buyer', 'm@yor.local')],
+      members: [seedMember('uni-m', 'BUYERM', 'YOR-MEMBER-9301', 'VIP', 'Buyer M', 'YOR-MEMBER-9300')],
+      networkAccounts: [seedNetwork('uni-s', 'VIP', null, null, null), seedNetwork('uni-m', 'VIP', 'uni-s', null, null)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const res = await service.creditUnilevelForRepurchase({ repurchasingUserId: 'uni-m', sku: 'YOR-REFILL-HUGO-BOSS', repurchaseRef: 'rp-2' });
+    expect(res.repurchasePv).toBe(150);
+    const sLedger = await repo.listWalletLedgerEntriesForUser('uni-s');
+    expect(sLedger.find((e) => e.entryType === 'unilevel')?.creditAmount).toBe(15); // L1 10% of 150
+  });
+
   it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');

@@ -10,6 +10,7 @@ import type {
   ProductionNetworkAccount,
   ProductionPlacementReservation,
   ProductionSalesmatchBalance,
+  ProductionShadowAccount,
   ProductionWalletLedgerEntry
 } from './encoding-service.js';
 import type {
@@ -22,6 +23,7 @@ import type {
   NetworkAccountRow,
   PlacementReservationRow,
   SalesmatchBalanceRow,
+  ShadowAccountRow,
   WalletLedgerRow
 } from '../../types/db';
 
@@ -238,6 +240,29 @@ function mapQueueRow(row: CompensationQueueRow): ProductionCompensationQueueItem
   };
 }
 
+function mapShadowRow(row: ShadowAccountRow): ProductionShadowAccount {
+  return {
+    id: row.id,
+    ownerUserId: row.owner_user_id,
+    shadowCode: row.shadow_code,
+    state: row.state,
+    placement: row.placement,
+    walletEnabled: row.wallet_enabled ?? false,
+    unilevelEnabled: row.unilevel_enabled ?? false,
+    binaryCycleEnabled: row.binary_cycle_enabled ?? false,
+    note: row.notes ?? '',
+    packageTier: (row.package_tier as ProductionShadowAccount['packageTier']) ?? null,
+    accountType: (row.account_type as ProductionShadowAccount['accountType']) ?? null,
+    activationCode: row.activation_code ?? null,
+    pvValue: Number(row.pv_value ?? 0),
+    salesmatchValue: Number(row.salesmatch_value ?? 0),
+    activatedAt: row.activated_at ?? null,
+    lastUpgradedAt: row.last_upgraded_at ?? null,
+    createdAt: row.created_at ?? isoNow(),
+    updatedAt: row.updated_at ?? isoNow()
+  };
+}
+
 function mapEncashmentRow(row: EncashmentRow): ProductionEncashment {
   return {
     id: row.id,
@@ -420,6 +445,44 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     listUsers: async () => {
       const { data } = await client.from('app_users').select('*');
       return (data ?? []).map(mapUserRow);
+    },
+    listShadowAccounts: async () => {
+      const { data } = await client.from('shadow_accounts').select('*');
+      return (data ?? []).map(mapShadowRow);
+    },
+    listShadowAccountsForOwner: async (ownerUserId) => {
+      const { data } = await client.from('shadow_accounts').select('*').eq('owner_user_id', ownerUserId).order('placement', { ascending: true });
+      return (data ?? []).map(mapShadowRow);
+    },
+    findShadowAccountByCode: async (shadowCode) => {
+      const { data } = await client.from('shadow_accounts').select('*').ilike('shadow_code', shadowCode).maybeSingle();
+      return data ? mapShadowRow(data) : null;
+    },
+    saveShadowAccounts: async (rows) => {
+      const { error } = await client.from('shadow_accounts').upsert(
+        rows.map((row) => ({
+          id: row.id,
+          owner_user_id: row.ownerUserId,
+          shadow_code: row.shadowCode,
+          state: row.state,
+          placement: row.placement,
+          wallet_enabled: row.walletEnabled,
+          unilevel_enabled: row.unilevelEnabled,
+          binary_cycle_enabled: row.binaryCycleEnabled,
+          notes: row.note,
+          package_tier: row.packageTier,
+          account_type: row.accountType,
+          activation_code: row.activationCode,
+          pv_value: row.pvValue,
+          salesmatch_value: row.salesmatchValue,
+          activated_at: row.activatedAt,
+          last_upgraded_at: row.lastUpgradedAt,
+          created_at: row.createdAt,
+          updated_at: row.updatedAt
+        })),
+        { onConflict: 'id' }
+      );
+      assertNoError(error, 'saveShadowAccounts');
     },
     listWalletLedgerEntriesForUser: async (userId) => {
       const { data } = await client.from('wallet_ledger').select('*').eq('user_id', userId).order('occurred_at', { ascending: true });
@@ -754,6 +817,106 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     findPlacementReservationByToken: async (token) => {
       const { data } = await client.from('placement_reservations').select('*').eq('share_token', token).maybeSingle();
       return data ? mapReservationRow(data) : null;
+    },
+    listMembersFiltered: async (query, page, pageSize) => {
+      const offset = (page - 1) * pageSize;
+      let q = client.from('member_profiles').select('*').order('created_at', { ascending: false }).range(offset, offset + pageSize - 1);
+      if (query) {
+        const upper = query.toUpperCase();
+        q = q.or(`username.ilike.%${upper}%,normalized_full_name.ilike.%${upper}%,referral_code.ilike.%${upper}%`);
+      }
+      const { data } = await q;
+      return (data ?? []).map(mapMemberRow);
+    },
+    countMembersFiltered: async (query) => {
+      let q = client.from('member_profiles').select('id', { count: 'exact', head: true });
+      if (query) {
+        const upper = query.toUpperCase();
+        q = q.or(`username.ilike.%${upper}%,normalized_full_name.ilike.%${upper}%,referral_code.ilike.%${upper}%`);
+      }
+      const { count } = await q;
+      return count ?? 0;
+    },
+    listNetworkAccountsByUserIds: async (userIds) => {
+      if (userIds.length === 0) return [];
+      const { data } = await client.from('network_accounts').select('*').in('user_id', userIds);
+      return (data ?? []).map(mapNetworkRow);
+    },
+    sumWalletMainBalancesByUserIds: async (userIds) => {
+      const result = new Map<string, number>();
+      if (userIds.length === 0) return result;
+      const { data } = await client
+        .from('wallet_ledger')
+        .select('user_id, credit_amount, debit_amount')
+        .in('user_id', userIds)
+        .eq('wallet_type', 'main');
+      for (const row of data ?? []) {
+        const prev = result.get(row.user_id) ?? 0;
+        result.set(row.user_id, prev + Number(row.credit_amount ?? 0) - Number(row.debit_amount ?? 0));
+      }
+      return result;
+    },
+    countDirectReferralsByUserIds: async (userIds) => {
+      const result = new Map<string, number>();
+      if (userIds.length === 0) return result;
+      const { data } = await client
+        .from('network_accounts')
+        .select('sponsor_user_id')
+        .in('sponsor_user_id', userIds)
+        .eq('registration_status', 'active');
+      for (const row of data ?? []) {
+        const prev = result.get(row.sponsor_user_id) ?? 0;
+        result.set(row.sponsor_user_id, prev + 1);
+      }
+      return result;
+    },
+
+    insertRepurchase: async (row) => {
+      await client.from('repurchases').insert({
+        id: row.id,
+        process_key: row.processKey,
+        user_id: row.userId,
+        product_code: row.productCode,
+        product_name: row.productName,
+        product_type: row.productType,
+        quantity: row.quantity,
+        unit_price: row.unitPrice,
+        total_amount: row.totalAmount,
+        pv_earned: row.pvEarned,
+        activation_code: row.activationCode,
+        transaction_date: row.transactionDate,
+        created_at: row.createdAt
+      });
+    },
+
+    sumLifestyleCreditsForUserToday: async (userId, dayIso) => {
+      const dayStart = `${dayIso.slice(0, 10)}T00:00:00.000Z`;
+      const dayEnd   = `${dayIso.slice(0, 10)}T23:59:59.999Z`;
+      const { data } = await client
+        .from('wallet_ledger')
+        .select('credit_amount')
+        .eq('user_id', userId)
+        .eq('wallet_type', 'lifestyle')
+        .eq('entry_type', 'lifestyle_rewards')
+        .gte('created_at', dayStart)
+        .lte('created_at', dayEnd);
+      return (data ?? []).reduce((sum, r) => sum + Number(r.credit_amount ?? 0), 0);
+    },
+
+    sumLifestyleCreditsForUserThisMonth: async (userId, yearMonthPrefix) => {
+      const monthStart = `${yearMonthPrefix}-01T00:00:00.000Z`;
+      const [year, month] = yearMonthPrefix.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const monthEnd = `${yearMonthPrefix}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+      const { data } = await client
+        .from('wallet_ledger')
+        .select('credit_amount')
+        .eq('user_id', userId)
+        .eq('wallet_type', 'lifestyle')
+        .eq('entry_type', 'lifestyle_rewards')
+        .gte('created_at', monthStart)
+        .lte('created_at', monthEnd);
+      return (data ?? []).reduce((sum, r) => sum + Number(r.credit_amount ?? 0), 0);
     }
   };
 }

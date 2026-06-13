@@ -165,6 +165,17 @@ export async function findAppUserByUsername(
     if (exactUser) {
       return toSessionUser(exactUser);
     }
+
+    // 5. Match by display_name — covers cashier/staff accounts where display_name is their login handle
+    const { data: displayNameUser } = await supabase
+      .from('app_users')
+      .select('id,email,display_name,role,status,password_hash,password_salt')
+      .ilike('display_name', username.trim())
+      .maybeSingle<AppUserRow>();
+
+    if (displayNameUser) {
+      return toSessionUser(displayNameUser);
+    }
   } else {
     const { data: appUser, error: appUserError } = await supabase
       .from('app_users')

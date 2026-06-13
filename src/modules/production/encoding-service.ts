@@ -11,14 +11,19 @@ import { manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from '../compe
 import { computeGetYorFiveGroups, type GyfDirect } from '../compensation/get-yor-five.js';
 import { rankForIncome, type RankProgress } from '../compensation/rank-ladder.js';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
-import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
+import {
+  repeatPurchaseProductCatalog,
+  findProductByCodeFamily,
+  lifestyleDailyCapByPackage,
+  lifestyleMonthlyCapByPackage
+} from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { MoneyMode, SessionUser } from '../../types/auth.js';
 import { buildCanonicalReferralCode, decodeReferralCode, encodeReferralCode } from '../../lib/referral-utils.js';
 import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
-export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR VISION';
+export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR REFILL' | 'YOR VISION';
 export type AccountType = 'PD' | 'FS' | 'CD';
 export type ActivationCodeStatus = 'unreleased' | 'available' | 'used' | 'disabled';
 export type PaymentStatus = 'unpaid' | 'paid' | 'externally-paid';
@@ -263,9 +268,32 @@ export type ProductionCompensationQueueItem = {
     createdMemberUserId: string;
     createdMemberUsername: string;
     activationCode: string;
+    shadowCode?: string | null;
+    binaryCycleEligible?: boolean;
   };
   createdAt: string;
   processedAt: string | null;
+};
+
+export type ProductionShadowAccount = {
+  id: string;
+  ownerUserId: string;
+  shadowCode: string;
+  state: 'reserved_shadow' | 'activated_shadow' | 'converted_full';
+  placement: PlacementSide;
+  walletEnabled: boolean;
+  unilevelEnabled: boolean;
+  binaryCycleEnabled: boolean;
+  note: string;
+  packageTier: PackageTier | null;
+  accountType: AccountType | null;
+  activationCode: string | null;
+  pvValue: number;
+  salesmatchValue: number;
+  activatedAt: string | null;
+  lastUpgradedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ProductionRegistrationInput = {
@@ -394,6 +422,7 @@ type ProductionGenealogyNode = {
       owner: string;
       placement: 'left';
       state: 'reserved_shadow' | 'activated_shadow';
+      shadowCode: string;
       label: string;
       activationStatus: 'inactive' | 'activated';
       registrationEnabled: boolean;
@@ -401,12 +430,20 @@ type ProductionGenealogyNode = {
       unilevelEnabled: boolean;
       binaryCycleEnabled: boolean;
       note: string;
+      packageTier: PackageTier | null;
+      accountType: AccountType | null;
+      activationCode: string | null;
+      pvValue: number;
+      salesmatchValue: number;
+      activatedAt: string | null;
+      lastUpgradedAt: string | null;
     };
     right: {
       id: string;
       owner: string;
       placement: 'right';
       state: 'reserved_shadow' | 'activated_shadow';
+      shadowCode: string;
       label: string;
       activationStatus: 'inactive' | 'activated';
       registrationEnabled: boolean;
@@ -414,6 +451,13 @@ type ProductionGenealogyNode = {
       unilevelEnabled: boolean;
       binaryCycleEnabled: boolean;
       note: string;
+      packageTier: PackageTier | null;
+      accountType: AccountType | null;
+      activationCode: string | null;
+      pvValue: number;
+      salesmatchValue: number;
+      activatedAt: string | null;
+      lastUpgradedAt: string | null;
     };
   };
   accountStateLabel: 'PD' | 'FS' | 'CD - Paid' | 'CD - Unpaid';
@@ -440,6 +484,10 @@ export type ProductionEncodingRepository = {
   listActivationCodeEvents(): Promise<ProductionActivationCodeEvent[]>;
   listMembers(): Promise<ProductionMemberProfile[]>;
   listUsers(): Promise<ProductionAppUser[]>;
+  listShadowAccounts(): Promise<ProductionShadowAccount[]>;
+  listShadowAccountsForOwner(ownerUserId: string): Promise<ProductionShadowAccount[]>;
+  findShadowAccountByCode(shadowCode: string): Promise<ProductionShadowAccount | null>;
+  saveShadowAccounts(rows: ProductionShadowAccount[]): Promise<void>;
   listWalletLedgerEntriesForUser(userId: string): Promise<ProductionWalletLedgerEntry[]>;
   appendWalletLedgerEntry(entry: ProductionWalletLedgerEntry): Promise<void>;
   hasWalletLedgerProcess(processId: string): Promise<boolean>;
@@ -480,6 +528,28 @@ export type ProductionEncodingRepository = {
   listPlacementReservationsForSponsor(sponsorUserId: string): Promise<ProductionPlacementReservation[]>;
   findPlacementReservationById(reservationId: string): Promise<ProductionPlacementReservation | null>;
   findPlacementReservationByToken(token: string): Promise<ProductionPlacementReservation | null>;
+  listMembersFiltered(query: string, page: number, pageSize: number): Promise<ProductionMemberProfile[]>;
+  countMembersFiltered(query: string): Promise<number>;
+  listNetworkAccountsByUserIds(userIds: string[]): Promise<ProductionNetworkAccount[]>;
+  sumWalletMainBalancesByUserIds(userIds: string[]): Promise<Map<string, number>>;
+  countDirectReferralsByUserIds(userIds: string[]): Promise<Map<string, number>>;
+  insertRepurchase(row: {
+    id: string;
+    processKey: string;
+    userId: string;
+    productCode: string;
+    productName: string;
+    productType: string;
+    quantity: number;
+    unitPrice: number;
+    totalAmount: number;
+    pvEarned: number;
+    activationCode: string;
+    transactionDate: string;
+    createdAt: string;
+  }): Promise<void>;
+  sumLifestyleCreditsForUserToday(userId: string, dayIso: string): Promise<number>;
+  sumLifestyleCreditsForUserThisMonth(userId: string, yearMonthPrefix: string): Promise<number>;
 };
 
 export function normalizeFullName(fullName: string): string {
@@ -556,6 +626,23 @@ function resolveActivationCodeTemplate(packageTier: string, codeFamily: CodeFami
     getFiveAmount: 0,
     binaryPoints: 0
   };
+}
+
+function buildActivationCodeValue(accountType: AccountType, packageTier: string, codeFamily: CodeFamily, sequence: number): string {
+  let pkg: string;
+  if (codeFamily === 'YOR CODES') {
+    const pkgMap: Record<string, string> = { Basic: 'BA', Classic: 'CL', Standard: 'ST', Business: 'BU', VIP: 'VI' };
+    pkg = pkgMap[packageTier] ?? 'XX';
+  } else {
+    const cfMap: Record<string, string> = {
+      'YOR MAINTENANCE': 'YM',
+      'YOR PERFUME': 'YP',
+      'YOR REFILL': 'YR',
+      'YOR VISION': 'YV',
+    };
+    pkg = cfMap[codeFamily] ?? 'YX';
+  }
+  return `${accountType}${pkg}${String(sequence).padStart(6, '0')}`;
 }
 
 function visibilityForCode(code: ProductionActivationCode, assignedUsername: string | null): string {
@@ -654,12 +741,116 @@ function randomToken(): string {
 export class ProductionEncodingService {
   constructor(private readonly repo: ProductionEncodingRepository) {}
 
+  private buildShadowCode(ownerUsername: string, placement: PlacementSide) {
+    return `${ownerUsername}-${placement === 'left' ? 'L' : 'R'}`;
+  }
+
+  private buildDefaultShadowNote(placement: PlacementSide, state: ProductionShadowAccount['state']) {
+    if (state === 'activated_shadow') {
+      return `Activated ${placement} shadow support. Carries PV for Salesmatch only; no wallet, direct referral, unilevel, or binary cycle rights.`;
+    }
+    return `Reserved ${placement} shadow support. Binary Function Only until a paid code activates this slot.`;
+  }
+
+  private createDefaultShadowAccount(owner: ProductionMemberProfile, placement: PlacementSide): ProductionShadowAccount {
+    const now = this.repo.now();
+    return {
+      id: crypto.randomUUID(),
+      ownerUserId: owner.userId,
+      shadowCode: this.buildShadowCode(owner.username, placement),
+      state: 'reserved_shadow',
+      placement,
+      walletEnabled: false,
+      unilevelEnabled: false,
+      binaryCycleEnabled: false,
+      note: this.buildDefaultShadowNote(placement, 'reserved_shadow'),
+      packageTier: null,
+      accountType: null,
+      activationCode: null,
+      pvValue: 0,
+      salesmatchValue: 0,
+      activatedAt: null,
+      lastUpgradedAt: null,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  private async ensureShadowAccountsForMembers(members: ProductionMemberProfile[]) {
+    const existing = await this.repo.listShadowAccounts();
+    const byOwnerPlacement = new Map<string, ProductionShadowAccount>(existing.map((row) => [`${row.ownerUserId}:${row.placement}`, row]));
+    const created: ProductionShadowAccount[] = [];
+
+    for (const member of members) {
+      for (const placement of ['left', 'right'] as const) {
+        const key = `${member.userId}:${placement}`;
+        if (!byOwnerPlacement.has(key)) {
+          const row = this.createDefaultShadowAccount(member, placement);
+          byOwnerPlacement.set(key, row);
+          created.push(row);
+        }
+      }
+    }
+
+    if (created.length > 0) {
+      await this.repo.saveShadowAccounts(created);
+    }
+
+    return [...existing, ...created];
+  }
+
+  private async ensureShadowAccountsForOwner(owner: ProductionMemberProfile) {
+    const rows = await this.repo.listShadowAccountsForOwner(owner.userId);
+    if (rows.length >= 2 && rows.some((row) => row.placement === 'left') && rows.some((row) => row.placement === 'right')) {
+      return rows;
+    }
+    const missing: ProductionShadowAccount[] = [];
+    if (!rows.some((row) => row.placement === 'left')) {
+      missing.push(this.createDefaultShadowAccount(owner, 'left'));
+    }
+    if (!rows.some((row) => row.placement === 'right')) {
+      missing.push(this.createDefaultShadowAccount(owner, 'right'));
+    }
+    if (missing.length > 0) {
+      await this.repo.saveShadowAccounts(missing);
+    }
+    return [...rows, ...missing].sort((a, b) => a.placement.localeCompare(b.placement));
+  }
+
+  private toGenealogyShadowSlot(owner: ProductionMemberProfile, row: ProductionShadowAccount) {
+    return {
+      id: row.id,
+      owner: owner.username,
+      placement: row.placement,
+      state: row.state === 'converted_full' ? 'activated_shadow' : row.state,
+      shadowCode: row.shadowCode,
+      label: `${owner.username} ${row.placement === 'left' ? 'Left' : 'Right'} Shadow`,
+      activationStatus: row.state === 'reserved_shadow' ? 'inactive' as const : 'activated' as const,
+      registrationEnabled: false,
+      walletEnabled: row.walletEnabled,
+      unilevelEnabled: row.unilevelEnabled,
+      binaryCycleEnabled: row.binaryCycleEnabled,
+      note: row.note,
+      packageTier: row.packageTier,
+      accountType: row.accountType,
+      activationCode: row.activationCode,
+      pvValue: row.pvValue,
+      salesmatchValue: row.salesmatchValue,
+      activatedAt: row.activatedAt,
+      lastUpgradedAt: row.lastUpgradedAt
+    };
+  }
+
   async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string) {
     const signedInMember = await this.requireMemberByUserId(user.id);
     const [members, networks] = await Promise.all([this.repo.listMembers(), this.repo.listNetworkAccounts()]);
+    const shadowAccounts = await this.ensureShadowAccountsForMembers(members);
     const membersByUserId = new Map(members.map((member) => [member.userId, member]));
     const networksByUserId = new Map(networks.map((network) => [network.userId, network]));
     const membersByUsername = new Map(members.map((member) => [member.username, member]));
+    const shadowByOwnerPlacement = new Map(
+      shadowAccounts.map((row) => [`${row.ownerUserId}:${row.placement}`, row] as const)
+    );
     const directReferralCounts = new Map<string, number>();
 
     for (const member of members) {
@@ -693,20 +884,6 @@ export class ProductionEncodingService {
       return nodes;
     };
 
-    const toShadowSlot = <TPlacement extends PlacementSide>(owner: ProductionMemberProfile, placement: TPlacement) => ({
-      id: `${owner.username}-${placement.toUpperCase()}-SHADOW`,
-      owner: owner.username,
-      placement,
-      state: 'reserved_shadow' as const,
-      label: `${owner.username} ${placement === 'left' ? 'Left' : 'Right'} Shadow`,
-      activationStatus: 'inactive' as const,
-      registrationEnabled: true,
-      walletEnabled: false,
-      unilevelEnabled: false,
-      binaryCycleEnabled: false,
-      note: `Reserved ${placement} shadow support under ${owner.username}.`
-    });
-
     const toAccountStateLabel = (network: ProductionNetworkAccount | null): 'PD' | 'FS' | 'CD - Paid' | 'CD - Unpaid' => {
       if (!network) return 'PD';
       if (network.currentAccountType === 'FS') return 'FS';
@@ -724,6 +901,8 @@ export class ProductionEncodingService {
     ): ProductionGenealogyNode => {
       const network = networksByUserId.get(member.userId) ?? null;
       const tracePath = [...path, member.username];
+      const leftShadow = shadowByOwnerPlacement.get(`${member.userId}:left`) ?? this.createDefaultShadowAccount(member, 'left');
+      const rightShadow = shadowByOwnerPlacement.get(`${member.userId}:right`) ?? this.createDefaultShadowAccount(member, 'right');
 
       return {
         nodeId: member.username,
@@ -744,8 +923,8 @@ export class ProductionEncodingService {
           right: false
         },
         shadowSlots: {
-          left: toShadowSlot(member, 'left'),
-          right: toShadowSlot(member, 'right')
+          left: { ...this.toGenealogyShadowSlot(member, leftShadow), placement: 'left' as const },
+          right: { ...this.toGenealogyShadowSlot(member, rightShadow), placement: 'right' as const }
         },
         accountStateLabel: toAccountStateLabel(network),
         children: [
@@ -839,6 +1018,223 @@ export class ProductionEncodingService {
     };
   }
 
+  async buildAdminBinaryGenealogyCenter(rootUsername?: string) {
+    const members = await this.repo.listMembers();
+    const byUsername = new Map(members.map((m) => [m.username, m]));
+    const companyRoot = members.find((m) => m.isCompanyAccount) ?? members[0];
+    const rootMember = rootUsername ? (byUsername.get(rootUsername) ?? companyRoot) : companyRoot;
+    if (!rootMember) {
+      throw new Error('No company root found in production database.');
+    }
+    const syntheticUser: SessionUser = {
+      id: rootMember.userId,
+      name: rootMember.fullName,
+      email: '',
+      role: 'member'
+    };
+    return this.buildScopedBinaryGenealogyCenter(syntheticUser, rootUsername);
+  }
+
+  async buildMemberShadowAccountCenter(user: SessionUser, ownerUsername?: string) {
+    const owner = ownerUsername ? await this.requireMemberByUsername(ownerUsername) : await this.requireMemberByUserId(user.id);
+    if (user.role === 'member' && owner.userId !== user.id) {
+      throw new Error('Members can only view their own shadow accounts.');
+    }
+
+    const [shadowAccounts, availableCodes] = await Promise.all([
+      this.ensureShadowAccountsForOwner(owner),
+      this.repo.listActivationCodesForUser(owner.userId)
+    ]);
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      owner: owner.username,
+      accounts: shadowAccounts.map((row) => ({
+        id: row.id,
+        owner: owner.username,
+        shadowCode: row.shadowCode,
+        label: `${owner.username} ${row.placement === 'left' ? 'Left' : 'Right'} Shadow`,
+        state: row.state,
+        activationStatus: row.state === 'reserved_shadow' ? 'inactive' : 'activated',
+        placement: row.placement,
+        walletEnabled: row.walletEnabled,
+        unilevelEnabled: row.unilevelEnabled,
+        binaryCycleEnabled: row.binaryCycleEnabled,
+        packageTier: row.packageTier,
+        accountType: row.accountType,
+        activationCode: row.activationCode,
+        pvValue: row.pvValue,
+        salesmatchValue: row.salesmatchValue,
+        activatedAt: row.activatedAt,
+        lastUpgradedAt: row.lastUpgradedAt,
+        note: row.note,
+        canActivate: row.state === 'reserved_shadow',
+        canUpgrade: row.state !== 'reserved_shadow'
+      })),
+      availableCodes: availableCodes
+        .filter(
+          (item) =>
+            item.codeFamily === 'YOR CODES' &&
+            item.status === 'available' &&
+            item.paymentStatus !== 'unpaid' &&
+            item.registrationEligible
+        )
+        .map((item) => ({
+          id: item.id,
+          code: item.code,
+          codeFamily: item.codeFamily,
+          accountType: item.accountType,
+          packageTier: item.packageTier,
+          assignedTo: owner.username,
+          status: item.status,
+          paymentStatus: item.paymentStatus,
+          generatedAt: item.generatedAt,
+          transferredAt: item.transferredAt,
+          releasedAt: item.releasedAt,
+          registrationEligible: item.registrationEligible,
+          copyEnabled: true,
+          transferable: false,
+          upgradable: true,
+          visibility: 'shadow-activation'
+        })),
+      notes: [
+        'Shadow accounts are Binary Function Only until activated.',
+        'Activated shadows add Salesmatch PV only. They never generate Direct Referral, Unilevel, or Binary Cycle.'
+      ]
+    };
+  }
+
+  async activateShadowAccount(
+    actor: SessionUser,
+    payload: { shadowCode: string; code: string }
+  ) {
+    const shadowCode = payload.shadowCode.trim().toUpperCase();
+    const codeValue = payload.code.trim().toUpperCase();
+    if (!shadowCode) {
+      throw new Error('Select a shadow account first.');
+    }
+    if (!codeValue) {
+      throw new Error('Select an activation code first.');
+    }
+
+    return withMoneyLock(`shadow:${shadowCode}`, async () => {
+      const shadow = await this.repo.findShadowAccountByCode(shadowCode);
+      if (!shadow) {
+        throw new Error('Shadow account not found.');
+      }
+      if (actor.role === 'member' && shadow.ownerUserId !== actor.id) {
+        throw new Error('You can only activate your own shadow account.');
+      }
+
+      const owner = await this.requireMemberByUserId(shadow.ownerUserId);
+      const code = await this.repo.findActivationCodeByCode(codeValue);
+      if (!code) {
+        throw new Error('Activation code not found.');
+      }
+      if (code.codeFamily !== 'YOR CODES' || !code.registrationEligible) {
+        throw new Error('Only registration activation codes can activate a shadow account.');
+      }
+      if (code.assignedUserId !== shadow.ownerUserId) {
+        throw new Error(`Activation code ${code.code} is not assigned to ${owner.username}.`);
+      }
+      if (code.status !== 'available') {
+        throw new Error(`Activation code ${code.code} is not available.`);
+      }
+      if (code.paymentStatus === 'unpaid') {
+        throw new Error(`Activation code ${code.code} must be settled before it can activate a shadow account.`);
+      }
+
+      const previousSalesmatchValue = shadow.salesmatchValue;
+      const previousPvValue = shadow.pvValue;
+      const nextSalesmatchValue = code.lockedSalesmatchValue;
+      const nextPvValue = code.lockedBinaryPoints;
+
+      if (shadow.state !== 'reserved_shadow' && nextSalesmatchValue <= previousSalesmatchValue && nextPvValue <= previousPvValue) {
+        throw new Error('Use a higher-value code to upgrade this activated shadow account.');
+      }
+
+      const now = this.repo.now();
+      shadow.state = 'activated_shadow';
+      shadow.walletEnabled = false;
+      shadow.unilevelEnabled = false;
+      shadow.binaryCycleEnabled = false;
+      shadow.note = this.buildDefaultShadowNote(shadow.placement, 'activated_shadow');
+      shadow.packageTier = toPackageTier(code.packageTier);
+      shadow.accountType = code.accountType;
+      shadow.activationCode = code.code;
+      shadow.pvValue = nextPvValue;
+      shadow.salesmatchValue = nextSalesmatchValue;
+      shadow.activatedAt = shadow.activatedAt ?? now;
+      shadow.lastUpgradedAt = now;
+      shadow.updatedAt = now;
+
+      code.status = 'used';
+      code.usedAt = now;
+      code.usedByUserId = shadow.ownerUserId;
+
+      await this.repo.saveShadowAccounts([shadow]);
+      await this.repo.saveActivationCodes([code]);
+      await this.repo.appendActivationCodeEvents([
+        {
+          id: crypto.randomUUID(),
+          activationCodeId: code.id,
+          code: code.code,
+          action: 'consumed',
+          actorUserId: actor.id,
+          actorName: actor.name,
+          fromUserId: shadow.ownerUserId,
+          toUserId: shadow.ownerUserId,
+          notes: `Activation code consumed for shadow account ${shadow.shadowCode}.`,
+          createdAt: now
+        }
+      ]);
+
+      const salesmatchDelta = Math.max(0, Number((nextSalesmatchValue - previousSalesmatchValue).toFixed(2)));
+      const pvDelta = Math.max(0, Number((nextPvValue - previousPvValue).toFixed(2)));
+      if (salesmatchDelta > 0 || pvDelta > 0) {
+        await this.repo.enqueueCompensation({
+          id: crypto.randomUUID(),
+          processId: buildProcessId('shadow-activate', shadow.shadowCode, code.code),
+          eventType: 'placement-sales',
+          status: 'pending',
+          payload: {
+            placementParentUserId: shadow.ownerUserId,
+            placementParentShadowSide: shadow.placement,
+            placementSide: shadow.placement,
+            salesmatchValue: salesmatchDelta,
+            binaryPoints: pvDelta,
+            createdMemberUserId: shadow.ownerUserId,
+            createdMemberUsername: shadow.shadowCode,
+            activationCode: code.code,
+            shadowCode: shadow.shadowCode,
+            binaryCycleEligible: false
+          },
+          createdAt: now,
+          processedAt: null
+        });
+      }
+
+      return {
+        moneyMode: this.repo.getMoneyMode(),
+        action: 'member-shadow-account-activate',
+        status: 'completed' as const,
+        reason:
+          previousSalesmatchValue > 0
+            ? `Shadow account ${shadow.shadowCode} upgraded to ${shadow.packageTier}.`
+            : `Shadow account ${shadow.shadowCode} activated with ${shadow.packageTier}.`,
+        detail: `Shadow ${shadow.shadowCode} now carries ${shadow.pvValue} PV and PHP ${shadow.salesmatchValue} Salesmatch value. Binary Cycle, Direct Referral, and Unilevel remain disabled.`,
+        shadowAccount: {
+          shadowCode: shadow.shadowCode,
+          placement: shadow.placement,
+          packageTier: shadow.packageTier,
+          accountType: shadow.accountType,
+          pvValue: shadow.pvValue,
+          salesmatchValue: shadow.salesmatchValue
+        }
+      };
+    });
+  }
+
   async getMemberBinaryBalance(userId: string): Promise<{
     leftPoints: number;
     rightPoints: number;
@@ -884,8 +1280,13 @@ export class ProductionEncodingService {
     }>;
   }> {
     const members = await this.repo.listMembers();
+    const COMPANY_USERNAMES = new Set(['yor01', 'yor0001', 'yor-company-root']);
     const eligible = members.filter(
-      (member) => member.accountStatus === 'active' && !member.isCompanyAccount && !member.isLeaderboardExcluded
+      (member) =>
+        member.accountStatus === 'active' &&
+        !member.isCompanyAccount &&
+        !member.isLeaderboardExcluded &&
+        !COMPANY_USERNAMES.has(member.username.toLowerCase())
     );
     const ranked = await Promise.all(
       eligible.map(async (member) => {
@@ -983,6 +1384,153 @@ export class ProductionEncodingService {
       sourceLabel: member?.username ? `${member.username} · ${product.label}` : product.label
     });
     return { ...result, repurchasePv: product.repurchasePv };
+  }
+
+  // GATE-LFR-20260613: Lifestyle Rewards production posting (owner sign-off item 9).
+  // Credits the PURCHASING MEMBER's lifestyle wallet (not sponsor bloodline).
+  // Caps enforced per package: daily and monthly. Both caps must have room.
+  // Process key LFR:<memberUserId>:<repurchaseRef> makes re-credit a no-op.
+  async applyRepurchaseLifestyle(input: {
+    memberUserId: string;
+    sku: string;
+    repurchaseRef: string;
+    memberPackageTier: PackageTier;
+  }): Promise<{ credited: number; cappedOut: boolean; reason: string }> {
+    if (input.memberPackageTier === 'Basic') {
+      return { credited: 0, cappedOut: false, reason: 'Basic package is not eligible for Lifestyle Rewards.' };
+    }
+    const product = repeatPurchaseProductCatalog.find((p) => p.sku === input.sku);
+    if (!product || !product.lifestyleEligible) {
+      return { credited: 0, cappedOut: false, reason: 'Product is not lifestyle-eligible.' };
+    }
+
+    const nowIso = this.repo.now();
+    const dayIso = nowIso.slice(0, 10);
+    const yearMonthPrefix = nowIso.slice(0, 7);
+
+    const tier = input.memberPackageTier as Exclude<PackageTier, 'Basic'>;
+    const dailyCap = lifestyleDailyCapByPackage[tier];
+    const monthlyCap = lifestyleMonthlyCapByPackage[tier];
+
+    const [dailyUsed, monthlyUsed] = await Promise.all([
+      this.repo.sumLifestyleCreditsForUserToday(input.memberUserId, dayIso),
+      this.repo.sumLifestyleCreditsForUserThisMonth(input.memberUserId, yearMonthPrefix)
+    ]);
+
+    if (dailyUsed >= dailyCap) {
+      return { credited: 0, cappedOut: true, reason: `Daily lifestyle cap (${dailyCap}) reached.` };
+    }
+    if (monthlyUsed >= monthlyCap) {
+      return { credited: 0, cappedOut: true, reason: `Monthly lifestyle cap (${monthlyCap}) reached.` };
+    }
+
+    const credit = product.lifestyleRewardPer;
+    await this.postLedgerIfNeeded({
+      userId: input.memberUserId,
+      walletType: 'lifestyle',
+      entryType: 'lifestyle_rewards',
+      sourceReference: product.sku,
+      creditAmount: credit,
+      processId: `LFR:${input.memberUserId}:${input.repurchaseRef}`,
+      notes: `Lifestyle Rewards from ${product.label}.`
+    });
+
+    return { credited: credit, cappedOut: false, reason: 'Credited.' };
+  }
+
+  // Combined repurchase trigger: inserts repurchase record, credits unilevel
+  // up the sponsor bloodline, and credits lifestyle to the purchasing member.
+  async submitProductRepurchase(input: {
+    memberUserId: string;
+    activationCodeValue: string;
+    sku: string;
+    memberPackageTier: PackageTier;
+  }): Promise<{
+    repurchasePv: number;
+    unilevel: { levelsCredited: number; totalCredited: number };
+    lifestyle: { credited: number; cappedOut: boolean; reason: string };
+  }> {
+    const product = repeatPurchaseProductCatalog.find((p) => p.sku === input.sku)
+      ?? findProductByCodeFamily(input.sku);
+    if (!product) {
+      throw new Error(`Unknown repurchase product or code family: ${input.sku}`);
+    }
+
+    const repurchaseRef = `repurchase-${input.activationCodeValue}-${this.repo.now()}`;
+    const repurchaseId = crypto.randomUUID();
+
+    await this.repo.insertRepurchase({
+      id: repurchaseId,
+      processKey: repurchaseRef,
+      userId: input.memberUserId,
+      productCode: product.sku,
+      productName: product.label,
+      productType: product.codeFamily === 'YOR REFILL' ? 'refill' : 'perfume',
+      quantity: 1,
+      unitPrice: product.repurchasePrice,
+      totalAmount: product.repurchasePrice,
+      pvEarned: product.repurchasePv,
+      activationCode: input.activationCodeValue,
+      transactionDate: this.repo.now(),
+      createdAt: this.repo.now()
+    });
+
+    const [unilevel, lifestyle] = await Promise.all([
+      this.creditUnilevelForRepurchase({
+        repurchasingUserId: input.memberUserId,
+        sku: product.sku,
+        repurchaseRef
+      }),
+      this.applyRepurchaseLifestyle({
+        memberUserId: input.memberUserId,
+        sku: product.sku,
+        repurchaseRef,
+        memberPackageTier: input.memberPackageTier
+      })
+    ]);
+
+    return { repurchasePv: product.repurchasePv, unilevel, lifestyle };
+  }
+
+  async getMemberProfileForUser(userId: string): Promise<ProductionMemberProfile | null> {
+    return this.repo.findMemberByUserId(userId);
+  }
+
+  // Returns an assigned, released (available) maintenance or refill code owned by userId.
+  async findOwnedMaintenanceCode(userId: string, codeValue: string): Promise<ProductionActivationCode | null> {
+    const code = await this.repo.findActivationCodeByCode(codeValue);
+    if (!code) return null;
+    if (code.assignedUserId !== userId) return null;
+    if (code.status !== 'available') return null;
+    if (code.codeFamily !== 'YOR MAINTENANCE' && code.codeFamily !== 'YOR REFILL' && code.codeFamily !== 'YOR VISION') return null;
+    return code;
+  }
+
+  // Marks the code used, then fires submitProductRepurchase (lifestyle + unilevel).
+  async consumeMaintenanceCode(
+    memberUserId: string,
+    codeValue: string,
+    sku: string,
+    memberPackageTier: PackageTier
+  ): Promise<{
+    repurchasePv: number;
+    unilevel: { levelsCredited: number; totalCredited: number };
+    lifestyle: { credited: number; cappedOut: boolean; reason: string };
+  }> {
+    const code = await this.repo.findActivationCodeByCode(codeValue);
+    if (!code || code.assignedUserId !== memberUserId || code.status !== 'available') {
+      throw new Error('Code is not available for consumption.');
+    }
+
+    code.status = 'used';
+    await this.repo.saveActivationCodes([code]);
+
+    return this.submitProductRepurchase({
+      memberUserId,
+      activationCodeValue: codeValue,
+      sku,
+      memberPackageTier
+    });
   }
 
   // Member unilevel earnings view: total + per-level breakdown + recent entries.
@@ -1141,6 +1689,99 @@ export class ProductionEncodingService {
     return upper === 'YOR0001' || upper === 'YOR01';
   }
 
+  async listAdminMembersForManagement(input: {
+    query: string;
+    page: number;
+    pageSize: number;
+    username?: string;
+  }) {
+    const pageSize = Math.min(Math.max(input.pageSize, 5), 100);
+    const page = Math.max(input.page, 1);
+    const query = input.query.trim();
+
+    const [members, total] = await Promise.all([
+      this.repo.listMembersFiltered(query, page, pageSize),
+      this.repo.countMembersFiltered(query)
+    ]);
+
+    const userIds = members.map((m) => m.userId);
+    const [networkMap, walletMap, directMap] = await Promise.all([
+      this.repo.listNetworkAccountsByUserIds(userIds).then((rows) => new Map(rows.map((r) => [r.userId, r]))),
+      this.repo.sumWalletMainBalancesByUserIds(userIds),
+      this.repo.countDirectReferralsByUserIds(userIds)
+    ]);
+
+    const php = (v: number) =>
+      `PHP ${v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const totalPages = Math.ceil(total / pageSize);
+
+    const rows = members.map((m) => {
+      const net = networkMap.get(m.userId);
+      const cdBalance = net ? Math.max(0, (net.cdAmount ?? 0) - (net.cdTotal ?? 0)) : 0;
+      return {
+        username: m.username,
+        fullName: m.fullName,
+        packageTier: m.packageTier,
+        accountStatus: m.accountStatus as import('../../types/auth.js').MemberAccountStatus,
+        stockist: false,
+        sponsorCode: m.sponsorCode ?? '',
+        directReferrals: directMap.get(m.userId) ?? 0,
+        walletAvailable: php(walletMap.get(m.userId) ?? 0),
+        cdBalance: php(cdBalance),
+        lastActivity: net?.createdAt ?? m.createdAt,
+        actions: ['view']
+      };
+    });
+
+    const selectedUsername = input.username?.trim() || (query && members[0]?.username) || '';
+    const selectedMember = selectedUsername
+      ? members.find((m) => m.username.toUpperCase() === selectedUsername.toUpperCase()) ?? null
+      : null;
+
+    const selectedNet = selectedMember ? networkMap.get(selectedMember.userId) : null;
+    const selectedCdBalance = selectedNet ? Math.max(0, (selectedNet.cdAmount ?? 0) - (selectedNet.cdTotal ?? 0)) : 0;
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      query,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      rows,
+      selectedMember: selectedMember
+        ? {
+            username: selectedMember.username,
+            fullName: selectedMember.fullName,
+            firstName: selectedMember.firstName,
+            lastName: selectedMember.lastName,
+            middleName: selectedMember.middleName,
+            packageTier: selectedMember.packageTier,
+            accountStatus: selectedMember.accountStatus as import('../../types/auth.js').MemberAccountStatus,
+            stockist: false,
+            referralCode: selectedMember.referralCode,
+            sponsorCode: selectedMember.sponsorCode ?? '',
+            email: '',
+            phone: selectedMember.contactNumber ?? '',
+            address: '',
+            payoutOption: selectedMember.payoutMethod ?? '',
+            payoutDetails: selectedMember.payoutDetails ?? '',
+            directReferrals: directMap.get(selectedMember.userId) ?? 0,
+            walletAvailable: php(walletMap.get(selectedMember.userId) ?? 0),
+            walletPending: php(0),
+            cdBalance: php(selectedCdBalance),
+            lastActivity: selectedNet?.createdAt ?? selectedMember.createdAt,
+            actions: ['view']
+          }
+        : null,
+      actionNotes: [
+        'Data is live from Supabase. Search by username, full name, or referral code.',
+        'Profile editing is available via the individual member profile endpoints.'
+      ]
+    };
+  }
+
   async buildMemberActivationCodeCenter(user: SessionUser) {
     const member = await this.requireMemberByUserId(user.id);
     const codes = await this.repo.listActivationCodesForUser(user.id);
@@ -1195,13 +1836,52 @@ export class ProductionEncodingService {
     };
   }
 
+  async buildMemberDirectReferrals(userId: string) {
+    const directs = await this.repo.listDirectsBySponsor(userId);
+    const memberProfiles = await Promise.all(
+      directs.map((n) => this.repo.findMemberByUserId(n.userId).catch(() => null))
+    );
+    return directs.map((network, i) => {
+      const profile = memberProfiles[i];
+      return {
+        username: profile?.username ?? network.userId,
+        name: profile?.fullName ?? '—',
+        package: network.packageTier ?? '—',
+        status: profile?.accountStatus ?? '—',
+        placement: network.placementSide ?? '—'
+      };
+    });
+  }
+
+  async buildAdminDashboardMetrics() {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const [members, networks, encashments] = await Promise.all([
+      this.repo.listMembers(),
+      this.repo.listNetworkAccounts(),
+      this.repo.listEncashments({}, 10000)
+    ]);
+
+    const active = members.filter((m) => !m.isCompanyAccount);
+    const weeklyActivations = active.filter((m) => m.createdAt >= weekAgo).length;
+    const monthlyRegistrations = active.filter((m) => m.createdAt >= monthStart).length;
+    const activeCdAccounts = networks.filter((n) => n.cdStatus > 0 || n.cdAmount > 0).length;
+    const pendingEncashments = encashments.filter((e) => /pending|queued|requested|verification/i.test(e.status)).length;
+
+    return [
+      { label: 'Weekly Activations', value: String(weeklyActivations), detail: 'Last 7 days', tone: 'good' as const },
+      { label: 'Monthly Registrations', value: String(monthlyRegistrations), detail: 'This calendar month', tone: 'good' as const },
+      { label: 'Active CD Accounts', value: String(activeCdAccounts), detail: 'CD balance active', tone: 'good' as const },
+      { label: 'Pending Encashments', value: String(pendingEncashments), detail: 'Awaiting processing', tone: 'warning' as const }
+    ];
+  }
+
   async buildAdminActivationCodeCenter(actorRole?: string) {
     const [codes, members] = await Promise.all([this.repo.listActivationCodes(), this.repo.listMembers()]);
     const memberByUserId = new Map(members.map((item) => [item.userId, item]));
-    const isLooseRegistrationCode = (code: ProductionActivationCode) =>
-      code.codeFamily === 'YOR CODES' && code.status === 'unreleased' && !code.assignedUserId;
-    const filteredCodes = actorRole === 'cashier' ? codes : codes.filter((code) => !isLooseRegistrationCode(code));
-    const inventory = filteredCodes
+    const inventory = codes
       .map((code) => {
         const assigned = code.assignedUserId ? memberByUserId.get(code.assignedUserId)?.username ?? 'Unassigned' : 'Unassigned';
         return {
@@ -1431,7 +2111,7 @@ export class ProductionEncodingService {
         'Use only sponsor-owned, released, and unused YOR CODES.',
         'Package tier and account type are locked from the consumed activation code.',
         origin === 'referral-link'
-          ? 'A valid placement token must be attached to the public registration link before final submit.'
+          ? 'Placement is auto-balanced to the lighter side under your sponsor. You may share a token link to override placement.'
           : 'The clicked genealogy slot stays locked and is revalidated immediately before final save.'
       ]
     };
@@ -1563,11 +2243,11 @@ export class ProductionEncodingService {
       }
     ]);
 
-    // GATE-BIN-PV-PDCD-20260612: owner ruling — only PD (settled payment) and
-    // fully-settled CD accounts generate Direct Referral or binary PV. FS never
-    // does, even when paid (FS stays FS forever). Unpaid entries defer DR/PV to
-    // the settlement trigger (settleActivationCode), which reuses these exact
-    // process keys so each posting happens at most once.
+    // GATE-BIN-PV-PDCD-20260612: owner ruling — PD counts immediately, fully
+    // settled CD accounts count after recovery, and FS never generates Direct
+    // Referral or binary PV even when paid. Deferred DR/PV applies only to CD
+    // entries, and the settlement trigger (settleActivationCode) reuses these
+    // exact process keys so each posting happens at most once.
     // Reverts GATE-BIN-PV-FS-2026-06-12, which wrongly allowed paid FS entries.
     const entryState = this.codeEntryState(matchingCode, network);
     const drEligible = countsForDirectReferralSource(entryState);
@@ -1616,7 +2296,7 @@ export class ProductionEncodingService {
           ? `Created ${finalUsername}, consumed ${matchingCode.code}, posted direct referral, and queued placement-based compensation workers.`
           : matchingCode.accountType === 'FS'
             ? `Created ${finalUsername}, consumed ${matchingCode.code}. FS entries never generate direct referral or binary PV.`
-            : `Created ${finalUsername}, consumed ${matchingCode.code}. Direct referral and binary PV are deferred until the entry payment is settled (PD/paid-CD rule).`,
+            : `Created ${finalUsername}, consumed ${matchingCode.code}. Direct referral and binary PV are deferred until the CD entry is settled.`,
       placementReservationId: preview.placementReservationId,
       queuedCompensation: queuedProcessIds,
       createdMember: {
@@ -1777,7 +2457,7 @@ export class ProductionEncodingService {
             // (payable === 0). Overrides BUSINESSRULE BIN-02 "Weekly capping applies".
             // Source eligibility is enforced upstream (only PD / settled-CD entries
             // enqueue PV) and recipient eligibility above.
-            if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
+            if ((item.payload.binaryCycleEligible ?? true) && packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
               const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));
               if (binaryCredit > 0) {
                 await this.postLedgerIfNeeded({
@@ -1822,20 +2502,21 @@ export class ProductionEncodingService {
     const assignedMember = input.assignedTo ? await this.requireMemberByUsername(input.assignedTo) : null;
     const quantity = Math.max(1, Math.min(100, Math.trunc(input.quantity || 1)));
     const createdAt = this.repo.now();
+    const effectiveAccountType = input.accountType ?? packageConfig.accountType;
     const rows: ProductionActivationCode[] = [];
     const events: ProductionActivationCodeEvent[] = [];
 
     for (let index = 0; index < quantity; index += 1) {
       const seq = await this.repo.nextActivationCodeSequence();
-      const code = `YOR-ACT-${String(seq).padStart(8, '0')}`;
+      const code = buildActivationCodeValue(effectiveAccountType, packageConfig.packageTier, codeFamily, seq);
       const row: ProductionActivationCode = {
         id: crypto.randomUUID(),
         code,
         codeFamily,
         packageTier: packageConfig.packageTier,
-        accountType: input.accountType ?? packageConfig.accountType,
+        accountType: effectiveAccountType,
         status: 'unreleased',
-        paymentStatus: 'unpaid',
+        paymentStatus: effectiveAccountType === 'CD' ? 'unpaid' : 'paid',
         assignedUserId: assignedMember?.userId ?? null,
         generatedByUserId: actor.id,
         generatedAt: createdAt,
@@ -1846,7 +2527,10 @@ export class ProductionEncodingService {
         registrationEligible: (input.codeFamily ?? 'YOR CODES') === 'YOR CODES',
         lockedDirectReferralBonus: packageConfig.directReferralBonus,
         lockedSalesmatchValue: packageConfig.salesmatchValue,
-        lockedBinaryPoints: packageConfig.binaryPoints,
+        // GATE-BIN-PV-20260613: generated registration codes lock pairing BP from
+        // the resolved salesmatch table (1 BP/PV = PHP 250 SMB), not from any
+        // separate package catalog PV scale.
+        lockedBinaryPoints: packageConfig.salesmatchBinaryPoints,
         lockedGetFiveAmount: packageConfig.getFiveAmount,
         processId: buildProcessId('code-generate', String(seq)),
         remarks: input.remarks?.trim() || 'Generated for production encoding flow.',
@@ -1869,7 +2553,11 @@ export class ProductionEncodingService {
     }
 
     await this.repo.saveActivationCodes(rows);
-    await this.repo.appendActivationCodeEvents(events);
+    try {
+      await this.repo.appendActivationCodeEvents(events);
+    } catch {
+      // non-fatal: event logging failure does not block code generation
+    }
 
     return {
       moneyMode: this.repo.getMoneyMode(),
@@ -2514,6 +3202,26 @@ export class ProductionEncodingService {
       (input.placementToken ? await this.repo.findPlacementReservationByToken(input.placementToken) : null);
 
     if (!reservation || reservation.status !== 'active' || reservation.expiresAt <= this.repo.now()) {
+      // Auto-balance: when no placement token, place under the sponsor using the lesser-points side.
+      if (sponsor) {
+        const sponsorNetwork = await this.repo.findNetworkAccountByUserId(sponsor.userId);
+        const leftPoints = sponsorNetwork?.leftPoints ?? 0;
+        const rightPoints = sponsorNetwork?.rightPoints ?? 0;
+        const autoSide: PlacementSide = leftPoints <= rightPoints ? 'left' : 'right';
+        const occupied = await this.repo.findPlacementChild(sponsor.userId, autoSide, null);
+        if (!occupied) {
+          return {
+            context: {
+              placementUsername: sponsor.username,
+              placementParentShadowSide: null,
+              placementSide: autoSide,
+              note: `Auto-balanced placement: ${autoSide} leg (${autoSide === 'left' ? leftPoints : rightPoints} pts vs ${autoSide === 'left' ? rightPoints : leftPoints} pts).`
+            },
+            reservation: null,
+            issue: null
+          };
+        }
+      }
       return {
         context: null,
         reservation: null,
@@ -2669,7 +3377,8 @@ export class ProductionEncodingService {
         binaryPoints: input.code.lockedBinaryPoints,
         createdMemberUserId: input.newMemberUserId,
         createdMemberUsername: input.newMemberUsername,
-        activationCode: input.code.code
+        activationCode: input.code.code,
+        binaryCycleEligible: true
       },
       createdAt: input.createdAt,
       processedAt: null
@@ -2813,6 +3522,7 @@ export function createInMemoryProductionEncodingRepository(seed?: {
   users?: ProductionAppUser[];
   members?: ProductionMemberProfile[];
   networkAccounts?: ProductionNetworkAccount[];
+  shadowAccounts?: ProductionShadowAccount[];
   activationCodes?: ProductionActivationCode[];
   codeEvents?: ProductionActivationCodeEvent[];
   walletLedger?: ProductionWalletLedgerEntry[];
@@ -2827,6 +3537,7 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     users: [...(seed?.users ?? [])],
     members: [...(seed?.members ?? [])],
     networkAccounts: [...(seed?.networkAccounts ?? [])],
+    shadowAccounts: [...(seed?.shadowAccounts ?? [])],
     activationCodes: [...(seed?.activationCodes ?? [])],
     codeEvents: [...(seed?.codeEvents ?? [])],
     walletLedger: [...(seed?.walletLedger ?? [])],
@@ -2888,6 +3599,21 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     listActivationCodeEvents: async () => [...state.codeEvents],
     listMembers: async () => [...state.members],
     listUsers: async () => [...state.users],
+    listShadowAccounts: async () => [...state.shadowAccounts],
+    listShadowAccountsForOwner: async (ownerUserId) =>
+      state.shadowAccounts.filter((item) => item.ownerUserId === ownerUserId).sort((a, b) => a.placement.localeCompare(b.placement)),
+    findShadowAccountByCode: async (shadowCode) =>
+      state.shadowAccounts.find((item) => item.shadowCode.trim().toUpperCase() === shadowCode.trim().toUpperCase()) ?? null,
+    saveShadowAccounts: async (rows) => {
+      for (const row of rows) {
+        const index = state.shadowAccounts.findIndex((item) => item.id === row.id);
+        if (index >= 0) {
+          state.shadowAccounts[index] = { ...row };
+        } else {
+          state.shadowAccounts.push({ ...row });
+        }
+      }
+    },
     listWalletLedgerEntriesForUser: async (userId) => state.walletLedger.filter((item) => item.userId === userId),
     appendWalletLedgerEntry: async (entry) => {
       state.walletLedger.push({ ...entry });
@@ -3023,6 +3749,70 @@ export function createInMemoryProductionEncodingRepository(seed?: {
     },
     listPlacementReservationsForSponsor: async (sponsorUserId) => state.reservations.filter((item) => item.sponsorUserId === sponsorUserId),
     findPlacementReservationById: async (reservationId) => state.reservations.find((item) => item.id === reservationId) ?? null,
-    findPlacementReservationByToken: async (token) => state.reservations.find((item) => item.shareToken === token) ?? null
+    findPlacementReservationByToken: async (token) => state.reservations.find((item) => item.shareToken === token) ?? null,
+    listMembersFiltered: async (query, page, pageSize) => {
+      const upper = query.toUpperCase();
+      const filtered = query
+        ? state.members.filter(
+            (m) => m.username.toUpperCase().includes(upper) || m.fullName.toUpperCase().includes(upper) || m.referralCode.toUpperCase().includes(upper)
+          )
+        : state.members;
+      const offset = (page - 1) * pageSize;
+      return filtered.slice(offset, offset + pageSize);
+    },
+    countMembersFiltered: async (query) => {
+      if (!query) return state.members.length;
+      const upper = query.toUpperCase();
+      return state.members.filter(
+        (m) => m.username.toUpperCase().includes(upper) || m.fullName.toUpperCase().includes(upper) || m.referralCode.toUpperCase().includes(upper)
+      ).length;
+    },
+    listNetworkAccountsByUserIds: async (userIds) => state.networkAccounts.filter((n) => userIds.includes(n.userId)),
+    sumWalletMainBalancesByUserIds: async (userIds) => {
+      const result = new Map<string, number>();
+      for (const entry of state.walletLedger.filter((e) => userIds.includes(e.userId) && e.walletType === 'main')) {
+        result.set(entry.userId, (result.get(entry.userId) ?? 0) + (entry.creditAmount ?? 0) - (entry.debitAmount ?? 0));
+      }
+      return result;
+    },
+    countDirectReferralsByUserIds: async (userIds) => {
+      const result = new Map<string, number>();
+      for (const n of state.networkAccounts.filter((n) => n.sponsorUserId && userIds.includes(n.sponsorUserId) && n.registrationStatus === 'active')) {
+        if (n.sponsorUserId) {
+          result.set(n.sponsorUserId, (result.get(n.sponsorUserId) ?? 0) + 1);
+        }
+      }
+      return result;
+    },
+
+    insertRepurchase: async (_row) => {
+      // In-memory stub: repurchase records are not stored in-memory tests;
+      // idempotency is handled by the wallet ledger process key check.
+    },
+
+    sumLifestyleCreditsForUserToday: async (userId, dayIso) => {
+      const day = dayIso.slice(0, 10);
+      return state.walletLedger
+        .filter(
+          (e) =>
+            e.userId === userId &&
+            e.walletType === 'lifestyle' &&
+            e.entryType === 'lifestyle_rewards' &&
+            e.occurredAt.slice(0, 10) === day
+        )
+        .reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
+    },
+
+    sumLifestyleCreditsForUserThisMonth: async (userId, yearMonthPrefix) => {
+      return state.walletLedger
+        .filter(
+          (e) =>
+            e.userId === userId &&
+            e.walletType === 'lifestyle' &&
+            e.entryType === 'lifestyle_rewards' &&
+            e.occurredAt.startsWith(yearMonthPrefix)
+        )
+        .reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
+    }
   };
 }

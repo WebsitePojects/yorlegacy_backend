@@ -269,6 +269,7 @@ describe('auth and protected access', () => {
     expect(officeResponse.status).toBe(200);
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).toEqual([
       'account-details',
+      'voucher-management',
       'activation-codes'
     ]);
     expect(officeResponse.body.modules.map((module: { id: string }) => module.id)).not.toContain('encashment-reports');

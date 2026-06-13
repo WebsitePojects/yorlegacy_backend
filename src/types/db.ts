@@ -253,6 +253,13 @@ export interface ShadowAccountRow {
   unilevel_enabled: boolean;
   binary_cycle_enabled: boolean;
   notes: string | null;
+  package_tier: string | null;
+  account_type: string | null;
+  activation_code: string | null;
+  pv_value: number | null;
+  salesmatch_value: number | null;
+  activated_at: string | null;
+  last_upgraded_at: string | null;
   created_at: string;
   updated_at: string;
 }

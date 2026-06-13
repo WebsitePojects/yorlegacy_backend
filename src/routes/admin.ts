@@ -41,6 +41,20 @@ adminRouter.get('/api/admin/summary', requireRole('admin', 'cashier', 'bod', 'su
 
 adminRouter.get('/api/admin/office', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const office = await buildAdminOffice(req.authUser!);
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const prodMetrics = await service.buildAdminDashboardMetrics();
+        const existingLabels = new Set(prodMetrics.map((m) => m.label.toLowerCase()));
+        const baseMetrics = office.metrics.filter((m) => !existingLabels.has(m.label.toLowerCase()));
+        res.status(200).json({ ...office, metrics: [...prodMetrics, ...baseMetrics] });
+        return;
+      } catch {
+        // fall through to sandbox office
+      }
+    }
+  }
   res.status(200).json(office);
 });
 
@@ -48,25 +62,33 @@ adminRouter.get('/api/admin/dashboard', requireRole('admin', 'cashier', 'bod', '
   res.status(200).json(await buildAdminMvpDashboard(req.authUser!));
 });
 
-adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.query === 'string' ? req.query.query : '';
   const username = typeof req.query.username === 'string' ? req.query.username : '';
   const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
   const pageSize = typeof req.query.pageSize === 'string' ? Number(req.query.pageSize) : 10;
-  const payload = buildAdminMemberManagementCenter({
-    query,
-    username,
-    page,
-    pageSize
-  });
 
-  res.status(200).json({
-    ...payload,
-    members: payload.rows
-  });
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ error: 'Production service unavailable.' });
+      return;
+    }
+    try {
+      const payload = await service.listAdminMembersForManagement({ query, username, page, pageSize });
+      res.status(200).json({ ...payload, members: payload.rows });
+      return;
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch members from database.' });
+      return;
+    }
+  }
+
+  const payload = buildAdminMemberManagementCenter({ query, username, page, pageSize });
+  res.status(200).json({ ...payload, members: payload.rows });
 });
 
-adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
   if (query.length < 3) {
@@ -74,12 +96,29 @@ adminRouter.get('/api/admin/members/search', requireRole('admin', 'cashier', 'bo
     return;
   }
 
-  const payload = buildAdminMemberManagementCenter({
-    query,
-    page: 1,
-    pageSize: 20
-  });
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ results: [] });
+      return;
+    }
+    try {
+      const payload = await service.listAdminMembersForManagement({ query, page: 1, pageSize: 20 });
+      res.status(200).json({
+        results: payload.rows.slice(0, 20).map((member) => ({
+          username: member.username,
+          displayName: member.fullName,
+          packageTier: member.packageTier
+        }))
+      });
+      return;
+    } catch {
+      res.status(200).json({ results: [] });
+      return;
+    }
+  }
 
+  const payload = buildAdminMemberManagementCenter({ query, page: 1, pageSize: 20 });
   res.status(200).json({
     results: payload.rows.slice(0, 20).map((member) => ({
       username: member.username,
@@ -422,12 +461,45 @@ adminRouter.post('/api/admin/members/:username/status', requireRole('admin', 'bo
 
 adminRouter.get('/api/admin/genealogy/binary-tree', requireRole('admin', 'cashier', 'bod', 'superadmin'), (_req, res) => {
   const rootUsername = typeof _req.query.rootUsername === 'string' ? _req.query.rootUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    void service.buildAdminBinaryGenealogyCenter(rootUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build admin binary genealogy tree.' });
+    });
+    return;
+  }
   res.status(200).json(buildAdminGenealogyCenter('binary-placement', rootUsername));
 });
 
 adminRouter.get('/api/admin/genealogy/sponsor-tree', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
   res.status(200).json(buildAdminGenealogyCenter('sponsor', rootUsername));
+});
+
+adminRouter.get('/api/admin/shadow-accounts', requireRole('admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const ownerUsername = typeof req.query.ownerUsername === 'string' ? req.query.ownerUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+
+    void service.buildMemberShadowAccountCenter(req.authUser!, ownerUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build admin shadow account center.' });
+    });
+    return;
+  }
+
+  res.status(404).json({ message: 'Shadow account center is only available in production mode.' });
 });
 
 adminRouter.get('/api/admin/modules/:moduleId', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {

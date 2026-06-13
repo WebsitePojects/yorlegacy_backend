@@ -485,7 +485,7 @@ function buildSeedState(): SandboxState {
       { code: 'FSBUP3N9XA', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0002', status: 'used', paymentStatus: 'externally-paid', remarks: 'Settled member-to-member outside office.', generatedAt: '2026-05-21', codeFamily: 'YOR CODES' },
       { code: 'PDSTK7V2LC', accountType: 'PD', packageTier: 'Standard', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Paid and ready for release cycle.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'FSBUZ6Q1RH', accountType: 'FS', packageTier: 'Business', assignedTo: 'YOR0003', status: 'available', paymentStatus: 'externally-paid', remarks: 'Stockist walk-in settlement verified by admin.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
-      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'yor01', status: 'available', paymentStatus: 'unpaid', remarks: 'Awaiting package settlement.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
+      { code: 'PDBA5D8WJ2', accountType: 'PD', packageTier: 'Basic', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Paid basic package ready for placement and pairing.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'PDCLV4T9QB', accountType: 'PD', packageTier: 'Classic', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'Ready for direct sponsor release.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'FSBUH7M2KC', accountType: 'FS', packageTier: 'Business', assignedTo: null, status: 'unreleased', paymentStatus: 'unpaid', remarks: 'General code pool inventory — loose.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
       { code: 'FSVI8X4R2M', accountType: 'FS', packageTier: 'VIP', assignedTo: 'yor01', status: 'available', paymentStatus: 'paid', remarks: 'High-tier stockist sale cleared.', generatedAt: '2026-05-28', codeFamily: 'YOR CODES' },
@@ -946,11 +946,23 @@ function packageCodePrefix(packageTier: string): string {
 function nextActivationCode(codes: ActivationRow[], packageTier: string, accountType: ActivationRow['accountType']): string {
   const prefix = `${accountType}${packageCodePrefix(packageTier)}`;
   const existingCodes = new Set(codes.map((row) => row.code));
-  let candidate = '';
+  let nextSequence = 1;
 
-  do {
-    candidate = `${prefix}${crypto.randomBytes(4).toString('base64url').replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 7)}`;
-  } while (existingCodes.has(candidate) || candidate.length < 8);
+  for (const code of existingCodes) {
+    if (!code.startsWith(prefix)) {
+      continue;
+    }
+    const sequence = Number(code.slice(prefix.length));
+    if (Number.isInteger(sequence) && sequence >= nextSequence) {
+      nextSequence = sequence + 1;
+    }
+  }
+
+  let candidate = `${prefix}${String(nextSequence).padStart(6, '0')}`;
+  while (existingCodes.has(candidate)) {
+    nextSequence += 1;
+    candidate = `${prefix}${String(nextSequence).padStart(6, '0')}`;
+  }
 
   return candidate;
 }
@@ -1976,16 +1988,16 @@ export function commitSandboxRegistration(actor: string, input: {
       lastActivity: todayDate()
     });
 
-    // GATE-BIN-PV-FS-2026-06-12: Only paid/externally-paid codes (any account type) generate binary PV.
-    // Unpaid codes do not flow salesmatch or binary cycle to uplines regardless of account type.
-    const eligibleForBinaryPV = code.paymentStatus !== 'unpaid';
+    // GATE-BIN-PV-20260613: sandbox follows production BIN-01 source eligibility:
+    // paid PD / settled CD entries carry placement BP; FS and unpaid entries do not.
+    const eligibleForBinaryPV = code.accountType !== 'FS' && code.paymentStatus !== 'unpaid';
     if (eligibleForBinaryPV) {
       settleSandboxPlacementCompensation(
         state,
         preview.placement.placementUsername,
         preview.placement.placementParentShadowSide ?? null,
         preferredSide,
-        policy.pv,
+        policy.salesmatchValue / 250,
         policy.salesmatchValue,
         username
       );

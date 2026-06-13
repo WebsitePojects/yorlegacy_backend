@@ -12,8 +12,8 @@ describe('countsForPairingSource (owner ruling 2026-06-12 + Nogatu parity)', () 
     expect(countsForPairingSource({ ...base, paymentStatus: 'externally-paid' })).toBe(true);
   });
 
-  it('PD unpaid does not count', () => {
-    expect(countsForPairingSource({ ...base, paymentStatus: 'unpaid' })).toBe(false);
+  it('PD unpaid still counts because PD is always treated as paid', () => {
+    expect(countsForPairingSource({ ...base, paymentStatus: 'unpaid' })).toBe(true);
   });
 
   it('FS never counts, even when paid', () => {

@@ -174,7 +174,11 @@ memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'adm
     return;
   }
 
-  res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
+  try {
+    res.status(200).json(buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build binary genealogy tree.' });
+  }
 });
 
 memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
@@ -183,6 +187,21 @@ memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'ad
 
 memberRouter.get('/api/member/shadow-accounts', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const ownerUsername = typeof req.query.ownerUsername === 'string' ? req.query.ownerUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+
+    void service.buildMemberShadowAccountCenter(req.authUser!, ownerUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build shadow account center.' });
+    });
+    return;
+  }
+
   res.status(200).json(buildShadowAccounts(ownerUsername));
 });
 
@@ -213,6 +232,22 @@ memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 
   } else {
     res.status(200).json(buildMemberActivationCodeCenter(req.authUser!));
   }
+});
+
+memberRouter.get('/api/member/direct-referrals', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const rows = await service.buildMemberDirectReferrals(req.authUser!.id);
+        res.status(200).json({ rows });
+        return;
+      } catch (err) {
+        console.error('[direct-referrals] Production error:', err);
+      }
+    }
+  }
+  res.status(200).json({ rows: [] });
 });
 
 memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
@@ -277,7 +312,24 @@ memberRouter.post('/api/member/activation-codes/transfer', requireRole('member',
   }));
 });
 
-memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode() && typeof req.body?.shadowCode === 'string' && req.body.shadowCode.trim()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      res.status(200).json(await service.activateShadowAccount(req.authUser!, {
+        code: req.body?.code ?? '',
+        shadowCode: req.body.shadowCode
+      }));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to activate shadow account.' });
+    }
+    return;
+  }
+
   res.status(200).json(
     runMemberUpgradeActivationCode(req.authUser!, {
       code: req.body?.code ?? ''
@@ -285,13 +337,17 @@ memberRouter.post('/api/member/activation-codes/upgrade', requireRole('member', 
   );
 });
 
-memberRouter.post('/api/member/activation-codes/maintenance', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
-  res.status(200).json(
-    runMemberMaintenanceCode(req.authUser!, {
+memberRouter.post('/api/member/activation-codes/maintenance', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  try {
+    const result = await runMemberMaintenanceCode(req.authUser!, {
       code: req.body?.code ?? '',
       transType: Number(req.body?.transType ?? 1)
-    })
-  );
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Maintenance code error.';
+    res.status(400).json({ error: { code: 'MAINTENANCE_CODE_ERROR', message } });
+  }
 });
 
 memberRouter.get('/api/member/transactions', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
@@ -490,17 +546,19 @@ memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admi
 memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        const data = await service.getMemberGetYorFiveData(req.authUser!.id);
-        res.status(200).json(data);
-        return;
-      } catch (err) {
-        console.error('[get-yor-five] Production data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
     }
+    try {
+      res.status(200).json(await service.getMemberGetYorFiveData(req.authUser!.id));
+    } catch (err) {
+      console.error('[get-yor-five] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load Get Yor Five data.' });
+    }
+    return;
   }
-  // Sandbox fallback: derive from hybrid operational data
+  // Non-production path
   const { getMemberModule: getModule, getHybridMemberForUser } = await import('../modules/operations/hybrid-operational-data.js');
   const mod = getModule(req.authUser!, 'get-five-bonus');
   const member = getHybridMemberForUser(req.authUser!);
@@ -529,14 +587,17 @@ memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cas
 memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        res.status(200).json(await service.getMemberRank(req.authUser!.id));
-        return;
-      } catch (err) {
-        console.error('[rank] Production data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
     }
+    try {
+      res.status(200).json(await service.getMemberRank(req.authUser!.id));
+    } catch (err) {
+      console.error('[rank] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load rank data.' });
+    }
+    return;
   }
   res.status(200).json({
     moneyMode: 'sandbox',
@@ -553,14 +614,17 @@ memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', '
 memberRouter.get('/api/member/leaderboard', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        res.status(200).json(await service.getLeaderboard());
-        return;
-      } catch (err) {
-        console.error('[leaderboard] Production data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
     }
+    try {
+      res.status(200).json(await service.getLeaderboard());
+    } catch (err) {
+      console.error('[leaderboard] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load leaderboard.' });
+    }
+    return;
   }
   res.status(200).json({ moneyMode: 'sandbox', entries: [] });
 });
@@ -568,14 +632,17 @@ memberRouter.get('/api/member/leaderboard', requireRole('member', 'admin', 'cash
 memberRouter.get('/api/member/unilevel', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
-    if (service) {
-      try {
-        res.status(200).json(await service.getMemberUnilevelData(req.authUser!.id));
-        return;
-      } catch (err) {
-        console.error('[unilevel] Production data error:', err);
-      }
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service unavailable.' });
+      return;
     }
+    try {
+      res.status(200).json(await service.getMemberUnilevelData(req.authUser!.id));
+    } catch (err) {
+      console.error('[unilevel] Production data error:', err);
+      res.status(500).json({ message: 'Unable to load unilevel data.' });
+    }
+    return;
   }
   res.status(200).json({
     moneyMode: 'sandbox',

@@ -29,7 +29,7 @@ describe('GET /health', () => {
       'cd-accounts',
       'voucher-management',
       'rankings',
-      'get-five-package-claims',
+      'leaderboard',
       'contact-messages',
       'news-posts',
       'change-password',

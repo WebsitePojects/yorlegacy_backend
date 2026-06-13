@@ -163,15 +163,30 @@ export const repeatPurchaseProductCatalog: RepeatPurchaseProduct[] = [
   }
 ];
 
-export const lifestyleRepeatPurchaseReactivationByPackage: Record<
-  Exclude<PackageTier, 'Basic'>,
-  number
-> = {
+// Daily lifestyle credit caps per package (LFR-01, BUSINESSRULE.md)
+export const lifestyleDailyCapByPackage: Record<Exclude<PackageTier, 'Basic'>, number> = {
   Classic: 1000,
   Standard: 2000,
   Business: 3000,
   VIP: 5000
 };
+
+// Monthly lifestyle credit caps per package (LFR-01, BUSINESSRULE.md)
+export const lifestyleMonthlyCapByPackage: Record<Exclude<PackageTier, 'Basic'>, number> = {
+  Classic: 30000,
+  Standard: 60000,
+  Business: 90000,
+  VIP: 150000
+};
+
+// Kept as alias for backwards compat — daily cap is the reactivation threshold
+export const lifestyleRepeatPurchaseReactivationByPackage = lifestyleDailyCapByPackage;
+
+// Returns the first catalog product for a given code family, used when the
+// specific SKU is unknown (all products in a family share the same PV and price).
+export function findProductByCodeFamily(codeFamily: string): RepeatPurchaseProduct | null {
+  return repeatPurchaseProductCatalog.find((p) => p.codeFamily === codeFamily) ?? null;
+}
 
 export const unilevelMonthlyMaintenanceRequirement = {
   requiredPv: 200,

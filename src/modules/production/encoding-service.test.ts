@@ -132,6 +132,7 @@ describe('ProductionEncodingService', () => {
     const codeCenterAfterGenerate = await service.buildAdminActivationCodeCenter();
     const generatedCode = codeCenterAfterGenerate.inventory[0];
     expect(generatedCode.status).toBe('unreleased');
+    expect(generatedCode.code).toBe('FSVI001001');
 
     await service.releaseActivationCodes(
       { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' },
@@ -173,6 +174,7 @@ describe('ProductionEncodingService', () => {
 
     const storedCode = (await repo.listActivationCodes())[0];
     expect(storedCode).toMatchObject({
+      code: 'PDYM001001',
       codeFamily: 'YOR MAINTENANCE',
       packageTier: 'Yor Perfume - Hugo Boss',
       registrationEligible: false,
@@ -192,7 +194,33 @@ describe('ProductionEncodingService', () => {
     });
   });
 
-  it('requires a placement reservation for public registration and processes direct, salesmatch, and binary-cycle deltas', async () => {
+  it('treats generated PD codes as paid while keeping CD unpaid until settlement', async () => {
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')]
+    });
+    const service = new ProductionEncodingService(repo);
+    const actor = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    await service.generateActivationCodes(actor, {
+      quantity: 1,
+      packageTier: 'Basic',
+      accountType: 'PD'
+    });
+    await service.generateActivationCodes(actor, {
+      quantity: 1,
+      packageTier: 'Classic',
+      accountType: 'CD'
+    });
+
+    const codes = await repo.listActivationCodes();
+    const pdCode = codes.find((item) => item.accountType === 'PD');
+    const cdCode = codes.find((item) => item.accountType === 'CD');
+
+    expect(pdCode?.paymentStatus).toBe('paid');
+    expect(cdCode?.paymentStatus).toBe('unpaid');
+  });
+
+  it('auto-balances public registration when no token is provided and processes direct, salesmatch, and binary-cycle deltas', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
     const repo = createInMemoryProductionEncodingRepository({
@@ -215,7 +243,7 @@ describe('ProductionEncodingService', () => {
     });
     const service = new ProductionEncodingService(repo);
 
-    const blockedPreview = await service.previewRegistration(null, {
+    const autoBalancePreview = await service.previewRegistration(null, {
       origin: 'referral-link',
       fullName: 'New Prospect',
       username: 'YOR1001',
@@ -224,8 +252,9 @@ describe('ProductionEncodingService', () => {
       referralCode: 'YOR-MEMBER-0001',
       activationCode: 'YOR-ACT-00001001'
     });
-    expect(blockedPreview.canProceed).toBe(false);
-    expect(blockedPreview.issues).toContain('Placement selection is required before this referral link can be used.');
+    // No placement token → auto-balance picks lighter side (left when equal)
+    expect(autoBalancePreview.canProceed).toBe(true);
+    expect(autoBalancePreview.placement?.placementSide).toBe('left');
 
     const reservation = await service.createPlacementReservation(
       { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
@@ -606,7 +635,7 @@ describe('ProductionEncodingService', () => {
     );
 
     expect(submit.queuedCompensation).toEqual([]);
-    expect(submit.detail).toContain('deferred until the entry payment is settled');
+    expect(submit.detail).toContain('deferred until the CD entry is settled');
 
     const sponsorLedger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(sponsorLedger.find((entry) => entry.entryType === 'direct_referral')).toBeUndefined();
@@ -1327,5 +1356,204 @@ describe('ProductionEncodingService', () => {
     const leftShadow = tree.root.children.find((child) => child.placement === 'left');
     expect(leftShadow?.username).toBe('YOR0002-L');
     expect(leftShadow?.children.find((child) => child.username === 'YOR3002')?.placement).toBe('right');
+  });
+
+  it('builds the member shadow center from live shadow rows and exposes paid unused codes for activation', async () => {
+    const ownerUser = seedUser('owner-user', 'Owner', 'owner@yor.local');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [ownerUser],
+      members: [seedMember('owner-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Owner Member')],
+      networkAccounts: [seedNetwork('owner-user', 'Standard', null, null, null)],
+      shadowAccounts: [
+        {
+          id: 'shadow-left-row',
+          ownerUserId: 'owner-user',
+          shadowCode: 'YOR0001-L',
+          state: 'activated_shadow',
+          placement: 'left',
+          walletEnabled: false,
+          unilevelEnabled: false,
+          binaryCycleEnabled: false,
+          note: 'Activated shadow support only.',
+          packageTier: 'Classic',
+          accountType: 'FS',
+          activationCode: 'FSCL001001',
+          pvValue: 2,
+          salesmatchValue: 500,
+          activatedAt: '2026-06-13T08:00:00.000Z',
+          lastUpgradedAt: '2026-06-13T08:00:00.000Z',
+          createdAt: '2026-06-13T07:00:00.000Z',
+          updatedAt: '2026-06-13T08:00:00.000Z'
+        }
+      ],
+      activationCodes: [
+        seedCode({
+          id: 'available-shadow-code',
+          code: 'FSBU001002',
+          packageTier: 'Business',
+          accountType: 'FS',
+          assignedUserId: 'owner-user',
+          status: 'available',
+          paymentStatus: 'paid',
+          lockedSalesmatchValue: 5000,
+          lockedBinaryPoints: 20
+        }),
+        seedCode({
+          id: 'used-shadow-code',
+          code: 'PDBA001003',
+          packageTier: 'Basic',
+          accountType: 'PD',
+          assignedUserId: 'owner-user',
+          status: 'used',
+          paymentStatus: 'paid',
+          lockedSalesmatchValue: 250,
+          lockedBinaryPoints: 1
+        })
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+
+    const center = await service.buildMemberShadowAccountCenter(
+      { id: 'owner-user', name: 'Owner', email: 'owner@yor.local', role: 'member' }
+    );
+
+    expect(center.owner).toBe('YOR0001');
+    expect(center.accounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          shadowCode: 'YOR0001-L',
+          state: 'activated_shadow',
+          packageTier: 'Classic',
+          accountType: 'FS',
+          activationCode: 'FSCL001001',
+          pvValue: 2,
+          salesmatchValue: 500
+        }),
+        expect.objectContaining({
+          shadowCode: 'YOR0001-R',
+          state: 'reserved_shadow'
+        })
+      ])
+    );
+    expect(center.availableCodes.map((item) => item.code)).toEqual(['FSBU001002']);
+  });
+
+  it('activates a specific shadow slot with a member-owned code and suppresses binary cycle on the shadow-generated pair', async () => {
+    const ownerUser = seedUser('owner-user', 'Owner', 'owner@yor.local');
+    const directUser = seedUser('direct-user', 'Direct Left', 'direct@yor.local');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [ownerUser, directUser],
+      members: [
+        seedMember('owner-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Owner Member'),
+        seedMember('direct-user', 'YOR0002', 'YOR-MEMBER-0002', 'Basic', 'Direct Left', 'YOR-MEMBER-0001')
+      ],
+      networkAccounts: [
+        seedNetwork('owner-user', 'Standard', null, null, null),
+        seedNetwork('direct-user', 'Basic', 'owner-user', 'owner-user', 'left', 'left')
+      ],
+      activationCodes: [
+        seedCode({
+          id: 'shadow-left-code',
+          code: 'FSBU001010',
+          packageTier: 'Business',
+          accountType: 'FS',
+          assignedUserId: 'owner-user',
+          status: 'available',
+          paymentStatus: 'paid',
+          lockedSalesmatchValue: 5000,
+          lockedBinaryPoints: 20
+        }),
+        seedCode({
+          id: 'shadow-right-code',
+          code: 'PDBA001011',
+          packageTier: 'Basic',
+          accountType: 'PD',
+          assignedUserId: 'owner-user',
+          status: 'available',
+          paymentStatus: 'paid',
+          lockedSalesmatchValue: 5000,
+          lockedBinaryPoints: 20
+        })
+      ],
+      shadowAccounts: [
+        {
+          id: 'shadow-left-row',
+          ownerUserId: 'owner-user',
+          shadowCode: 'YOR0001-L',
+          state: 'reserved_shadow',
+          placement: 'left',
+          walletEnabled: false,
+          unilevelEnabled: false,
+          binaryCycleEnabled: false,
+          note: 'Reserved.',
+          packageTier: null,
+          accountType: null,
+          activationCode: null,
+          pvValue: 0,
+          salesmatchValue: 0,
+          activatedAt: null,
+          lastUpgradedAt: null,
+          createdAt: '2026-06-13T07:00:00.000Z',
+          updatedAt: '2026-06-13T07:00:00.000Z'
+        },
+        {
+          id: 'shadow-right-row',
+          ownerUserId: 'owner-user',
+          shadowCode: 'YOR0001-R',
+          state: 'reserved_shadow',
+          placement: 'right',
+          walletEnabled: false,
+          unilevelEnabled: false,
+          binaryCycleEnabled: false,
+          note: 'Reserved.',
+          packageTier: null,
+          accountType: null,
+          activationCode: null,
+          pvValue: 0,
+          salesmatchValue: 0,
+          activatedAt: null,
+          lastUpgradedAt: null,
+          createdAt: '2026-06-13T07:00:00.000Z',
+          updatedAt: '2026-06-13T07:00:00.000Z'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const actor = { id: 'owner-user', name: 'Owner', email: 'owner@yor.local', role: 'member' as const };
+
+    await service.activateShadowAccount(actor, {
+      shadowCode: 'YOR0001-L',
+      code: 'FSBU001010'
+    });
+    await service.processCompensationQueue();
+
+    await service.activateShadowAccount(actor, {
+      shadowCode: 'YOR0001-R',
+      code: 'PDBA001011'
+    });
+    await service.processCompensationQueue();
+
+    const shadowRows = await repo.listShadowAccountsForOwner('owner-user');
+    expect(shadowRows.find((item) => item.shadowCode === 'YOR0001-L')).toMatchObject({
+      state: 'activated_shadow',
+      packageTier: 'Business',
+      activationCode: 'FSBU001010',
+      pvValue: 20,
+      salesmatchValue: 5000
+    });
+    expect(shadowRows.find((item) => item.shadowCode === 'YOR0001-R')).toMatchObject({
+      state: 'activated_shadow',
+      packageTier: 'Basic',
+      activationCode: 'PDBA001011',
+      pvValue: 20,
+      salesmatchValue: 5000
+    });
+
+    const ownerLedger = await repo.listWalletLedgerEntriesForUser('owner-user');
+    expect(ownerLedger.filter((entry) => entry.entryType === 'salesmatch').map((entry) => entry.creditAmount)).toEqual([5000]);
+    expect(ownerLedger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+
+    const consumedCodes = await repo.findActivationCodesByCodes(['FSBU001010', 'PDBA001011']);
+    expect(consumedCodes.every((item) => item.status === 'used')).toBe(true);
   });
 });

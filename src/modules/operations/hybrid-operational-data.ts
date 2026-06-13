@@ -23,6 +23,7 @@ import {
   type PayoutRow
 } from '../sandbox/dev-sandbox-store.js';
 import { packagePolicies } from '../compensation/mvp-service.js';
+import { isProductionMode } from '../production/runtime.js';
 
 const STAFF_ROLES: AppRole[] = ['admin', 'cashier', 'bod', 'superadmin'];
 const ADMIN_AND_SUPERADMIN_ROLES: AppRole[] = ['admin', 'bod', 'superadmin'];
@@ -41,7 +42,7 @@ const OPERATIONAL_ADMIN_MODULE_IDS = new Set([
   'cd-accounts',
   'voucher-management',
   'rankings',
-  'get-five-package-claims',
+  'leaderboard',
   'contact-messages',
   'news-posts',
   'change-password',
@@ -58,8 +59,7 @@ const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
   'account-shadow-management',
   'activation-codes',
   'upgrade-registration',
-  'global-bonus-eligibility',
-  'leaderboard'
+  'global-bonus-eligibility'
 ]);
 
 export type { MemberRecord } from '../sandbox/dev-sandbox-store.js';
@@ -343,7 +343,9 @@ const auditEvents: AuditEvent[] = [
 ];
 
 function currentMoneyMode() {
-  return isSandboxMode() ? getSandboxMoneyMode() : 'playground';
+  if (isSandboxMode()) return getSandboxMoneyMode();
+  if (isProductionMode()) return 'production' as const;
+  return 'playground' as const;
 }
 
 function currentMembers() {
@@ -714,7 +716,7 @@ function adminModules(): OperationalModule[] {
       'Voucher Management',
       'Vouchers',
       'Voucher inventory and release review aligned to Yor package and activation-code controls.',
-      ADMIN_AND_SUPERADMIN_ROLES,
+      CASHIER_CODE_ROLES,
       activationRowsForTables.map((row) => ({
         code: row.code,
         accountType: row.accountType,
@@ -740,6 +742,13 @@ function adminModules(): OperationalModule[] {
       }))
     ),
     adminMvpModule(
+      'leaderboard',
+      'Rank & Leaderboard',
+      'Compensation',
+      'Unilevel rank by lifetime total income and the all-member income leaderboard (company accounts excluded).',
+      ADMIN_AND_SUPERADMIN_ROLES
+    ),
+    adminMvpModule(
       'global-bonus',
       'Global Bonus',
       'Compensation',
@@ -750,20 +759,6 @@ function adminModules(): OperationalModule[] {
         package: member.packageTier,
         eligible: member.packageTier === 'VIP' ? 'candidate' : 'building qualification',
         basis: 'Yor 2% annual global sales pool reference / Nogatu qualifier port in progress'
-      }))
-    ),
-    adminMvpModule(
-      'get-five-package-claims',
-      'Get Yor Five Package Claims',
-      'Compensation',
-      'Package-claim review for completed five-direct groups, using Yor terminology over legacy Hi-Five naming.',
-      ADMIN_AND_SUPERADMIN_ROLES,
-      allMembers.map((member) => ({
-        username: member.username,
-        package: member.packageTier,
-        samePackageDirects: samePackageDirectCount(member),
-        completedGroups: completedDirectGroups(member),
-        status: completedDirectGroups(member) > 0 ? 'claim review' : 'building'
       }))
     ),
     {
@@ -1073,19 +1068,6 @@ function memberModules(member: MemberRecord): OperationalModule[] {
           status: sameTierDirects >= 5 ? 'qualified' : 'building'
         }
       ]),
-      gatedActions: []
-    },
-    {
-      id: 'leaderboard',
-      label: 'Rank & Leaderboard',
-      path: '/member/leaderboard',
-      group: 'Recognition',
-      description: 'Unilevel rank by lifetime total income and the all-member income leaderboard (company accounts excluded).',
-      status: 'live-report',
-      legacyReference: 'ecom/ranking.php',
-      permissions: ['member', ...STAFF_ROLES],
-      metrics: [],
-      table: table('Rank & Leaderboard', []),
       gatedActions: []
     },
     {

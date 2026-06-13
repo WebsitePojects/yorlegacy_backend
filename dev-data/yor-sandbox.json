@@ -2,8 +2,8 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-12T15:17:48.637Z",
-    "lastMutationAt": "2026-06-12T15:17:48.881Z"
+    "lastResetAt": "2026-06-13T09:06:30.828Z",
+    "lastMutationAt": "2026-06-13T09:06:31.049Z"
   },
   "users": [
     {
@@ -201,10 +201,10 @@
     {
       "userId": "yor-legacy-005",
       "username": "YOR0005",
-      "fullName": "Ramon Dela Dela Cruz",
+      "fullName": "Ramon Dela Cruz",
       "firstName": "Ramon",
       "lastName": "Dela Cruz",
-      "middleName": "Dela",
+      "middleName": "",
       "email": "ramon.dc@example.test",
       "phone": "+63 917 100 2005",
       "address": "Antipolo City, Rizal",
@@ -232,10 +232,10 @@
     {
       "userId": "yor-company-root",
       "username": "yorinternational",
-      "fullName": "Yor International International Company",
+      "fullName": "Yor International Company",
       "firstName": "Yor",
       "lastName": "International Company",
-      "middleName": "International",
+      "middleName": "",
       "email": "yorinternational@yor.local",
       "phone": "+63 900 000 1000",
       "address": "Yor International Head Office",
@@ -311,8 +311,8 @@
       "packageTier": "Basic",
       "assignedTo": "yor01",
       "status": "available",
-      "paymentStatus": "unpaid",
-      "remarks": "Awaiting package settlement.",
+      "paymentStatus": "paid",
+      "remarks": "Paid basic package ready for placement and pairing.",
       "generatedAt": "2026-05-28",
       "codeFamily": "YOR CODES"
     },
@@ -485,7 +485,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-12T15:17:48.637Z"
+      "occurredAt": "2026-06-13T09:06:30.828Z"
     }
   ]
 }

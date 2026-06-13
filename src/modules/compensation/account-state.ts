@@ -3,6 +3,8 @@
 // CD participates only once the Commission Deduction obligation is fully recovered
 // (cdStatus settled flag AND recovery total >= obligation), mirroring
 // NogatuMLM/Nogatu_Backend/services/accountState.js.
+// Owner rule clarified on 2026-06-13: PD codes are always treated as paid; only
+// CD carries paid/unpaid settlement states.
 import type { AccountType, PaymentStatus } from '../production/encoding-service.js';
 
 export type AccountStateInput = {
@@ -34,8 +36,7 @@ function isEligibleSource(state: AccountStateInput): boolean {
   if (state.accountType === 'CD') {
     return isCdFullyPaid(state);
   }
-  // PD: requires settled payment on the originating code.
-  return state.paymentStatus !== 'unpaid';
+  return true;
 }
 
 export function countsForPairingSource(state: AccountStateInput): boolean {

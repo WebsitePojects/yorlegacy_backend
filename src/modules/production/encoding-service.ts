@@ -1871,6 +1871,7 @@ export class ProductionEncodingService {
     const pendingEncashments = encashments.filter((e) => /pending|queued|requested|verification/i.test(e.status)).length;
 
     return [
+      { label: 'Total Accounts', value: String(active.length), detail: 'Active member accounts', tone: 'good' as const },
       { label: 'Weekly Activations', value: String(weeklyActivations), detail: 'Last 7 days', tone: 'good' as const },
       { label: 'Monthly Registrations', value: String(monthlyRegistrations), detail: 'This calendar month', tone: 'good' as const },
       { label: 'Active CD Accounts', value: String(activeCdAccounts), detail: 'CD balance active', tone: 'good' as const },

@@ -572,10 +572,12 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
       try {
         const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [
           { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
           { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
-          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} more in ${myTierProgress.remainingDays}d` : 'ready now', tone: 'neutral' as const },
+          { label: 'Voided Groups', value: String(myVoidedGroups), tone: myVoidedGroups > 0 ? ('warning' as const) : ('neutral' as const) }
         ];
         module.table = {
           title: 'Get Yor Five progress',
@@ -584,6 +586,7 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
             { key: 'directSamePackage', label: 'Direct Same Package' },
             { key: 'completedGroups', label: 'Completed Groups' },
             { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'daysLeft', label: 'Days Left' },
             { key: 'target', label: 'Target' },
             { key: 'status', label: 'Status' }
           ],
@@ -594,8 +597,9 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
               directSamePackage: t.referralCount,
               completedGroups: t.completedGroups,
               remainingToNextGroup: t.remainingToNext,
+              daysLeft: t.remainingDays > 0 ? `${t.remainingDays}d` : '—',
               target: 5,
-              status: t.referralCount >= 5 ? 'qualified' : 'building'
+              status: t.completedGroups > 0 ? 'qualified' : t.remainingDays > 0 ? 'in window' : 'building'
             }))
         };
       } catch (err) {
@@ -611,10 +615,12 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
       try {
         const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
+        const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [
           { label: 'Direct Same Package', value: String(myTierProgress?.referralCount ?? 0), tone: 'neutral' as const },
           { label: 'Claimable Groups', value: String(myTierProgress?.completedGroups ?? 0), tone: 'neutral' as const },
-          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} remaining` : 'ready now', tone: 'neutral' as const }
+          { label: 'Next Milestone', value: myTierProgress && myTierProgress.remainingToNext < 5 ? `${myTierProgress.remainingToNext} more in ${myTierProgress.remainingDays}d` : 'ready now', tone: 'neutral' as const },
+          { label: 'Voided Groups', value: String(myVoidedGroups), tone: myVoidedGroups > 0 ? ('warning' as const) : ('neutral' as const) }
         ];
         module.table = {
           title: 'Get Yor Five overview',
@@ -623,6 +629,7 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
             { key: 'directSamePackage', label: 'Direct Same Package' },
             { key: 'completedGroups', label: 'Completed Groups' },
             { key: 'remainingToNextGroup', label: 'Remaining to Next' },
+            { key: 'daysLeft', label: 'Days Left' },
             { key: 'target', label: 'Target' },
             { key: 'status', label: 'Status' }
           ],
@@ -633,8 +640,9 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
               directSamePackage: t.referralCount,
               completedGroups: t.completedGroups,
               remainingToNextGroup: t.remainingToNext,
+              daysLeft: t.remainingDays > 0 ? `${t.remainingDays}d` : '—',
               target: 5,
-              status: t.referralCount >= 5 ? 'qualified' : 'building'
+              status: t.completedGroups > 0 ? 'qualified' : t.remainingDays > 0 ? 'in window' : 'building'
             }))
         };
       } catch (err) {

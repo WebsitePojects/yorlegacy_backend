@@ -312,6 +312,94 @@ describe('ProductionEncodingService', () => {
     expect(ledger.find((entry) => entry.entryType === 'get_five')?.creditAmount).toBe(25998);
   });
 
+  // GATE-GYF-WINDOW-20260613 (owner item 5): groups of five qualified same-package
+  // directs must complete within a 3-month window. Four Classic directs join in
+  // early January; the fifth's join date (= repo.now()) decides whether the group
+  // completes in-window or the January group voids.
+  const seedClassicGyfScenario = async (fifthJoinIso: string) => {
+    const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
+    const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Classic', 'Sponsor Member');
+    const janDates = ['2026-01-01', '2026-01-02', '2026-01-03', '2026-01-04'];
+    const existingUsers = Array.from({ length: 4 }, (_, i) => seedUser(`existing-${i}`, `Existing ${i}`, `existing${i}@yor.local`));
+    const existingMembers = Array.from({ length: 4 }, (_, i) =>
+      seedMember(
+        `existing-${i}`,
+        `YOR${String(i + 2).padStart(4, '0')}`,
+        `YOR-MEMBER-${String(i + 2).padStart(4, '0')}`,
+        'Classic',
+        `Existing ${i}`,
+        'YOR-MEMBER-0001'
+      )
+    );
+    const existingNetworks = Array.from({ length: 4 }, (_, i) => ({
+      ...seedNetwork(`existing-${i}`, 'Classic', 'sponsor-user', 'sponsor-user', i % 2 === 0 ? 'left' : 'right'),
+      createdAt: `${janDates[i]}T09:00:00.000Z`
+    }));
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [sponsorUser, ...existingUsers],
+      members: [sponsorMember, ...existingMembers],
+      networkAccounts: [seedNetwork('sponsor-user', 'Classic', null, null, null), ...existingNetworks],
+      activationCodes: [
+        seedCode({
+          code: 'YOR-ACT-00001002',
+          packageTier: 'Classic',
+          accountType: 'PD',
+          paymentStatus: 'paid',
+          lockedDirectReferralBonus: 1000,
+          lockedSalesmatchValue: 500,
+          lockedBinaryPoints: 2,
+          lockedGetFiveAmount: 5998
+        })
+      ],
+      now: fifthJoinIso
+    });
+    const service = new ProductionEncodingService(repo);
+    const reservation = await service.createPlacementReservation(
+      { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
+      { placementParentUsername: 'YOR0002', placementSide: 'left' }
+    );
+    await service.submitRegistration(null, {
+      origin: 'referral-link',
+      fullName: 'Fifth Direct',
+      username: 'YOR2001',
+      phone: '+63 999 222 2222',
+      password: 'Password123!',
+      referralCode: 'YOR-MEMBER-0001',
+      activationCode: 'YOR-ACT-00001002',
+      placementToken: reservation.reservation.shareToken
+    });
+    return { service, repo };
+  };
+
+  it('credits one Get Yor Five group when the fifth same-package direct completes the 3-month window', async () => {
+    // Jan 1-4 directs + fifth on Mar 1 — all within the Jan 1 -> Apr 1 window.
+    const { service, repo } = await seedClassicGyfScenario('2026-03-01T09:00:00.000Z');
+    const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    const getFive = ledger.filter((entry) => entry.entryType === 'get_five');
+    expect(getFive).toHaveLength(1);
+    expect(getFive[0].creditAmount).toBe(5998);
+
+    const data = await service.getMemberGetYorFiveData('sponsor-user');
+    const classic = data.tierProgress.find((t) => t.tier === 'Classic');
+    expect(classic?.completedGroups).toBe(1);
+    expect(data.voidedGroups).toHaveLength(0);
+  });
+
+  it('voids the partial group, posts no credit, and surfaces it when the window lapses', async () => {
+    // Jan 1-4 directs + fifth on May 1 — past the Jan 1 -> Apr 1 window.
+    const { service, repo } = await seedClassicGyfScenario('2026-05-01T09:00:00.000Z');
+    const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
+    expect(ledger.filter((entry) => entry.entryType === 'get_five')).toHaveLength(0);
+
+    const data = await service.getMemberGetYorFiveData('sponsor-user');
+    const classic = data.tierProgress.find((t) => t.tier === 'Classic');
+    expect(classic?.completedGroups).toBe(0);
+    expect(classic?.remainingToNext).toBe(4); // open group of one (the late fifth) needs four more
+    expect(classic?.remainingDays).toBeGreaterThan(0);
+    expect(data.voidedGroups).toHaveLength(1);
+    expect(data.voidedGroups[0]).toMatchObject({ tier: 'Classic', memberCount: 4 });
+  });
+
   it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');
@@ -625,7 +713,7 @@ describe('ProductionEncodingService', () => {
     expect(salesmatch[0].creditAmount).toBe(2500);
   });
 
-  it('caps weekly salesmatch payout at the package cap, forfeits the excess, and computes binary cycle on the paid amount', async () => {
+  it('caps weekly salesmatch payout at the package cap, forfeits the excess, and computes binary cycle on the FULL matched salesmatch (uncapped, item 3)', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Classic', 'Sponsor Member');
     const repo = createInMemoryProductionEncodingRepository({
@@ -699,14 +787,16 @@ describe('ProductionEncodingService', () => {
 
     const binaryCycle = ledger.filter((entry) => entry.entryType === 'binary_cycle');
     expect(binaryCycle).toHaveLength(1);
-    expect(binaryCycle[0].creditAmount).toBe(4); // 2% of the capped 200, not the raw 500
+    // GATE-BIN-CYCLE-NOCAP-20260613: binary cycle is uncapped — 2% of the FULL
+    // matched 500, not the SMB-capped 200.
+    expect(binaryCycle[0].creditAmount).toBe(10);
 
     const snapshots = await repo.listPairingSnapshotsForUser('sponsor-user');
     expect(snapshots).toHaveLength(1);
     expect(snapshots[0]).toMatchObject({ matchedSales: 500, paidSalesmatch: 200, forfeitedSalesmatch: 300 });
   });
 
-  it('a member already at the weekly cap earns zero while legs still consume', async () => {
+  it('a member already at the weekly SMB cap earns zero salesmatch but still earns uncapped binary cycle while legs consume', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Classic', 'Sponsor Member');
     const repo = createInMemoryProductionEncodingRepository({
@@ -771,7 +861,11 @@ describe('ProductionEncodingService', () => {
 
     const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(ledger.filter((entry) => entry.entryType === 'salesmatch' && entry.processId !== 'seed:salesmatch:cap')).toHaveLength(0);
-    expect(ledger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+    // GATE-BIN-CYCLE-NOCAP-20260613: SMB payout is fully capped (payable 0) but
+    // binary cycle is uncapped — 2% of the FULL matched 500 still posts.
+    const binaryCycle = ledger.filter((entry) => entry.entryType === 'binary_cycle');
+    expect(binaryCycle).toHaveLength(1);
+    expect(binaryCycle[0].creditAmount).toBe(10);
 
     const balance = await repo.getSalesmatchBalance('sponsor-user');
     expect(balance).toMatchObject({ leftSales: 0, rightSales: 0, matchedSales: 500 });

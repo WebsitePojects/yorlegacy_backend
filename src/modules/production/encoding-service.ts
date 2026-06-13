@@ -8,6 +8,7 @@ import {
   type AccountStateInput
 } from '../compensation/account-state.js';
 import { manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from '../compensation/cap-windows.js';
+import { computeGetYorFiveGroups, type GyfDirect } from '../compensation/get-yor-five.js';
 import { packagePolicies, PV_PESO_RATE } from '../compensation/mvp-service.js';
 import { repeatPurchaseProductCatalog } from '../compensation/repurchase-product-catalog.js';
 import { createPasswordHashSync } from '../auth/password.js';
@@ -860,7 +861,14 @@ export class ProductionEncodingService {
       referralCount: number;
       completedGroups: number;
       remainingToNext: number;
+      remainingDays: number;
       nextThreshold: number;
+    }>;
+    voidedGroups: Array<{
+      tier: string;
+      memberCount: number;
+      startDate: string;
+      deadline: string;
     }>;
     ledgerEntries: Array<{
       id: string;
@@ -886,23 +894,45 @@ export class ProductionEncodingService {
       this.repo.listWalletLedgerEntriesForUser(userId)
     ]);
 
-    const memberReferralCode = member?.referralCode ?? '';
-    const directs = memberReferralCode ? await this.repo.listMembersBySponsorCode(memberReferralCode) : [];
+    const nowIso = this.repo.now();
+    const tierProgress: Array<{
+      tier: string;
+      claimValue: number;
+      referralCount: number;
+      completedGroups: number;
+      remainingToNext: number;
+      remainingDays: number;
+      nextThreshold: number;
+    }> = [];
+    const voidedGroups: Array<{ tier: string; memberCount: number; startDate: string; deadline: string }> = [];
 
-    const tierProgress = ELIGIBLE_TIERS.map((tier) => {
-      const count = directs.filter((d) => d.packageTier === tier).length;
-      const completedGroups = Math.floor(count / 5);
-      const remainder = count % 5;
-      const remainingToNext = remainder === 0 ? 5 : 5 - remainder;
-      return {
+    // GATE-GYF-WINDOW-20260613: progress mirrors the credit engine — same-package
+    // qualified directs grouped into 3-month windows. The open group shows the
+    // remaining target and remaining days; expired partial groups are listed as
+    // void history for monitoring and never credit.
+    for (const tier of ELIGIBLE_TIERS) {
+      const gyfDirects = await this.listQualifiedSamePackageGyfDirects(userId, tier);
+      const groups = computeGetYorFiveGroups(gyfDirects, { asOf: nowIso });
+      const completedGroups = groups.filter((g) => g.status === 'complete').length;
+      const openGroup = groups.find((g) => g.status === 'open') ?? null;
+      for (const voided of groups.filter((g) => g.status === 'void')) {
+        voidedGroups.push({
+          tier,
+          memberCount: voided.memberUserIds.length,
+          startDate: voided.startDate,
+          deadline: voided.deadline
+        });
+      }
+      tierProgress.push({
         tier,
         claimValue: CLAIM_VALUES[tier] ?? 0,
-        referralCount: count,
+        referralCount: gyfDirects.length,
         completedGroups,
-        remainingToNext,
+        remainingToNext: openGroup ? openGroup.remainingNeeded : 5,
+        remainingDays: openGroup ? openGroup.remainingDays : 0,
         nextThreshold: (completedGroups + 1) * 5
-      };
-    });
+      });
+    }
 
     const gyfEntries = allLedger
       .filter((e) => e.entryType === 'get_five')
@@ -922,6 +952,7 @@ export class ProductionEncodingService {
       moneyMode: this.repo.getMoneyMode(),
       memberPackageTier: member?.packageTier ?? 'Basic',
       tierProgress,
+      voidedGroups,
       ledgerEntries: gyfEntries,
       totalEarned,
       completedGroupsTotal
@@ -1561,12 +1592,18 @@ export class ProductionEncodingService {
                     ? `Salesmatch delta from ${item.payload.createdMemberUsername} (PHP ${forfeited} forfeited at package cap).`
                     : `Salesmatch delta from ${item.payload.createdMemberUsername}.`
               });
+            }
 
-              // Binary cycle fires on the capped (paid) salesmatch amount.
-              // Source eligibility is enforced upstream (only PD / settled-CD
-              // entries enqueue PV) and recipient eligibility above.
-              if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
-                const binaryCredit = Number(((payable * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+            // GATE-BIN-CYCLE-NOCAP-20260613: owner sign-off item 3 — Binary Cycle
+            // has NO weekly/monthly cap. It pays a flat percent of the FULL matched
+            // salesmatch movement (salesmatchDelta), independent of the SMB payout
+            // cap above, and still posts when the SMB payout is fully forfeited
+            // (payable === 0). Overrides BUSINESSRULE BIN-02 "Weekly capping applies".
+            // Source eligibility is enforced upstream (only PD / settled-CD entries
+            // enqueue PV) and recipient eligibility above.
+            if (packageConfig.binaryCyclePercent > 0 && profile.packageTier !== 'Basic') {
+              const binaryCredit = Number(((salesmatchDelta * packageConfig.binaryCyclePercent) / 100).toFixed(2));
+              if (binaryCredit > 0) {
                 await this.postLedgerIfNeeded({
                   userId: profile.userId,
                   entryType: 'binary_cycle',
@@ -2382,26 +2419,51 @@ export class ProductionEncodingService {
       notes: `Direct referral bonus from ${input.newMemberUsername}.`
     });
 
-    const qualifiedSamePackageDirects = await this.countQualifiedDirectsBySponsorAndPackage(input.sponsorUserId, input.packageTier);
-    if (input.code.lockedGetFiveAmount > 0 && qualifiedSamePackageDirects > 0 && qualifiedSamePackageDirects % 5 === 0) {
-      // Group index keeps the process key unique per completed group of five —
-      // a single shared key would silently block the 10th, 15th, ... payouts.
-      const groupIndex = qualifiedSamePackageDirects / 5;
-      const getFiveProcessId = buildProcessId(
-        'registration-get-five',
-        input.sponsorUserId,
-        input.packageTier.toUpperCase(),
-        String(groupIndex)
-      );
-      await this.postLedgerIfNeeded({
-        userId: input.sponsorUserId,
-        entryType: 'get_five',
-        sourceReference: `${input.code.packageTier} package threshold`,
-        creditAmount: input.code.lockedGetFiveAmount,
-        processId: getFiveProcessId,
-        notes: `Get Yor Five bonus on ${qualifiedSamePackageDirects} same-package directs.`
-      });
+    // GATE-GYF-WINDOW-20260613 (owner sign-off item 5): credit only groups of five
+    // qualified same-package directs that COMPLETED within their 3-month window.
+    // Partial groups whose window has lapsed are voided (never credited). The
+    // completed-group index keeps the process key unique and stable so each group
+    // pays at most once (postLedgerIfNeeded dedup); re-running is a no-op.
+    if (input.code.lockedGetFiveAmount > 0) {
+      const gyfDirects = await this.listQualifiedSamePackageGyfDirects(input.sponsorUserId, input.packageTier);
+      const groups = computeGetYorFiveGroups(gyfDirects, { asOf: this.repo.now() });
+      for (const group of groups) {
+        if (group.status !== 'complete' || group.index === null) {
+          continue;
+        }
+        const getFiveProcessId = buildProcessId(
+          'registration-get-five',
+          input.sponsorUserId,
+          input.packageTier.toUpperCase(),
+          String(group.index)
+        );
+        await this.postLedgerIfNeeded({
+          userId: input.sponsorUserId,
+          entryType: 'get_five',
+          sourceReference: `${input.packageTier} package group ${group.index}`,
+          creditAmount: input.code.lockedGetFiveAmount,
+          processId: getFiveProcessId,
+          notes: `Get Yor Five bonus on completed same-package group ${group.index}.`
+        });
+      }
     }
+  }
+
+  // Qualified (PD / fully-settled CD) same-package directs of a sponsor as
+  // GyfDirect records for the Get Yor Five 3-month window computation.
+  private async listQualifiedSamePackageGyfDirects(
+    sponsorUserId: string,
+    packageTier: PackageTier
+  ): Promise<GyfDirect[]> {
+    const directs = await this.repo.listDirectsBySponsor(sponsorUserId);
+    return directs
+      .filter(
+        (network) =>
+          network.registrationStatus === 'active' &&
+          network.packageTier === packageTier &&
+          countsForDirectReferralSource(this.networkAccountState(network))
+      )
+      .map((network) => ({ memberUserId: network.userId, joinedAt: network.createdAt }));
   }
 
   private buildPlacementSalesQueueItem(input: {
@@ -2464,17 +2526,6 @@ export class ProductionEncodingService {
       depth += 1;
     }
     return false;
-  }
-
-  // Counts only eligibility-qualified same-package directs (PD / fully-settled CD).
-  private async countQualifiedDirectsBySponsorAndPackage(sponsorUserId: string, packageTier: PackageTier) {
-    const directs = await this.repo.listDirectsBySponsor(sponsorUserId);
-    return directs.filter(
-      (network) =>
-        network.registrationStatus === 'active' &&
-        network.packageTier === packageTier &&
-        countsForDirectReferralSource(this.networkAccountState(network))
-    ).length;
   }
 
   private async postLedgerIfNeeded(input: {

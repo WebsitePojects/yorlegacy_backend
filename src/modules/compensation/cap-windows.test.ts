@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from './cap-windows.js';
+import { addManilaMonths, manilaDateKey, manilaMonthStartIso, manilaWeekStartIso } from './cap-windows.js';
 
 describe('manilaWeekStartIso', () => {
   it('maps a mid-week Manila timestamp to that week\'s Monday 00:00 Manila', () => {
@@ -38,5 +38,17 @@ describe('manilaDateKey', () => {
   it('returns the Manila calendar date', () => {
     expect(manilaDateKey('2026-06-10T09:00:00.000Z')).toBe('2026-06-10');
     expect(manilaDateKey('2026-06-10T17:00:00.000Z')).toBe('2026-06-11');
+  });
+});
+
+describe('addManilaMonths', () => {
+  it('adds whole calendar months in Manila time', () => {
+    // 2026-01-10T09:00:00Z = Jan 10 17:00 Manila -> +3mo -> Apr 10 17:00 Manila
+    expect(addManilaMonths('2026-01-10T09:00:00.000Z', 3)).toBe('2026-04-10T09:00:00.000Z');
+  });
+
+  it('clamps to month end (Jan 31 + 1mo = Feb 28 in 2026)', () => {
+    // 2026-01-31T01:00:00Z = Jan 31 09:00 Manila -> +1mo -> Feb 28 09:00 Manila
+    expect(addManilaMonths('2026-01-31T01:00:00.000Z', 1)).toBe('2026-02-28T01:00:00.000Z');
   });
 });

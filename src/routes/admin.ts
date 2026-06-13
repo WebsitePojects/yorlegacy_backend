@@ -62,7 +62,7 @@ adminRouter.get('/api/admin/dashboard', requireRole('admin', 'cashier', 'bod', '
   res.status(200).json(await buildAdminMvpDashboard(req.authUser!));
 });
 
-adminRouter.get('/api/admin/members', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+adminRouter.get('/api/admin/members', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.query === 'string' ? req.query.query : '';
   const username = typeof req.query.username === 'string' ? req.query.username : '';
   const page = typeof req.query.page === 'string' ? Number(req.query.page) : 1;
@@ -179,7 +179,7 @@ adminRouter.get('/api/admin/activation-codes', requireRole('admin', 'cashier', '
 
 const generateRateLimit = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'code-generate' });
 
-adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'bod', 'superadmin'), generateRateLimit, async (req, res) => {
+adminRouter.post('/api/admin/activation-codes/generate', requireRole('admin', 'cashier', 'bod', 'superadmin'), generateRateLimit, async (req, res) => {
   const remarks = typeof req.body?.remarks === 'string' ? req.body.remarks.slice(0, 200) : '';
   let quantity: number;
   try {

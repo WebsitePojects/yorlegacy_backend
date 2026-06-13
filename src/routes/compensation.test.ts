@@ -498,7 +498,7 @@ describe('Yor MVP compensation APIs', () => {
     ).toBe(true);
   });
 
-  it('keeps cashier limited to release and transfer actions while blocking generation and approvals', async () => {
+  it('allows cashier to generate codes but blocks payout and encashment approvals', async () => {
     const cashierCookie = await login('cashier@yor.local', '1');
 
     const [generateResponse, payoutApprovalResponse, encashmentApprovalResponse] = await Promise.all([
@@ -518,7 +518,7 @@ describe('Yor MVP compensation APIs', () => {
         .set('x-yor-csrf-token', getCookieValue(cashierCookie, 'yor_csrf') ?? '')
     ]);
 
-    expect(generateResponse.status).toBe(403);
+    expect(generateResponse.status).toBe(200);
     expect(payoutApprovalResponse.status).toBe(403);
     expect(encashmentApprovalResponse.status).toBe(403);
 

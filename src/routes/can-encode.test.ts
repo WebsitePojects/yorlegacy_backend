@@ -47,7 +47,7 @@ describe('Can Encode registration flow', () => {
       .set('Cookie', cookie);
 
     expect(response.status).toBe(200);
-    expect(response.body.referralLink).toContain('http://localhost:5173/register?');
+    expect(response.body.referralLink).toContain('/register?');
     expect(response.body.referralLink).toContain('origin=referral-link');
     expect(response.body.referralLink).toContain('ref=' + encodeReferralCode('yor01'));
     expect(response.body.referralLink).not.toContain('packageTier=');

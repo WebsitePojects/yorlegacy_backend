@@ -58,7 +58,8 @@ const OPERATIONAL_MEMBER_MODULE_IDS = new Set([
   'account-shadow-management',
   'activation-codes',
   'upgrade-registration',
-  'global-bonus-eligibility'
+  'global-bonus-eligibility',
+  'leaderboard'
 ]);
 
 export type { MemberRecord } from '../sandbox/dev-sandbox-store.js';
@@ -1072,6 +1073,19 @@ function memberModules(member: MemberRecord): OperationalModule[] {
           status: sameTierDirects >= 5 ? 'qualified' : 'building'
         }
       ]),
+      gatedActions: []
+    },
+    {
+      id: 'leaderboard',
+      label: 'Rank & Leaderboard',
+      path: '/member/leaderboard',
+      group: 'Recognition',
+      description: 'Unilevel rank by lifetime total income and the all-member income leaderboard (company accounts excluded).',
+      status: 'live-report',
+      legacyReference: 'ecom/ranking.php',
+      permissions: ['member', ...STAFF_ROLES],
+      metrics: [],
+      table: table('Rank & Leaderboard', []),
       gatedActions: []
     },
     {

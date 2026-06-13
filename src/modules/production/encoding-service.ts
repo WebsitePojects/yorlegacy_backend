@@ -2238,7 +2238,12 @@ export class ProductionEncodingService {
         availableBalance: mainBalance,
         pendingBalance: 0,
         cdBalance,
-        payoutMethod: member.payoutMethod ?? 'GCash',
+        // Item 8: no GCash default — surface the member's actual saved payout
+        // method + details (null when unset) so Account Details can fetch/display
+        // and edit them. The payout method is chosen from a dropdown at
+        // registration and on Account Details, never silently defaulted.
+        payoutMethod: member.payoutMethod ?? null,
+        payoutDetails: member.payoutDetails ?? null,
         payoutSchedule: 'Tuesday encashment / Friday payout'
       },
       incomeBreakdown,

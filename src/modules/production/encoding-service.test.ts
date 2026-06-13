@@ -400,6 +400,38 @@ describe('ProductionEncodingService', () => {
     expect(data.voidedGroups[0]).toMatchObject({ tier: 'Classic', memberCount: 4 });
   });
 
+  it('wallet summary returns the saved payout method and details, with no GCash default (item 8)', async () => {
+    const user = seedUser('payout-m1', 'Member One', 'payoutm1@yor.local');
+    const member = {
+      ...seedMember('payout-m1', 'PAYOUTM1', 'YOR-MEMBER-9001', 'Classic', 'Member One'),
+      payoutMethod: 'Metro Bank',
+      payoutDetails: '4417441939015'
+    };
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [user],
+      members: [member],
+      networkAccounts: [seedNetwork('payout-m1', 'Classic', null, null, null)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const data = await service.buildMemberWalletData('payout-m1');
+    expect(data.summary.payoutMethod).toBe('Metro Bank');
+    expect(data.summary.payoutDetails).toBe('4417441939015');
+  });
+
+  it('wallet summary payout method/details are null (not GCash) when unset (item 8)', async () => {
+    const user = seedUser('payout-m2', 'Member Two', 'payoutm2@yor.local');
+    const member = seedMember('payout-m2', 'PAYOUTM2', 'YOR-MEMBER-9002', 'Classic', 'Member Two');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [user],
+      members: [member],
+      networkAccounts: [seedNetwork('payout-m2', 'Classic', null, null, null)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const data = await service.buildMemberWalletData('payout-m2');
+    expect(data.summary.payoutMethod).toBeNull();
+    expect(data.summary.payoutDetails).toBeNull();
+  });
+
   it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const sponsorMember = seedMember('sponsor-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Sponsor Member');

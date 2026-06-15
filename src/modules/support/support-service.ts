@@ -72,6 +72,27 @@ export async function submitSupportMessage(input: SubmitSupportMessageInput): Pr
   return message;
 }
 
+// Public (anonymous) contact-us submission from the marketing site. Stored in the
+// same contact_messages inbox the admin reviews; user_id uses a 'public' sentinel
+// since there is no signed-in account.
+export async function submitPublicContactMessage(input: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  category?: SupportMessageCategory;
+}): Promise<SupportMessage> {
+  return submitSupportMessage({
+    userId: 'public',
+    username: 'public',
+    displayName: input.name,
+    email: input.email,
+    category: input.category ?? 'general',
+    subject: input.subject,
+    message: input.message
+  });
+}
+
 export async function listSupportMessages(): Promise<SupportMessage[]> {
   if (isProductionMode()) {
     const client = getSupabaseClient();

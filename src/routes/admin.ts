@@ -39,6 +39,7 @@ import {
 } from '../modules/operations/legacy-parity-service.js';
 import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
 import { voucherService } from '../modules/vouchers/voucher-service.js';
+import { newsService } from '../modules/news/news-service.js';
 
 export const adminRouter = Router();
 
@@ -335,6 +336,62 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
       remarks: typeof req.body?.remarks === 'string' ? req.body.remarks : ''
     })
   );
+});
+
+// News / Announcements management (admin-authored, surfaced on the public bulletin).
+adminRouter.get('/api/admin/news-posts', requireRole('admin', 'bod', 'superadmin'), async (_req, res) => {
+  try {
+    res.status(200).json({ posts: await newsService.listAll() });
+  } catch (error) {
+    console.error('[admin-news] load failed:', error);
+    res.status(500).json({ message: 'Unable to load posts.' });
+  }
+});
+
+adminRouter.post('/api/admin/news-posts', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+  const category = ['announcement', 'news', 'promo', 'memo'].includes(req.body?.category) ? req.body.category : 'announcement';
+  const status = ['draft', 'published', 'archived'].includes(req.body?.status) ? req.body.status : 'draft';
+  if (title.length < 3 || body.length < 3) {
+    res.status(400).json({ message: 'Title and body are required.' });
+    return;
+  }
+  try {
+    const post = await newsService.create({
+      title, body, category, status, pinned: Boolean(req.body?.pinned),
+      createdByUserId: req.authUser!.id, createdByLabel: req.authUser!.name ?? 'admin'
+    });
+    res.status(200).json({ post });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to create post.' });
+  }
+});
+
+adminRouter.patch('/api/admin/news-posts/:id', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const post = await newsService.update(id, {
+      title: typeof req.body?.title === 'string' ? req.body.title.trim() : undefined,
+      body: typeof req.body?.body === 'string' ? req.body.body.trim() : undefined,
+      category: ['announcement', 'news', 'promo', 'memo'].includes(req.body?.category) ? req.body.category : undefined,
+      status: ['draft', 'published', 'archived'].includes(req.body?.status) ? req.body.status : undefined,
+      pinned: typeof req.body?.pinned === 'boolean' ? req.body.pinned : undefined
+    });
+    res.status(200).json({ post });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update post.' });
+  }
+});
+
+adminRouter.delete('/api/admin/news-posts/:id', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    await newsService.remove(id);
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to delete post.' });
+  }
 });
 
 // Shadow-account overview — system-wide shadow monitoring (leg volumes, matched, SMB transferred).

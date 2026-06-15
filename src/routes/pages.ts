@@ -6,8 +6,11 @@ import {
   buildPublicRegistrationSubmit
 } from '../modules/operations/legacy-parity-service.js';
 import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
+import { newsService } from '../modules/news/news-service.js';
+import { submitPublicContactMessage } from '../modules/support/support-service.js';
 
 export const pagesRouter = Router();
+const contactHits = new Map<string, number[]>();
 const registrationPreviewHits = new Map<string, number[]>();
 
 function isRegistrationPreviewRateLimited(remoteKey: string) {
@@ -18,6 +21,46 @@ function isRegistrationPreviewRateLimited(remoteKey: string) {
   registrationPreviewHits.set(remoteKey, bucket);
   return bucket.length > 20;
 }
+
+// Public announcements bulletin — published news posts only.
+pagesRouter.get('/api/public/announcements', async (_request, response) => {
+  try {
+    response.status(200).json({ posts: await newsService.listPublished() });
+  } catch (error) {
+    console.error('[public-announcements] load failed:', error);
+    response.status(200).json({ posts: [] });
+  }
+});
+
+// Public (anonymous) contact-us submission. Lightweight per-IP rate limit.
+pagesRouter.post('/api/public/contact', async (request, response) => {
+  const remoteKey = String(request.ip ?? request.headers['x-forwarded-for'] ?? 'unknown');
+  const now = Date.now();
+  const bucket = (contactHits.get(remoteKey) ?? []).filter((v) => now - v < 60_000);
+  bucket.push(now);
+  contactHits.set(remoteKey, bucket);
+  if (bucket.length > 5) {
+    response.status(429).json({ message: 'Too many messages. Please wait a minute and try again.' });
+    return;
+  }
+
+  const name = typeof request.body?.name === 'string' ? request.body.name.trim() : '';
+  const email = typeof request.body?.email === 'string' ? request.body.email.trim() : '';
+  const subject = typeof request.body?.subject === 'string' ? request.body.subject.trim() : '';
+  const message = typeof request.body?.message === 'string' ? request.body.message.trim() : '';
+
+  if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || subject.length < 3 || message.length < 10) {
+    response.status(400).json({ message: 'Please provide your name, a valid email, a subject, and a message (10+ characters).' });
+    return;
+  }
+
+  try {
+    const submitted = await submitPublicContactMessage({ name, email, subject, message });
+    response.status(200).json({ status: 'submitted', id: submitted.id });
+  } catch {
+    response.status(500).json({ message: 'Unable to send your message right now. Please try again later.' });
+  }
+});
 
 pagesRouter.get('/api/pages/:slug', async (request, response) => {
   const page = await getPageBySlug(request.params.slug);

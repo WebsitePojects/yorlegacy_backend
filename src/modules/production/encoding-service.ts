@@ -932,7 +932,11 @@ export class ProductionEncodingService {
     };
   }
 
-  async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string) {
+  async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string, maxTreeDepth = 16) {
+    // maxTreeDepth bounds how deep the placement tree is built (member + shadow levels
+    // alternate, so N tree levels ≈ N/2 logical levels). The canvas only renders the
+    // selected depth, so building deeper just wastes a query — clamp to a sane window.
+    const depthCap = Math.max(2, Math.min(40, Math.floor(maxTreeDepth) || 16));
     const signedInMember = await this.requireMemberByUserId(user.id);
     const [members, networks] = await Promise.all([this.repo.listMembers(), this.repo.listNetworkAccounts()]);
     const shadowAccounts = await this.ensureShadowAccountsForMembers(members);
@@ -1018,10 +1022,13 @@ export class ProductionEncodingService {
           right: { ...this.toGenealogyShadowSlot(member, rightShadow), placement: 'right' as const }
         },
         accountStateLabel: toAccountStateLabel(network),
-        children: [
-          buildShadowTreeNode(member, 'left', depth + 1, tracePath),
-          buildShadowTreeNode(member, 'right', depth + 1, tracePath)
-        ]
+        children:
+          depth + 1 > depthCap
+            ? []
+            : [
+                buildShadowTreeNode(member, 'left', depth + 1, tracePath),
+                buildShadowTreeNode(member, 'right', depth + 1, tracePath)
+              ]
       };
     };
 
@@ -1053,12 +1060,16 @@ export class ProductionEncodingService {
       const rightMember = rightNetwork ? membersByUserId.get(rightNetwork.userId) ?? null : null;
       const children: ProductionGenealogyNode[] = [];
 
-      if (leftMember) {
-        children.push(buildTreeNode(leftMember, 'left', depth + 1, tracePath));
-      }
+      // Stop descending past the depth window; openSlots below still reflect
+      // real availability (computed from leftMember/rightMember) for the indicator.
+      if (depth + 1 <= depthCap) {
+        if (leftMember) {
+          children.push(buildTreeNode(leftMember, 'left', depth + 1, tracePath));
+        }
 
-      if (rightMember) {
-        children.push(buildTreeNode(rightMember, 'right', depth + 1, tracePath));
+        if (rightMember) {
+          children.push(buildTreeNode(rightMember, 'right', depth + 1, tracePath));
+        }
       }
 
       return {

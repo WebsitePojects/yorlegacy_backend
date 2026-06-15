@@ -161,6 +161,8 @@ memberRouter.get('/api/member/genealogy/binary', requireRole('member', 'admin', 
 
 memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
   const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
+  // Optional depth window (tree levels) so we only build what the canvas shows.
+  const depth = typeof req.query.depth === 'string' ? Number(req.query.depth) : undefined;
   if (isProductionMode()) {
     const service = getProductionEncodingService();
     if (!service) {
@@ -168,7 +170,7 @@ memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'adm
       return;
     }
 
-    void service.buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername).then((payload) => {
+    void service.buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername, depth && Number.isFinite(depth) ? depth : undefined).then((payload) => {
       res.status(200).json(payload);
     }).catch((error) => {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build binary genealogy tree.' });

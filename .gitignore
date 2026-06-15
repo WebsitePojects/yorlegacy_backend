@@ -5,6 +5,6 @@ dist
 *.tsbuildinfo
 docs/*.local.md
 docs/LOCAL_*.md
-dev-data
+/dev-data/
 .codex-dev*.log
 docs/

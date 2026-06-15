@@ -48,9 +48,10 @@ memberRouter.get('/api/member/office', requireRole('member', 'admin', 'cashier',
     const service = getProductionEncodingService();
     if (service) {
       try {
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
         const [walletData, pts] = await Promise.all([
-          service.buildMemberWalletData(req.authUser!.id),
-          service.getMemberBinaryBalance(req.authUser!.id)
+          service.buildMemberWalletData(memberViewUserId),
+          service.getMemberBinaryBalance(memberViewUserId)
         ]);
         const mainWallet = walletData.wallets.find((w: { type: string }) => w.type === 'main');
         const available = mainWallet?.balance ?? 0;
@@ -89,7 +90,8 @@ memberRouter.get('/api/member/dashboard', requireRole('member', 'admin', 'cashie
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const data = await service.buildMemberWalletData(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const data = await service.buildMemberWalletData(memberViewUserId);
         res.status(200).json({
           user: req.authUser,
           moneyMode: 'production',
@@ -124,7 +126,8 @@ memberRouter.get('/api/member/wallets', requireRole('member', 'admin', 'cashier'
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const data = await service.buildMemberWalletData(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const data = await service.buildMemberWalletData(memberViewUserId);
         res.status(200).json({ moneyMode: data.moneyMode, wallets: data.wallets, entries: data.entries });
         return;
       } catch (err) {
@@ -140,7 +143,8 @@ memberRouter.get('/api/member/wallet-detail', requireRole('member', 'admin', 'ca
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const data = await service.buildMemberWalletData(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const data = await service.buildMemberWalletData(memberViewUserId);
         res.status(200).json(data);
         return;
       } catch (err) {
@@ -301,7 +305,8 @@ memberRouter.get('/api/member/salesmatch/pairing-events', requireRole('member', 
     const service = getProductionEncodingService();
     if (service) {
       try {
-        res.status(200).json(await service.getMemberPairingEvents(req.authUser!.id));
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        res.status(200).json(await service.getMemberPairingEvents(memberViewUserId));
         return;
       } catch (err) {
         console.error('[pairing-events] Production error:', err);
@@ -316,7 +321,8 @@ memberRouter.get('/api/member/direct-referrals', requireRole('member', 'admin', 
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const rows = await service.buildMemberDirectReferrals(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const rows = await service.buildMemberDirectReferrals(memberViewUserId);
         res.status(200).json({ rows });
         return;
       } catch (err) {
@@ -655,7 +661,8 @@ memberRouter.get('/api/member/get-yor-five', requireRole('member', 'admin', 'cas
       return;
     }
     try {
-      res.status(200).json(await service.getMemberGetYorFiveData(req.authUser!.id));
+      const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+      res.status(200).json(await service.getMemberGetYorFiveData(memberViewUserId));
     } catch (err) {
       console.error('[get-yor-five] Production data error:', err);
       res.status(500).json({ message: 'Unable to load Get Yor Five data.' });
@@ -696,7 +703,8 @@ memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', '
       return;
     }
     try {
-      res.status(200).json(await service.getMemberRank(req.authUser!.id));
+      const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+      res.status(200).json(await service.getMemberRank(memberViewUserId));
     } catch (err) {
       console.error('[rank] Production data error:', err);
       res.status(500).json({ message: 'Unable to load rank data.' });
@@ -741,7 +749,8 @@ memberRouter.get('/api/member/unilevel', requireRole('member', 'admin', 'cashier
       return;
     }
     try {
-      res.status(200).json(await service.getMemberUnilevelData(req.authUser!.id));
+      const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+      res.status(200).json(await service.getMemberUnilevelData(memberViewUserId));
     } catch (err) {
       console.error('[unilevel] Production data error:', err);
       res.status(500).json({ message: 'Unable to load unilevel data.' });
@@ -775,7 +784,8 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const pts = await service.getMemberBinaryBalance(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const pts = await service.getMemberBinaryBalance(memberViewUserId);
         if (pts !== null) {
           module.metrics = [
             { label: 'Current Left', value: String(pts.leftPoints), tone: 'neutral' as const },
@@ -809,7 +819,8 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const gyf = await service.getMemberGetYorFiveData(memberViewUserId);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
         const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [
@@ -852,7 +863,8 @@ memberRouter.get('/api/member/modules/:moduleId', requireRole('member', 'admin',
     const service = getProductionEncodingService();
     if (service) {
       try {
-        const gyf = await service.getMemberGetYorFiveData(req.authUser!.id);
+        const memberViewUserId = await service.resolveMemberViewUserId(req.authUser!);
+        const gyf = await service.getMemberGetYorFiveData(memberViewUserId);
         const myTierProgress = gyf.tierProgress.find((t) => t.tier === gyf.memberPackageTier);
         const myVoidedGroups = gyf.voidedGroups.filter((v) => v.tier === gyf.memberPackageTier).length;
         module.metrics = [

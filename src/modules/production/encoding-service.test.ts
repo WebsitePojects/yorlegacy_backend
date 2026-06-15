@@ -474,7 +474,7 @@ describe('ProductionEncodingService', () => {
     expect(data.summary.payoutDetails).toBeNull();
   });
 
-  it('computes member rank from lifetime gross wallet credits (item 8)', async () => {
+  it('computes member rank from lifetime unilevel wallet credits (item 8)', async () => {
     const user = seedUser('rank-m1', 'Ranker One', 'rank1@yor.local');
     const member = seedMember('rank-m1', 'RANKM1', 'YOR-MEMBER-9101', 'VIP', 'Ranker One');
     const repo = createInMemoryProductionEncodingRepository({
@@ -1346,6 +1346,29 @@ describe('ProductionEncodingService', () => {
         .find((child) => child.placement === 'right')
         ?.children.find((child) => child.username === 'YOR3001')?.placement
     ).toBe('right');
+  });
+
+  it('centers elevated member-view requests on the company member when the operator has no member profile', async () => {
+    const adminUser = seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin');
+    const rootUser = seedUser('root-user', 'Company Root', 'root@yor.local');
+    const rootMember: ProductionMemberProfile = {
+      ...seedMember('root-user', 'yor01', 'YOR-MEMBER-ROOT', 'VIP', 'Company Root'),
+      isCompanyAccount: true
+    };
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [adminUser, rootUser],
+      members: [rootMember],
+      networkAccounts: [seedNetwork('root-user', 'VIP', null, null, null)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const adminActor = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    await expect(service.resolveMemberViewUserId(adminActor)).resolves.toBe('root-user');
+
+    const tree = await service.buildScopedBinaryGenealogyCenter(adminActor, undefined, 4);
+
+    expect(tree.root.username).toBe('yor01');
+    expect(tree.nodes.length).toBeGreaterThan(0);
   });
 
   it('accepts shadow-derived placement labels and still encodes under the real member slot', async () => {

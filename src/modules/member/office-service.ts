@@ -14,9 +14,10 @@ export async function buildMemberOffice(user: SessionUser): Promise<MemberOffice
     const service = getProductionEncodingService();
     if (service) {
       try {
+        const memberViewUserId = await service.resolveMemberViewUserId(user);
         const [binary, walletData] = await Promise.all([
-          service.getMemberBinaryBalance(user.id),
-          service.buildMemberWalletData(user.id, 0)
+          service.getMemberBinaryBalance(memberViewUserId),
+          service.buildMemberWalletData(memberViewUserId, 0)
         ]);
         if (binary) {
           snapshot.metrics = snapshot.metrics.map((m) => {

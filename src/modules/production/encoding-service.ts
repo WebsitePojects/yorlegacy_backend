@@ -936,13 +936,41 @@ export class ProductionEncodingService {
     };
   }
 
+  private fallbackMemberForElevatedViewer(user: SessionUser, members: ProductionMemberProfile[]) {
+    if (!['admin', 'cashier', 'bod', 'superadmin'].includes(user.role)) {
+      return null;
+    }
+    return members.find((member) => member.isCompanyAccount) ?? members[0] ?? null;
+  }
+
+  async resolveMemberViewUserId(user: SessionUser): Promise<string> {
+    const directMember = await this.repo.findMemberByUserId(user.id);
+    if (directMember) {
+      return directMember.userId;
+    }
+
+    const fallbackMember = this.fallbackMemberForElevatedViewer(user, await this.repo.listMembers());
+    if (fallbackMember) {
+      return fallbackMember.userId;
+    }
+
+    throw new Error('Member profile was not found.');
+  }
+
   async buildScopedBinaryGenealogyCenter(user: SessionUser, rootUsername?: string, maxTreeDepth = 16) {
     // maxTreeDepth bounds how deep the placement tree is built (member + shadow levels
     // alternate, so N tree levels ≈ N/2 logical levels). The canvas only renders the
     // selected depth, so building deeper just wastes a query — clamp to a sane window.
     const depthCap = Math.max(2, Math.min(40, Math.floor(maxTreeDepth) || 16));
-    const signedInMember = await this.requireMemberByUserId(user.id);
-    const [members, networks] = await Promise.all([this.repo.listMembers(), this.repo.listNetworkAccounts()]);
+    const [viewerMember, members, networks] = await Promise.all([
+      this.repo.findMemberByUserId(user.id),
+      this.repo.listMembers(),
+      this.repo.listNetworkAccounts()
+    ]);
+    const signedInMember = viewerMember ?? this.fallbackMemberForElevatedViewer(user, members);
+    if (!signedInMember) {
+      throw new Error('Member profile was not found.');
+    }
     const shadowAccounts = await this.ensureShadowAccountsForMembers(members);
     const membersByUserId = new Map(members.map((member) => [member.userId, member]));
     const networksByUserId = new Map(networks.map((network) => [network.userId, network]));
@@ -1440,9 +1468,8 @@ export class ProductionEncodingService {
     };
   }
 
-  // Unilevel rank (owner item 8): determined solely by lifetime TOTAL INCOME =
-  // gross sum of every wallet credit (no debits/deductions), mapped onto the
-  // image-2 rank ladder.
+  // Unilevel rank (GATE-RANK-UNILEVEL-20260615): determined solely by lifetime
+  // unilevel wallet credits, mapped onto the approved rank ladder.
   async getMemberRank(userId: string): Promise<RankProgress & { moneyMode: MoneyMode }> {
     const ledger = await this.repo.listWalletLedgerEntriesForUser(userId);
     // GATE-RANK-UNILEVEL-20260615: rank is gated by lifetime UNILEVEL income only.

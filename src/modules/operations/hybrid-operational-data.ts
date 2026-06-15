@@ -730,7 +730,7 @@ function adminModules(): OperationalModule[] {
       'rankings',
       'Rankings',
       'Compensation',
-      'Rank and volume progress report based on direct referral, binary point, and package-level signals.',
+      'Rank tier is based only on lifetime unilevel income. Total income remains visible for accounting context and leaderboard comparison.',
       ADMIN_AND_SUPERADMIN_ROLES,
       allMembers.map((member) => ({
         username: member.username,

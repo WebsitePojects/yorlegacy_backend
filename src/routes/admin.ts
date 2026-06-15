@@ -32,6 +32,7 @@ import {
   runAdminTransferActivationCodes
 } from '../modules/operations/legacy-parity-service.js';
 import { getProductionEncodingService, isProductionMode } from '../modules/production/runtime.js';
+import { voucherService } from '../modules/vouchers/voucher-service.js';
 
 export const adminRouter = Router();
 
@@ -328,6 +329,49 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
       remarks: typeof req.body?.remarks === 'string' ? req.body.remarks : ''
     })
   );
+});
+
+// GATE-VOUCHER-B1T1-20260615: Buy-1-Take-1 voucher inventory (admin-side surface).
+adminRouter.get('/api/admin/vouchers', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
+  try {
+    res.status(200).json(await voucherService.getVoucherCenter());
+  } catch (error) {
+    console.error('[admin-vouchers] load failed:', error);
+    res.status(500).json({ message: 'Unable to load vouchers.' });
+  }
+});
+
+adminRouter.post('/api/admin/vouchers/grant', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  try {
+    const voucher = await voucherService.grantVoucher(req.authUser!, {
+      beneficiaryUsername: typeof req.body?.beneficiaryUsername === 'string' ? req.body.beneficiaryUsername : '',
+      packageTier: typeof req.body?.packageTier === 'string' ? req.body.packageTier : '',
+      quantity: Number(req.body?.quantity ?? 1),
+      expiresAt: typeof req.body?.expiresAt === 'string' && req.body.expiresAt ? req.body.expiresAt : null,
+      remarks: typeof req.body?.remarks === 'string' ? req.body.remarks : null
+    });
+    res.status(200).json({ voucher });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to grant voucher.' });
+  }
+});
+
+adminRouter.post('/api/admin/vouchers/:id/suspend', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    res.status(200).json({ voucher: await voucherService.suspendVoucher(req.authUser!, id) });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to suspend voucher.' });
+  }
+});
+
+adminRouter.post('/api/admin/vouchers/:id/reactivate', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    res.status(200).json({ voucher: await voucherService.reactivateVoucher(req.authUser!, id) });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to reactivate voucher.' });
+  }
 });
 
 adminRouter.get('/api/admin/encashments', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {

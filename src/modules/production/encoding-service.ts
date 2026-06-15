@@ -2985,6 +2985,85 @@ export class ProductionEncodingService {
     };
   }
 
+  // CD (Credit-Deduction) account center: per-account obligation/paid/remaining,
+  // package breakdown, and totals — computed from network_accounts (cdAmount =
+  // obligation, cdTotal = recovered) joined with encashment cdDeduction/netAmount.
+  async buildCdAccountCenter() {
+    const [members, networks, encashments] = await Promise.all([
+      this.repo.listMembers(),
+      this.repo.listNetworkAccounts(),
+      this.repo.listEncashments({}, 10000)
+    ]);
+
+    const memberById = new Map(members.map((m) => [m.userId, m]));
+    const netByUser = new Map(networks.map((n) => [n.userId, n]));
+
+    // Sum CD deductions + net encashment paid out per user (settled encashments only).
+    const settled = (status: string) => /paid|approved|released|queued/i.test(status);
+    const cdDeductionByUser = new Map<string, number>();
+    const netEncashByUser = new Map<string, number>();
+    for (const enc of encashments) {
+      if (!settled(enc.status)) continue;
+      cdDeductionByUser.set(enc.userId, (cdDeductionByUser.get(enc.userId) ?? 0) + (enc.cdDeduction ?? 0));
+      netEncashByUser.set(enc.userId, (netEncashByUser.get(enc.userId) ?? 0) + (enc.netAmount ?? 0));
+    }
+
+    const round = (n: number) => Number(n.toFixed(2));
+    const accounts = networks
+      .filter((n) => n.currentAccountType === 'CD' || n.cdAmount > 0)
+      .map((n) => {
+        const member = memberById.get(n.userId);
+        const cdAmount = round(n.cdAmount ?? 0);
+        const cdPaid = round(Math.min(n.cdTotal ?? 0, cdAmount));
+        const cdRemaining = round(Math.max(0, cdAmount - cdPaid));
+        return {
+          userId: n.userId,
+          username: member?.username ?? '—',
+          fullName: member?.fullName ?? '—',
+          packageTier: n.packageTier,
+          cdAmount,
+          cdPaid,
+          cdRemaining,
+          status: cdRemaining <= 0 ? ('fully-paid' as const) : ('paying' as const),
+          cdDeductions: round(cdDeductionByUser.get(n.userId) ?? 0),
+          netEncashment: round(netEncashByUser.get(n.userId) ?? 0)
+        };
+      })
+      .sort((a, b) => b.cdRemaining - a.cdRemaining);
+
+    const sum = (sel: (a: (typeof accounts)[number]) => number) => round(accounts.reduce((s, a) => s + sel(a), 0));
+    const stats = {
+      totalAccounts: accounts.length,
+      fullyPaid: accounts.filter((a) => a.status === 'fully-paid').length,
+      paying: accounts.filter((a) => a.status === 'paying').length,
+      totalCdAmount: sum((a) => a.cdAmount),
+      totalPaid: sum((a) => a.cdPaid),
+      totalRemaining: sum((a) => a.cdRemaining),
+      cdDeductions: sum((a) => a.cdDeductions),
+      netEncashment: sum((a) => a.netEncashment)
+    };
+
+    const tiers = ['Basic', 'Classic', 'Standard', 'Business', 'VIP'];
+    const packageBreakdown = tiers
+      .map((tier) => {
+        const inTier = accounts.filter((a) => a.packageTier === tier);
+        if (inTier.length === 0) return null;
+        return {
+          package: tier,
+          accounts: inTier.length,
+          fullyPaid: inTier.filter((a) => a.status === 'fully-paid').length,
+          paying: inTier.filter((a) => a.status === 'paying').length,
+          cdAmount: round(inTier.reduce((s, a) => s + a.cdAmount, 0)),
+          paid: round(inTier.reduce((s, a) => s + a.cdPaid, 0)),
+          remaining: round(inTier.reduce((s, a) => s + a.cdRemaining, 0)),
+          netEncashment: round(inTier.reduce((s, a) => s + a.netEncashment, 0))
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    return { stats, packageBreakdown, accounts };
+  }
+
   async reconcileShadowEarnings() {
     const paid = await withMoneyLock('shadow-reconcile', () => this.repo.reconcileShadowEarnings());
     for (const p of paid) {

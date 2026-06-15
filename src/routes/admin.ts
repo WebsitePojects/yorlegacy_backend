@@ -337,6 +337,25 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
   );
 });
 
+// CD (Credit-Deduction) account center — real per-account data + package breakdown + totals.
+adminRouter.get('/api/admin/cd-accounts', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({ stats: null, packageBreakdown: [], accounts: [] });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.buildCdAccountCenter());
+  } catch (error) {
+    console.error('[admin-cd-accounts] load failed:', error);
+    res.status(500).json({ message: 'Unable to load CD accounts.' });
+  }
+});
+
 // Paginated activation-code history (full audit trail, server-side paged for performance).
 adminRouter.get('/api/admin/activation-code-events', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (!isProductionMode()) {

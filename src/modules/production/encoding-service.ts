@@ -888,7 +888,11 @@ export class ProductionEncodingService {
     }
 
     if (created.length > 0) {
-      await this.repo.saveShadowAccounts(created);
+      try {
+        await this.repo.saveShadowAccounts(created);
+      } catch (error) {
+        console.warn('[ProductionEncodingService] Unable to persist generated shadow accounts for binary tree render.', error);
+      }
     }
 
     return [...existing, ...created];
@@ -943,13 +947,51 @@ export class ProductionEncodingService {
     return members.find((member) => member.isCompanyAccount) ?? members[0] ?? null;
   }
 
+  private memberFromSessionAlias(user: SessionUser, members: ProductionMemberProfile[]) {
+    if (user.role !== 'member') {
+      return null;
+    }
+
+    const candidates = [
+      user.email.includes('@') ? user.email.split('@')[0] : user.email,
+      user.name
+    ]
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const byUsername = new Map(members.map((member) => [member.username.trim().toUpperCase(), member]));
+
+    for (const candidate of candidates) {
+      const exact = byUsername.get(candidate.toUpperCase());
+      if (exact) {
+        return exact;
+      }
+
+      const normalizedAlias = normalizeProductionUsernameAlias(candidate);
+      if (normalizedAlias) {
+        const aliasMember = byUsername.get(normalizedAlias);
+        if (aliasMember) {
+          return aliasMember;
+        }
+      }
+    }
+
+    return null;
+  }
+
   async resolveMemberViewUserId(user: SessionUser): Promise<string> {
     const directMember = await this.repo.findMemberByUserId(user.id);
     if (directMember) {
       return directMember.userId;
     }
 
-    const fallbackMember = this.fallbackMemberForElevatedViewer(user, await this.repo.listMembers());
+    const members = await this.repo.listMembers();
+    const aliasMember = this.memberFromSessionAlias(user, members);
+    if (aliasMember) {
+      return aliasMember.userId;
+    }
+
+    const fallbackMember = this.fallbackMemberForElevatedViewer(user, members);
     if (fallbackMember) {
       return fallbackMember.userId;
     }
@@ -967,7 +1009,8 @@ export class ProductionEncodingService {
       this.repo.listMembers(),
       this.repo.listNetworkAccounts()
     ]);
-    const signedInMember = viewerMember ?? this.fallbackMemberForElevatedViewer(user, members);
+    const signedInMember =
+      viewerMember ?? this.memberFromSessionAlias(user, members) ?? this.fallbackMemberForElevatedViewer(user, members);
     if (!signedInMember) {
       throw new Error('Member profile was not found.');
     }

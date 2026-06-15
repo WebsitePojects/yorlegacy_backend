@@ -177,6 +177,13 @@ memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'adm
     void service.buildScopedBinaryGenealogyCenter(req.authUser!, rootUsername, depth && Number.isFinite(depth) ? depth : undefined).then((payload) => {
       res.status(200).json(payload);
     }).catch((error) => {
+      console.error('[member/genealogy/binary-tree] production render failed', {
+        userId: req.authUser?.id,
+        role: req.authUser?.role,
+        email: req.authUser?.email,
+        rootUsername,
+        depth
+      }, error);
       res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build binary genealogy tree.' });
     });
     return;

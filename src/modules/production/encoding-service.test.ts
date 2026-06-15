@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ProductionEncodingService,
   createInMemoryProductionEncodingRepository,
@@ -1369,6 +1369,68 @@ describe('ProductionEncodingService', () => {
 
     expect(tree.root.username).toBe('yor01');
     expect(tree.nodes.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a member view from the session email username when the app user id differs from the member profile id', async () => {
+    const loginUser = seedUser('login-user', 'Yor Company 01', 'yor01@yorinternational.local');
+    const rootUser = seedUser('root-user', 'Yor Company 01', 'root@yor.local');
+    const rootMember: ProductionMemberProfile = {
+      ...seedMember('root-user', 'yor01', 'YOR-MEMBER-ROOT', 'VIP', 'Yor Company 01'),
+      isCompanyAccount: true
+    };
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [loginUser, rootUser],
+      members: [rootMember],
+      networkAccounts: [seedNetwork('root-user', 'VIP', null, null, null)]
+    });
+    const service = new ProductionEncodingService(repo);
+    const memberActor = {
+      id: 'login-user',
+      name: 'Yor Company 01',
+      email: 'yor01@yorinternational.local',
+      role: 'member' as const
+    };
+
+    await expect(service.resolveMemberViewUserId(memberActor)).resolves.toBe('root-user');
+
+    const tree = await service.buildScopedBinaryGenealogyCenter(memberActor, undefined, 4);
+
+    expect(tree.root.username).toBe('yor01');
+    expect(tree.nodes.length).toBeGreaterThan(0);
+  });
+
+  it('renders the binary tree with generated shadow slots when shadow persistence is temporarily unavailable', async () => {
+    const ownerUser = seedUser('owner-user', 'Owner', 'owner@yor.local');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [ownerUser],
+      members: [seedMember('owner-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Owner Member')],
+      networkAccounts: [seedNetwork('owner-user', 'Standard', null, null, null)]
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const service = new ProductionEncodingService({
+      ...repo,
+      saveShadowAccounts: async () => {
+        throw new Error('duplicate key value violates unique constraint "shadow_accounts_shadow_code_key"');
+      }
+    });
+
+    try {
+      const tree = await service.buildScopedBinaryGenealogyCenter(
+        { id: 'owner-user', name: 'Owner', email: 'owner@yor.local', role: 'member' },
+        undefined,
+        4
+      );
+
+      expect(tree.root.username).toBe('YOR0001');
+      expect(tree.root.shadowSlots.left?.shadowCode).toBe('YOR0001-L');
+      expect(tree.root.shadowSlots.right?.shadowCode).toBe('YOR0001-R');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ProductionEncodingService] Unable to persist generated shadow accounts for binary tree render.',
+        expect.any(Error)
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('accepts shadow-derived placement labels and still encodes under the real member slot', async () => {

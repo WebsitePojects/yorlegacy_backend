@@ -133,7 +133,7 @@ create table if not exists activation_codes (
   transferred_at timestamptz,
   transfer_history text,
   process_id text,
-  status text not null default 'available' check (status in ('available', 'assigned', 'used', 'disabled')),
+  status text not null default 'available' check (status in ('unreleased', 'available', 'assigned', 'used', 'disabled')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -308,6 +308,13 @@ create table if not exists shadow_accounts (
   unilevel_enabled boolean not null default false,
   binary_cycle_enabled boolean not null default false,
   notes text,
+  package_tier text,
+  account_type text,
+  activation_code text,
+  pv_value numeric(12, 2) not null default 0,
+  salesmatch_value numeric(12, 2) not null default 0,
+  activated_at timestamptz,
+  last_upgraded_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -364,6 +371,14 @@ alter table if exists network_accounts add column if not exists current_account_
 alter table if exists network_accounts add column if not exists package_tier text;
 alter table if exists network_accounts add column if not exists left_points integer not null default 0;
 alter table if exists network_accounts add column if not exists right_points integer not null default 0;
+
+alter table if exists shadow_accounts add column if not exists package_tier text;
+alter table if exists shadow_accounts add column if not exists account_type text;
+alter table if exists shadow_accounts add column if not exists activation_code text;
+alter table if exists shadow_accounts add column if not exists pv_value numeric(12, 2) not null default 0;
+alter table if exists shadow_accounts add column if not exists salesmatch_value numeric(12, 2) not null default 0;
+alter table if exists shadow_accounts add column if not exists activated_at timestamptz;
+alter table if exists shadow_accounts add column if not exists last_upgraded_at timestamptz;
 
 alter table if exists wallet_ledger add column if not exists wallet_type text not null default 'main';
 alter table if exists wallet_ledger add column if not exists status text not null default 'posted';

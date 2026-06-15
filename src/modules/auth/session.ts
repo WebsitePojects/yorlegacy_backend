@@ -20,11 +20,26 @@ function sign(value: string): string {
     .digest('base64url');
 }
 
+// In-memory revocation store: userId → ms timestamp when sessions were invalidated.
+// Any token with iat < revokedAt[userId] is treated as expired.
+const revokedAt = new Map<string, number>();
+const REVOCATION_PURGE_MS = 48 * 60 * 60 * 1000; // 48 h — max possible session lifetime
+
+export function revokeUserSessions(userId: string): void {
+  revokedAt.set(userId, Date.now());
+  const cutoff = Date.now() - REVOCATION_PURGE_MS;
+  for (const [uid, ts] of revokedAt) {
+    if (ts < cutoff) revokedAt.delete(uid);
+  }
+}
+
 export function createSessionToken(user: SessionUser, rememberMe?: boolean): string {
+  const now = Date.now();
   const ttl = rememberMe ? 30 * 24 * 60 * 60 * 1000 : env.SESSION_TTL_HOURS * 60 * 60 * 1000;
   const payload: SessionPayload = {
     ...user,
-    exp: Date.now() + ttl
+    iat: now,
+    exp: now + ttl
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = sign(encodedPayload);
@@ -49,6 +64,11 @@ export function verifySessionToken(token: string): SessionPayload | null {
     const payload = JSON.parse(base64UrlDecode(encodedPayload)) as SessionPayload;
 
     if (!payload.exp || payload.exp <= Date.now()) {
+      return null;
+    }
+
+    const revoked = revokedAt.get(payload.id);
+    if (revoked && (!payload.iat || payload.iat < revoked)) {
       return null;
     }
 

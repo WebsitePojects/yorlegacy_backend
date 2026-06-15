@@ -113,7 +113,8 @@ function mapMemberRow(row: MemberProfileRow): ProductionMemberProfile {
     payoutDetails: row.payout_details ?? undefined,
     isCompanyAccount: row.is_company_account ?? false,
     isLeaderboardExcluded: row.is_leaderboard_excluded ?? false,
-    companyAccountTag: row.company_account_tag ?? null
+    companyAccountTag: row.company_account_tag ?? null,
+    stockistLevel: (row.stockist_level as import('./encoding-service.js').StockistLevel) ?? 'none'
   };
 }
 
@@ -163,7 +164,9 @@ function mapCodeRow(row: ActivationCodeRow): ProductionActivationCode {
     processId: row.process_id ?? '',
     remarks: row.remarks ?? '',
     settledAt: row.settled_at ?? null,
-    settledByUserId: row.settled_by_user_id ?? null
+    settledByUserId: row.settled_by_user_id ?? null,
+    pendingRecipientUserId: row.transfer_history ?? null,
+    cashierUserId: row.cashier_user_id ?? null
   };
 }
 
@@ -258,6 +261,10 @@ function mapShadowRow(row: ShadowAccountRow): ProductionShadowAccount {
     salesmatchValue: Number(row.salesmatch_value ?? 0),
     activatedAt: row.activated_at ?? null,
     lastUpgradedAt: row.last_upgraded_at ?? null,
+    leftVolume: Number(row.left_volume ?? 0),
+    rightVolume: Number(row.right_volume ?? 0),
+    matchedPoints: Number(row.matched_points ?? 0),
+    totalEarned: Number(row.total_earned ?? 0),
     createdAt: row.created_at ?? isoNow(),
     updatedAt: row.updated_at ?? isoNow()
   };
@@ -411,7 +418,9 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
           process_id: row.processId,
           remarks: row.remarks,
           settled_at: row.settledAt,
-          settled_by_user_id: row.settledByUserId
+          settled_by_user_id: row.settledByUserId,
+          transfer_history: row.pendingRecipientUserId,
+          cashier_user_id: row.cashierUserId
         })),
         { onConflict: 'id' }
       );
@@ -444,6 +453,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     },
     listUsers: async () => {
       const { data } = await client.from('app_users').select('*');
+      return (data ?? []).map(mapUserRow);
+    },
+    listUsersByRole: async (role) => {
+      const { data } = await client.from('app_users').select('*').eq('role', role);
       return (data ?? []).map(mapUserRow);
     },
     listShadowAccounts: async () => {
@@ -486,6 +499,10 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     },
     listWalletLedgerEntriesForUser: async (userId) => {
       const { data } = await client.from('wallet_ledger').select('*').eq('user_id', userId).order('occurred_at', { ascending: true });
+      return (data ?? []).map(mapWalletRow);
+    },
+    listRecentWalletLedger: async (limit) => {
+      const { data } = await client.from('wallet_ledger').select('*').order('occurred_at', { ascending: false }).limit(limit);
       return (data ?? []).map(mapWalletRow);
     },
     appendWalletLedgerEntry: async (entry) => {
@@ -655,6 +672,16 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       const { data } = await query.maybeSingle();
       return data ? mapNetworkRow(data) : null;
     },
+    findPlacementChildrenBatch: async (parentUserIds) => {
+      if (parentUserIds.length === 0) return [];
+      const { data } = await client
+        .from('network_accounts')
+        .select('*')
+        .in('placement_parent_user_id', parentUserIds)
+        .eq('registration_status', 'active')
+        .is('placement_parent_shadow_side', null);
+      return (data ?? []).map(mapNetworkRow);
+    },
     saveSalesmatchBalance: async (balance) => {
       const { error } = await client.from('salesmatch_balances').upsert(
         {
@@ -674,6 +701,14 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
     getSalesmatchBalance: async (userId) => {
       const { data } = await client.from('salesmatch_balances').select('*').eq('user_id', userId).maybeSingle();
       return data ? mapSalesmatchRow(data) : null;
+    },
+    listUsersWithPendingSalesmatch: async () => {
+      const { data } = await client
+        .from('salesmatch_balances')
+        .select('user_id, left_sales, right_sales, matched_sales');
+      return (data ?? [])
+        .filter((row) => Math.min(Number(row.left_sales), Number(row.right_sales)) > Number(row.matched_sales))
+        .map((row) => row.user_id as string);
     },
     getPaidSalesmatchSince: async (userId, sinceIso) => {
       const { data, error } = await client
@@ -757,6 +792,53 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         matchedSales: Number(row.matched_left_value ?? 0),
         paidSalesmatch: Number(row.paid_salesmatch ?? 0),
         forfeitedSalesmatch: Number(row.forfeited_salesmatch ?? 0)
+      }));
+    },
+    recordPairingEvent: async (input) => {
+      const { error } = await client.from('pairing_events').insert({
+        owner_user_id: input.ownerUserId,
+        source_username: input.sourceUsername,
+        left_volume: input.leftVolume,
+        right_volume: input.rightVolume,
+        matched_points: input.matchedPoints,
+        left_remaining: input.leftRemaining,
+        right_remaining: input.rightRemaining,
+        salesmatch_amount: input.salesmatchAmount
+      });
+      assertNoError(error, 'recordPairingEvent');
+    },
+    listPairingEventsForUser: async (userId, limit) => {
+      const { data } = await client
+        .from('pairing_events')
+        .select('*')
+        .eq('owner_user_id', userId)
+        .order('occurred_at', { ascending: false })
+        .limit(limit);
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        ownerUserId: row.owner_user_id,
+        sourceUsername: row.source_username ?? '',
+        leftVolume: Number(row.left_volume ?? 0),
+        rightVolume: Number(row.right_volume ?? 0),
+        matchedPoints: Number(row.matched_points ?? 0),
+        leftRemaining: Number(row.left_remaining ?? 0),
+        rightRemaining: Number(row.right_remaining ?? 0),
+        salesmatchAmount: Number(row.salesmatch_amount ?? 0),
+        occurredAt: row.occurred_at ?? isoNow()
+      }));
+    },
+    reconcileShadowEarnings: async () => {
+      // Recomputes shadow sub-leg volumes and pays the increase in matched to owners,
+      // tagged left/right_shadow_earning. Encapsulated in a SQL function (idempotent).
+      const { data, error } = await client.rpc('reconcile_shadow_earnings');
+      if (error) {
+        console.error('[reconcileShadowEarnings] rpc error:', error.message);
+        return [];
+      }
+      return (data ?? []).map((row: { paid_user_id: string; entry: string; amount: number | string }) => ({
+        userId: row.paid_user_id,
+        entryType: row.entry,
+        amount: Number(row.amount ?? 0)
       }));
     },
     enqueueCompensation: async (item) => {
@@ -881,11 +963,13 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         product_type: row.productType,
         quantity: row.quantity,
         unit_price: row.unitPrice,
+        srp_price: row.srpPrice,
         total_amount: row.totalAmount,
         pv_earned: row.pvEarned,
         activation_code: row.activationCode,
         transaction_date: row.transactionDate,
-        created_at: row.createdAt
+        created_at: row.createdAt,
+        global_bonus_included: false
       });
     },
 
@@ -917,6 +1001,43 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         .gte('created_at', monthStart)
         .lte('created_at', monthEnd);
       return (data ?? []).reduce((sum, r) => sum + Number(r.credit_amount ?? 0), 0);
+    },
+
+    sumRepurchasePvForUserInMonth: async (userId, yearMonthPrefix) => {
+      const monthStart = `${yearMonthPrefix}-01T00:00:00.000Z`;
+      const [year, month] = yearMonthPrefix.split('-').map(Number);
+      const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const monthEnd = `${yearMonthPrefix}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+      const { data } = await client
+        .from('repurchases')
+        .select('pv_earned')
+        .eq('user_id', userId)
+        .gte('transaction_date', monthStart)
+        .lte('transaction_date', monthEnd);
+      return (data ?? []).reduce((sum, r) => sum + Number(r.pv_earned ?? 0), 0);
+    },
+
+    setStockistLevel: async (userId, level) => {
+      const { error } = await client
+        .from('member_profiles')
+        .update({ stockist_level: level, updated_at: isoNow() })
+        .eq('user_id', userId);
+      assertNoError(error, 'setStockistLevel');
+    },
+
+    sumPendingGlobalBonusNetSales: async () => {
+      const { data } = await client
+        .from('repurchases')
+        .select('unit_price')
+        .eq('global_bonus_included', false);
+      return (data ?? []).reduce((sum, r) => sum + Number(r.unit_price ?? 0), 0);
+    },
+
+    markRepurchasesGlobalBonusIncluded: async () => {
+      await client
+        .from('repurchases')
+        .update({ global_bonus_included: true })
+        .eq('global_bonus_included', false);
     }
   };
 }

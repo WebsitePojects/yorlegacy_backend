@@ -158,9 +158,11 @@ describe('Production encoding compensation matrix', () => {
       );
       await repo.saveActivationCodes([{ ...generatedCode, status: 'available', paymentStatus: 'paid' }]);
 
+      // Placed at the sponsor's left-shadow-left slot so the new member is the
+      // sponsor's A and receives the binary cycle (GATE-BIN-CYCLE-UPLINE-A-20260614).
       const reservation = await service.createPlacementReservation(
         { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
-        { placementParentUsername: 'YOR0001', placementSide: 'left' }
+        { placementParentUsername: 'YOR0001-L', placementSide: 'left' }
       );
 
       await service.submitRegistration(null, {
@@ -182,7 +184,12 @@ describe('Production encoding compensation matrix', () => {
       const sponsorLedgerAfterQueue = await repo.listWalletLedgerEntriesForUser('sponsor-user');
       expect(sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'salesmatch')?.creditAmount).toBe(expectedSalesmatch);
 
-      const binaryEntry = sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'binary_cycle');
+      // Binary cycle is paid to the sponsor's A (the placed member), not the sponsor.
+      // A is the same tier here, so the amount equals the sponsor's package percent.
+      expect(sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'binary_cycle')).toBeUndefined();
+      const aMember = await repo.findMemberByUsername(`${packageTier.toLowerCase()}Prospect`);
+      const aLedger = await repo.listWalletLedgerEntriesForUser(aMember!.userId);
+      const binaryEntry = aLedger.find((entry) => entry.entryType === 'binary_cycle');
       if (expectedBinaryCycle === 0) {
         expect(binaryEntry).toBeUndefined();
       } else {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { rateLimit } from '../lib/rate-limit.js';
+import { addLiveClient } from '../lib/live-events.js';
 import { moneyAmountSchema, parseBody } from '../lib/validate.js';
 import { submitSupportMessage } from '../modules/support/support-service.js';
 import { buildMemberOffice } from '../modules/member/office-service.js';
@@ -183,6 +184,20 @@ memberRouter.get('/api/member/genealogy/binary-tree', requireRole('member', 'adm
 });
 
 memberRouter.get('/api/member/genealogy/sponsor-tree', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  const rootUsername = typeof req.query.rootUsername === 'string' ? req.query.rootUsername : undefined;
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable.' });
+      return;
+    }
+    void service.buildScopedSponsorGenealogyCenter(req.authUser!, rootUsername).then((payload) => {
+      res.status(200).json(payload);
+    }).catch((error) => {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to build sponsor tree.' });
+    });
+    return;
+  }
   res.status(200).json(buildSponsorGenealogyCenter(req.authUser!));
 });
 
@@ -235,6 +250,65 @@ memberRouter.get('/api/member/activation-codes', requireRole('member', 'admin', 
   }
 });
 
+// Live updates stream (SSE). The dashboard opens this once; the compensation engine
+// pushes 'update' events here whenever this member's PV or income changes, so the UI
+// ticks live without polling.
+memberRouter.get('/api/member/live', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.write(': connected\n\n');
+  const remove = addLiveClient(req.authUser!.id, { write: (chunk) => res.write(chunk) });
+  // Keep-alive comment every 25s so proxies don't drop the idle connection.
+  const keepAlive = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { /* closed */ }
+  }, 25_000);
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    remove();
+  });
+});
+
+// On-demand trigger: immediately runs salesmatch reconcile for the calling user.
+// Idempotent — safe to call on every income page load. The processId lock in
+// postLedgerIfNeeded ensures the same matched amount is never double-credited.
+memberRouter.post('/api/member/trigger-compensation', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        const [smb, queue] = await Promise.all([
+          service.reconcileSalesmatchForUser(req.authUser!.id),
+          service.processCompensationQueue(50)
+        ]);
+        res.status(200).json({ credited: smb, processed: queue.processed.length });
+        return;
+      } catch (err) {
+        console.error('[trigger-compensation] error:', err);
+      }
+    }
+  }
+  res.status(200).json({ credited: 0, processed: 0 });
+});
+
+memberRouter.get('/api/member/salesmatch/pairing-events', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (service) {
+      try {
+        res.status(200).json(await service.getMemberPairingEvents(req.authUser!.id));
+        return;
+      } catch (err) {
+        console.error('[pairing-events] Production error:', err);
+      }
+    }
+  }
+  res.status(200).json({ moneyMode: 'sandbox', events: [] });
+});
+
 memberRouter.get('/api/member/direct-referrals', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();
@@ -265,11 +339,35 @@ memberRouter.get('/api/member/search-profile', requireRole('member', 'admin', 'c
   res.status(200).json(member);
 });
 
-memberRouter.get('/api/member/members/search', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), (req, res) => {
+memberRouter.get('/api/member/members/search', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
   if (query.length < 3) {
     res.status(200).json({ results: [] });
+    return;
+  }
+
+  // Code transfer can target anyone in the directory (in-network to any depth and
+  // outside the network), so this resolves against the real member directory in
+  // production instead of the sandbox parity store.
+  if (isProductionMode()) {
+    const service = getProductionEncodingService();
+    if (!service) {
+      res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+      return;
+    }
+    try {
+      const payload = await service.listAdminMembersForManagement({ query, page: 1, pageSize: 20 });
+      res.status(200).json({
+        results: payload.rows.slice(0, 20).map((member) => ({
+          username: member.username,
+          displayName: member.fullName,
+          packageTier: member.packageTier
+        }))
+      });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to search members.' });
+    }
     return;
   }
 
@@ -491,6 +589,9 @@ memberRouter.post(
       try {
         res.status(200).json(await service.submitEncashment(req.authUser!, amount));
       } catch (error) {
+        // The client maps DB/technical errors to a generic toast, so log the real
+        // cause server-side (visible via `pm2 logs`) for diagnosis.
+        console.error('[encash-submit] failed:', error);
         res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit encashment.' });
       }
       return;

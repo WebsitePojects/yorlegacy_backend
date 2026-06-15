@@ -166,11 +166,14 @@ export async function findAppUserByUsername(
       return toSessionUser(exactUser);
     }
 
-    // 5. Match by display_name — covers cashier/staff accounts where display_name is their login handle
+    // 5. Match by display_name — covers cashier/staff accounts where display_name is their login handle.
+    // Intentionally excludes 'member' role: members authenticate by username from member_profiles,
+    // not display_name, to prevent stale display_name from granting access after a username change.
     const { data: displayNameUser } = await supabase
       .from('app_users')
       .select('id,email,display_name,role,status,password_hash,password_salt')
       .ilike('display_name', username.trim())
+      .neq('role', 'member')
       .maybeSingle<AppUserRow>();
 
     if (displayNameUser) {

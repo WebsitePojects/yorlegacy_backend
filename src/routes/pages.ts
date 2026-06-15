@@ -108,13 +108,19 @@ pagesRouter.post('/api/registration/submit', registrationSubmitRateLimit, async 
 
     try {
       const result = await service.submitRegistration(request.authUser ?? null, payload);
-      // Process the compensation queue inline so binary points, SMB, and binary cycle
-      // are credited immediately rather than sitting in the queue indefinitely.
-      try {
-        await service.processCompensationQueue(50);
-      } catch (queueError) {
-        console.error('[compensation-queue] Processing error after registration:', queueError);
-      }
+      // Respond immediately — registration is instant. The PV/SMB walk-up is processed in
+      // the background (fire-and-forget here + the 10s drainer as backstop), and the live
+      // SSE stream pushes the credited points to dashboards as soon as they land. This is
+      // what removes the multi-second wait while the ancestor chain is credited.
+      // GATE-SMB-INSTANT-20260615: drain compensation + reconcile salesmatch right after
+      // the response so PV propagation, SMB pairing, binary cycle, and shadow earnings
+      // credit within ~1s of encode (the 10s drainer is the backstop). Fire-and-forget so
+      // the registration request itself never blocks on the tree walk.
+      void service
+        .processCompensationQueue(200)
+        .then(() => service.reconcileShadowEarnings())
+        .then(() => service.reconcileSalesmatchAllEligible())
+        .catch((queueError) => console.error('[compensation-queue] background processing error:', queueError));
       response.status(200).json(result);
     } catch (error) {
       response.status(400).json({ message: error instanceof Error ? error.message : 'Unable to submit registration.' });

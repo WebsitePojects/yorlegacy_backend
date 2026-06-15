@@ -10,6 +10,7 @@ export type SessionUser = {
 
 export type SessionPayload = SessionUser & {
   exp: number;
+  iat: number; // issued-at, for revocation checking
 };
 
 export type OperationalMetric = {

@@ -102,7 +102,9 @@ function seedMaintenanceCode(
     processId: `seed:maint:${id}`,
     remarks: '',
     settledAt: null,
-    settledByUserId: null
+    settledByUserId: null,
+    pendingRecipientUserId: null,
+    cashierUserId: null
   };
 }
 
@@ -220,24 +222,19 @@ describe('Lifestyle Rewards — applyRepurchaseLifestyle', () => {
   });
 });
 
-describe('submitProductRepurchase — combined lifestyle + unilevel trigger', () => {
-  it('credits lifestyle to purchaser and unilevel up 3-level sponsor chain', async () => {
-    const grandpaUser = seedUser('gp', 'Grandpa', 'gp@yor.local');
+describe('submitProductRepurchase — lifestyle inline, unilevel deferred to monthly batch', () => {
+  it('credits lifestyle to the buyer immediately and defers unilevel (monthly)', async () => {
     const parentUser  = seedUser('pa', 'Parent', 'pa@yor.local');
     const memberUser  = seedUser('mb', 'Member', 'mb@yor.local');
-
-    const grandpaMember = seedMember('gp', 'grandpa1', 'YOR-MEMBER-0001', 'VIP',      'Grandpa',  null);
-    const parentMember  = seedMember('pa', 'parent1',  'YOR-MEMBER-0002', 'Standard', 'Parent',   'YOR-MEMBER-0001');
-    const memberMember  = seedMember('mb', 'member1',  'YOR-MEMBER-0003', 'Classic',  'Member',   'YOR-MEMBER-0002');
-
-    const grandpaNetwork = { ...seedNetwork('gp', 'VIP',      null),  sponsorUserId: null };
-    const parentNetwork  = { ...seedNetwork('pa', 'Standard', 'gp'),  sponsorUserId: 'gp'  };
-    const memberNetwork  = { ...seedNetwork('mb', 'Classic',  'pa'),  sponsorUserId: 'pa'  };
+    const parentMember = seedMember('pa', 'parent1', 'YOR-MEMBER-0002', 'Standard', 'Parent', null);
+    const memberMember = seedMember('mb', 'member1', 'YOR-MEMBER-0003', 'Classic',  'Member', 'YOR-MEMBER-0002');
+    const parentNetwork = { ...seedNetwork('pa', 'Standard', null), sponsorUserId: null };
+    const memberNetwork = { ...seedNetwork('mb', 'Classic',  'pa'),  sponsorUserId: 'pa' };
 
     const repo = createInMemoryProductionEncodingRepository({
-      users: [grandpaUser, parentUser, memberUser],
-      members: [grandpaMember, parentMember, memberMember],
-      networkAccounts: [grandpaNetwork, parentNetwork, memberNetwork]
+      users: [parentUser, memberUser],
+      members: [parentMember, memberMember],
+      networkAccounts: [parentNetwork, memberNetwork]
     });
     const svc = new ProductionEncodingService(repo);
 
@@ -248,18 +245,71 @@ describe('submitProductRepurchase — combined lifestyle + unilevel trigger', ()
       memberPackageTier: 'Classic'
     });
 
-    // Lifestyle goes to the buyer
+    // Lifestyle posts inline to the buyer (1% of SRP 500 = 5).
     expect(result.lifestyle.credited).toBe(5);
-
-    // Unilevel: L1 = parent (10% of 500 = 50), L2 = grandpa (8% of 500 = 40)
-    expect(result.unilevel.levelsCredited).toBe(2);
-    expect(result.unilevel.totalCredited).toBeCloseTo(90, 1);
-
-    // Confirm lifestyle wallet entry is on the BUYER not the sponsor
     const buyerLedger = await repo.listWalletLedgerEntriesForUser('mb');
     expect(buyerLedger.some((e) => e.entryType === 'lifestyle_rewards')).toBe(true);
 
+    // Unilevel is NOT credited inline anymore — it is settled by the monthly batch.
+    expect(result.unilevel.levelsCredited).toBe(0);
+    const parentLedgerInline = await repo.listWalletLedgerEntriesForUser('pa');
+    expect(parentLedgerInline.some((e) => e.entryType === 'unilevel')).toBe(false);
+  });
+});
+
+describe('reconcileMonthlyUnilevel — sponsor-tree monthly batch with 200-PV maintenance', () => {
+  it('pays maintained earners a % of downline repurchase PV, and pays nothing to a non-maintaining earner', async () => {
+    // Sponsor (bloodline) chain: buyer -> parent -> grandpa. Grandpa is NOT maintained.
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [seedUser('gp', 'Grandpa', 'gp@yor.local'), seedUser('pa', 'Parent', 'pa@yor.local'), seedUser('mb', 'Member', 'mb@yor.local')],
+      members: [
+        seedMember('gp', 'grandpa1', 'YOR-MEMBER-0001', 'VIP', 'Grandpa', null),
+        seedMember('pa', 'parent1', 'YOR-MEMBER-0002', 'Standard', 'Parent', 'YOR-MEMBER-0001'),
+        seedMember('mb', 'member1', 'YOR-MEMBER-0003', 'Classic', 'Member', 'YOR-MEMBER-0002')
+      ],
+      networkAccounts: [
+        { ...seedNetwork('gp', 'VIP', null), sponsorUserId: null },
+        { ...seedNetwork('pa', 'Standard', 'gp'), sponsorUserId: 'gp' },
+        { ...seedNetwork('mb', 'Classic', 'pa'), sponsorUserId: 'pa' }
+      ]
+    });
+    const svc = new ProductionEncodingService(repo);
+    const month = '2026-06';
+
+    // Buyer accumulates 220 PV (11 products) — also satisfies their own maintenance.
+    // Parent accumulates 200 PV (maintained). Grandpa accumulates 0 (NOT maintained).
+    for (let i = 0; i < 11; i++) {
+      await repo.insertRepurchase({
+        id: `rb-${i}`, processKey: `rb-${i}`, userId: 'mb', productCode: 'YOR-PERFUME', productName: 'Yor Perfume',
+        productType: 'perfume', quantity: 1, unitPrice: 350, srpPrice: 500, totalAmount: 350, pvEarned: 20,
+        activationCode: `C-${i}`, transactionDate: `${month}-10T08:00:00.000Z`, createdAt: `${month}-10T08:00:00.000Z`
+      });
+    }
+    for (let i = 0; i < 10; i++) {
+      await repo.insertRepurchase({
+        id: `rp-${i}`, processKey: `rp-${i}`, userId: 'pa', productCode: 'YOR-PERFUME', productName: 'Yor Perfume',
+        productType: 'perfume', quantity: 1, unitPrice: 300, srpPrice: 500, totalAmount: 300, pvEarned: 20,
+        activationCode: `P-${i}`, transactionDate: `${month}-11T08:00:00.000Z`, createdAt: `${month}-11T08:00:00.000Z`
+      });
+    }
+
+    const res = await svc.reconcileMonthlyUnilevel(month);
+    // Only parent earns: buyer has no downline; grandpa is not maintained (skipped).
+    expect(res.earners).toBe(1);
+
+    // Parent (maintained, 200 PV): earns L1 10% of buyer's 220 PV = 22.
     const parentLedger = await repo.listWalletLedgerEntriesForUser('pa');
-    expect(parentLedger.some((e) => e.entryType === 'unilevel')).toBe(true);
+    const parentUni = parentLedger.filter((e) => e.entryType === 'unilevel').reduce((s, e) => s + e.creditAmount, 0);
+    expect(parentUni).toBeCloseTo(22, 2);
+
+    // Grandpa is NOT maintained (0 PV) → earns nothing despite downline volume.
+    const grandpaLedger = await repo.listWalletLedgerEntriesForUser('gp');
+    expect(grandpaLedger.some((e) => e.entryType === 'unilevel')).toBe(false);
+
+    // Idempotent: re-running the same month does not double-credit.
+    await svc.reconcileMonthlyUnilevel(month);
+    const parentUniAgain = (await repo.listWalletLedgerEntriesForUser('pa'))
+      .filter((e) => e.entryType === 'unilevel').reduce((s, e) => s + e.creditAmount, 0);
+    expect(parentUniAgain).toBeCloseTo(22, 2);
   });
 });

@@ -110,6 +110,8 @@ export interface MemberProfileRow {
   is_company_account: boolean | null;
   is_leaderboard_excluded: boolean | null;
   company_account_tag: string | null;
+  // Stockist designation (migration add_stockist_level_to_member_profiles, 2026-06-13).
+  stockist_level: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -181,6 +183,7 @@ export interface ActivationCodeRow {
   released_at: string | null;
   used_at: string | null;
   transfer_history: string | null;
+  cashier_user_id: string | null;
   process_id: string | null;
   registration_eligible: boolean;
   locked_direct_referral_bonus: number;
@@ -260,6 +263,10 @@ export interface ShadowAccountRow {
   salesmatch_value: number | null;
   activated_at: string | null;
   last_upgraded_at: string | null;
+  left_volume: number | null;
+  right_volume: number | null;
+  matched_points: number | null;
+  total_earned: number | null;
   created_at: string;
   updated_at: string;
 }

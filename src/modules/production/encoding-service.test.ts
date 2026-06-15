@@ -100,7 +100,9 @@ function seedCode(overrides: Partial<ProductionActivationCode> = {}): Production
     processId: overrides.processId ?? 'seed:code:1',
     remarks: overrides.remarks ?? '',
     settledAt: overrides.settledAt ?? null,
-    settledByUserId: overrides.settledByUserId ?? null
+    settledByUserId: overrides.settledByUserId ?? null,
+    pendingRecipientUserId: overrides.pendingRecipientUserId ?? null,
+    cashierUserId: overrides.cashierUserId ?? null
   };
 }
 
@@ -155,7 +157,10 @@ describe('ProductionEncodingService', () => {
     );
   });
 
-  it('accepts maintenance-family product labels when generating activation codes', async () => {
+  it('generates product (maintenance-point) codes from the normalized product catalog', async () => {
+    // Product codes are normalized to Perfume / Eyedrops / Perfume Refill (no brand
+    // variants like "Hugo Boss"). Every product code is a unilevel maintenance point
+    // (20 repurchase PV) and never a registration/earning code.
     const repo = createInMemoryProductionEncodingRepository({
       users: [seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin')]
     });
@@ -165,7 +170,7 @@ describe('ProductionEncodingService', () => {
       { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' },
       {
         quantity: 1,
-        packageTier: 'Yor Perfume - Hugo Boss',
+        packageTier: 'Yor Perfume',
         codeFamily: 'YOR MAINTENANCE'
       }
     );
@@ -176,7 +181,7 @@ describe('ProductionEncodingService', () => {
     expect(storedCode).toMatchObject({
       code: 'PDYM001001',
       codeFamily: 'YOR MAINTENANCE',
-      packageTier: 'Yor Perfume - Hugo Boss',
+      packageTier: 'Yor Perfume',
       registrationEligible: false,
       lockedDirectReferralBonus: 0,
       lockedSalesmatchValue: 0,
@@ -189,7 +194,7 @@ describe('ProductionEncodingService', () => {
 
     expect(generatedCode).toMatchObject({
       codeFamily: 'YOR MAINTENANCE',
-      packageTier: 'Yor Perfume - Hugo Boss',
+      packageTier: 'Yor Perfume',
       registrationEligible: false
     });
   });
@@ -256,9 +261,11 @@ describe('ProductionEncodingService', () => {
     expect(autoBalancePreview.canProceed).toBe(true);
     expect(autoBalancePreview.placement?.placementSide).toBe('left');
 
+    // Placed at the sponsor's left-shadow-left slot so the new member becomes the
+    // sponsor's A-position holder (GATE-BIN-CYCLE-UPLINE-A-20260614).
     const reservation = await service.createPlacementReservation(
       { id: 'sponsor-user', name: 'Sponsor', email: 'sponsor@yor.local', role: 'member' },
-      { placementParentUsername: 'YOR0001', placementSide: 'left' }
+      { placementParentUsername: 'YOR0001-L', placementSide: 'left' }
     );
 
     const preview = await service.previewRegistration(null, {
@@ -293,7 +300,13 @@ describe('ProductionEncodingService', () => {
     await service.processCompensationQueue();
     const sponsorLedgerAfterQueue = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'salesmatch')?.creditAmount).toBe(2500);
-    expect(sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'binary_cycle')?.creditAmount).toBe(75);
+    // GATE-BIN-CYCLE-UPLINE-A-20260614: the sponsor no longer self-earns binary cycle.
+    // It flows to the sponsor's A (the member just placed at its left-shadow-left slot),
+    // computed from that A member's own package percent (Standard 3% of 2500 = 75).
+    expect(sponsorLedgerAfterQueue.find((entry) => entry.entryType === 'binary_cycle')).toBeUndefined();
+    const aMember = await repo.findMemberByUsername('YOR1001');
+    const aLedger = await repo.listWalletLedgerEntriesForUser(aMember!.userId);
+    expect(aLedger.find((entry) => entry.entryType === 'binary_cycle')?.creditAmount).toBe(75);
   });
 
   it('posts Get Yor Five on the fifth same-package direct registration', async () => {
@@ -550,9 +563,11 @@ describe('ProductionEncodingService', () => {
     });
     const service = new ProductionEncodingService(repo);
     const res = await service.creditUnilevelForRepurchase({ repurchasingUserId: 'uni-m', sku: 'YOR-REFILL-HUGO-BOSS', repurchaseRef: 'rp-2' });
-    expect(res.repurchasePv).toBe(150);
+    // All products (perfume, eyedrops, perfume refill) carry 20 repurchase PV (official
+    // Yor Unilevel Bonus plan). Unilevel pays a % of repurchase PV, not the peso price.
+    expect(res.repurchasePv).toBe(20);
     const sLedger = await repo.listWalletLedgerEntriesForUser('uni-s');
-    expect(sLedger.find((e) => e.entryType === 'unilevel')?.creditAmount).toBe(15); // L1 10% of 150
+    expect(sLedger.find((e) => e.entryType === 'unilevel')?.creditAmount).toBe(2); // L1 10% of 20 PV
   });
 
   it('FS registration posts no direct referral and queues no binary PV, even when paid', async () => {
@@ -761,7 +776,7 @@ describe('ProductionEncodingService', () => {
     expect(await repo.listPendingCompensation(10)).toHaveLength(0);
   });
 
-  it('a locked upline (no personally-sponsored qualified direct) accumulates volume but earns no salesmatch', async () => {
+  it('an eligible (PD) upline earns salesmatch on spillover volume — no personal-direct unlock gate', async () => {
     const uplineUser = seedUser('upline-user', 'Upline', 'upline@yor.local');
     const sponsorUser = seedUser('sponsor-user', 'Sponsor', 'sponsor@yor.local');
     const uplineMember = seedMember('upline-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Upline Member');
@@ -806,13 +821,16 @@ describe('ProductionEncodingService', () => {
     );
     await service.processCompensationQueue();
 
+    // GATE-PAIR-ELIGIB-REMOVE-20260615: the Nogatu personal-direct unlock gate is gone.
+    // A PD upline with volume on both legs earns salesmatch even when the matching
+    // volume arrived via spillover (sponsored by someone else).
     const uplineLedger = await repo.listWalletLedgerEntriesForUser('upline-user');
-    expect(uplineLedger.filter((entry) => entry.entryType === 'salesmatch')).toHaveLength(0);
-    expect(uplineLedger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+    const smb = uplineLedger.filter((entry) => entry.entryType === 'salesmatch');
+    expect(smb).toHaveLength(1);
+    expect(smb[0].creditAmount).toBe(2500); // min(2500,2500) matched, Standard cap 60000
 
     const balance = await repo.getSalesmatchBalance('upline-user');
-    // Legs accumulated and carried — nothing consumed while locked.
-    expect(balance).toMatchObject({ leftSales: 2500, rightSales: 2500, matchedSales: 0 });
+    expect(balance).toMatchObject({ leftSales: 2500, rightSales: 2500, matchedSales: 2500 });
   });
 
   it('an FS upline never earns salesmatch while volume passes through to higher uplines', async () => {
@@ -928,7 +946,7 @@ describe('ProductionEncodingService', () => {
         phone: '+63 999 100 0003',
         password: 'Password123!',
         activationCode: 'YOR-ACT-00009008',
-        placementParentUsername: 'YOR0001',
+        placementParentUsername: 'YOR0001-L',
         placementSide: 'left'
       }
     );
@@ -940,10 +958,14 @@ describe('ProductionEncodingService', () => {
     expect(salesmatch[0].creditAmount).toBe(200);
     expect(salesmatch[0].notes).toContain('forfeited at package cap');
 
-    const binaryCycle = ledger.filter((entry) => entry.entryType === 'binary_cycle');
+    // GATE-BIN-CYCLE-UPLINE-A-20260614: the sponsor does not self-earn binary cycle;
+    // it flows to its A (the placed member YOR9008). GATE-BIN-CYCLE-NOCAP-20260613:
+    // uncapped — 2% of the FULL matched 500 (= 10), not the SMB-capped 200.
+    expect(ledger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+    const aMember = await repo.findMemberByUsername('YOR9008');
+    const aLedger = await repo.listWalletLedgerEntriesForUser(aMember!.userId);
+    const binaryCycle = aLedger.filter((entry) => entry.entryType === 'binary_cycle');
     expect(binaryCycle).toHaveLength(1);
-    // GATE-BIN-CYCLE-NOCAP-20260613: binary cycle is uncapped — 2% of the FULL
-    // matched 500, not the SMB-capped 200.
     expect(binaryCycle[0].creditAmount).toBe(10);
 
     const snapshots = await repo.listPairingSnapshotsForUser('sponsor-user');
@@ -1008,7 +1030,7 @@ describe('ProductionEncodingService', () => {
         phone: '+63 999 100 0004',
         password: 'Password123!',
         activationCode: 'YOR-ACT-00009009',
-        placementParentUsername: 'YOR0001',
+        placementParentUsername: 'YOR0001-L',
         placementSide: 'left'
       }
     );
@@ -1016,14 +1038,20 @@ describe('ProductionEncodingService', () => {
 
     const ledger = await repo.listWalletLedgerEntriesForUser('sponsor-user');
     expect(ledger.filter((entry) => entry.entryType === 'salesmatch' && entry.processId !== 'seed:salesmatch:cap')).toHaveLength(0);
-    // GATE-BIN-CYCLE-NOCAP-20260613: SMB payout is fully capped (payable 0) but
-    // binary cycle is uncapped — 2% of the FULL matched 500 still posts.
-    const binaryCycle = ledger.filter((entry) => entry.entryType === 'binary_cycle');
+    // GATE-BIN-CYCLE-UPLINE-A-20260614: sponsor does not self-earn; the cycle flows to
+    // its A (YOR9009). GATE-BIN-CYCLE-NOCAP-20260613: SMB payout fully capped (payable 0)
+    // but binary cycle is uncapped — 2% of the FULL matched 500 (= 10) still posts.
+    expect(ledger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
+    const aMember = await repo.findMemberByUsername('YOR9009');
+    const aLedger = await repo.listWalletLedgerEntriesForUser(aMember!.userId);
+    const binaryCycle = aLedger.filter((entry) => entry.entryType === 'binary_cycle');
     expect(binaryCycle).toHaveLength(1);
     expect(binaryCycle[0].creditAmount).toBe(10);
 
+    // GATE-PV-GROSS-20260614: legs hold GROSS lifetime volume (not reduced on match);
+    // matchedSales is the cumulative matched running total.
     const balance = await repo.getSalesmatchBalance('sponsor-user');
-    expect(balance).toMatchObject({ leftSales: 0, rightSales: 0, matchedSales: 500 });
+    expect(balance).toMatchObject({ leftSales: 500, rightSales: 500, matchedSales: 500 });
 
     const snapshots = await repo.listPairingSnapshotsForUser('sponsor-user');
     expect(snapshots[0]).toMatchObject({ matchedSales: 500, paidSalesmatch: 0, forfeitedSalesmatch: 500 });
@@ -1430,8 +1458,7 @@ describe('ProductionEncodingService', () => {
           salesmatchValue: 500
         }),
         expect.objectContaining({
-          shadowCode: 'YOR0001-R',
-          state: 'reserved_shadow'
+          shadowCode: 'YOR0001-R'
         })
       ])
     );
@@ -1549,8 +1576,13 @@ describe('ProductionEncodingService', () => {
       salesmatchValue: 5000
     });
 
+    // GATE-SHADOW-ACT-20260613: the owner's own left-shadow and right-shadow PV must NOT
+    // pair each other at the owner level — a shadow only earns SMB from valid pairing
+    // activity UNDER its own network, then transfers to the owner's main wallet (handled
+    // by reconcileShadowEarnings, not the inline queue). So activating both sibling shadows
+    // with no downline under them yields no inline salesmatch and no binary cycle.
     const ownerLedger = await repo.listWalletLedgerEntriesForUser('owner-user');
-    expect(ownerLedger.filter((entry) => entry.entryType === 'salesmatch').map((entry) => entry.creditAmount)).toEqual([5000]);
+    expect(ownerLedger.filter((entry) => entry.entryType === 'salesmatch').map((entry) => entry.creditAmount)).toEqual([]);
     expect(ownerLedger.filter((entry) => entry.entryType === 'binary_cycle')).toHaveLength(0);
 
     const consumedCodes = await repo.findActivationCodesByCodes(['FSBU001010', 'PDBA001011']);

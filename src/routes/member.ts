@@ -707,7 +707,7 @@ memberRouter.get('/api/member/rank', requireRole('member', 'admin', 'cashier', '
     moneyMode: 'sandbox',
     level: 0,
     rankName: 'Unranked',
-    totalIncome: 0,
+    unilevelIncome: 0,
     currentThreshold: 0,
     nextRankName: 'Manager',
     nextThreshold: 50000,

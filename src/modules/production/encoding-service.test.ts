@@ -482,23 +482,27 @@ describe('ProductionEncodingService', () => {
       members: [member],
       networkAccounts: [seedNetwork('rank-m1', 'VIP', null, null, null)],
       walletLedger: [
+        // GATE-RANK-UNILEVEL-20260615: only UNILEVEL income gates rank. Total income here
+        // is 160k (100k direct referral + 60k unilevel), but rank reads the 60k unilevel only.
         { id: 'r1', userId: 'rank-m1', walletType: 'main', entryType: 'direct_referral', sourceReference: 'x', creditAmount: 100000, debitAmount: 0, balanceAfter: 100000, processId: 'r:1', notes: '', occurredAt: '2026-06-01T00:00:00.000Z', status: 'posted' },
-        { id: 'r2', userId: 'rank-m1', walletType: 'main', entryType: 'salesmatch', sourceReference: 'y', creditAmount: 20000, debitAmount: 0, balanceAfter: 120000, processId: 'r:2', notes: '', occurredAt: '2026-06-02T00:00:00.000Z', status: 'posted' },
-        { id: 'r3', userId: 'rank-m1', walletType: 'main', entryType: 'encashment', sourceReference: 'z', creditAmount: 0, debitAmount: 50000, balanceAfter: 70000, processId: 'r:3', notes: '', occurredAt: '2026-06-03T00:00:00.000Z', status: 'posted' }
+        { id: 'r2', userId: 'rank-m1', walletType: 'main', entryType: 'unilevel', sourceReference: 'y', creditAmount: 60000, debitAmount: 0, balanceAfter: 160000, processId: 'r:2', notes: '', occurredAt: '2026-06-02T00:00:00.000Z', status: 'posted' },
+        { id: 'r3', userId: 'rank-m1', walletType: 'main', entryType: 'encashment', sourceReference: 'z', creditAmount: 0, debitAmount: 50000, balanceAfter: 110000, processId: 'r:3', notes: '', occurredAt: '2026-06-03T00:00:00.000Z', status: 'posted' }
       ]
     });
     const service = new ProductionEncodingService(repo);
     const rank = await service.getMemberRank('rank-m1');
-    // gross credits = 120000 (debits ignored) -> Bronze Director
-    expect(rank.totalIncome).toBe(120000);
-    expect(rank.rankName).toBe('Bronze Director');
-    expect(rank.level).toBe(2);
-    expect(rank.nextRankName).toBe('Silver Director');
+    // unilevel income = 60000 -> Manager (NOT Bronze, despite 160k total income)
+    expect(rank.unilevelIncome).toBe(60000);
+    expect(rank.rankName).toBe('Manager');
+    expect(rank.level).toBe(1);
+    expect(rank.nextRankName).toBe('Bronze Director');
   });
 
   it('leaderboard ranks true members by income and excludes company-tagged accounts (item 8)', async () => {
+    // Rank tier is gated by unilevel income (GATE-RANK-UNILEVEL-20260615), so seed
+    // unilevel credits to drive the rank names asserted below.
     const mkLedger = (userId: string, amount: number) => ({
-      id: `l-${userId}`, userId, walletType: 'main' as const, entryType: 'direct_referral' as const,
+      id: `l-${userId}`, userId, walletType: 'main' as const, entryType: 'unilevel' as const,
       sourceReference: 'x', creditAmount: amount, debitAmount: 0, balanceAfter: amount,
       processId: `p:${userId}`, notes: '', occurredAt: '2026-06-01T00:00:00.000Z', status: 'posted' as const
     });

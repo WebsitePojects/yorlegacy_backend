@@ -1441,8 +1441,11 @@ export class ProductionEncodingService {
   // image-2 rank ladder.
   async getMemberRank(userId: string): Promise<RankProgress & { moneyMode: MoneyMode }> {
     const ledger = await this.repo.listWalletLedgerEntriesForUser(userId);
-    const totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
-    return { moneyMode: this.repo.getMoneyMode(), ...rankForIncome(totalIncome) };
+    // GATE-RANK-UNILEVEL-20260615: rank is gated by lifetime UNILEVEL income only.
+    const unilevelIncome = ledger
+      .filter((entry) => entry.entryType === 'unilevel')
+      .reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+    return { moneyMode: this.repo.getMoneyMode(), ...rankForIncome(unilevelIncome) };
   }
 
   // Real-DB tables for admin operational modules that otherwise render the static
@@ -1478,6 +1481,10 @@ export class ProductionEncodingService {
           const net = networkMap.get(m.userId);
           const ledger = await this.repo.listWalletLedgerEntriesForUser(m.userId);
           const income = ledger.reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
+          // GATE-RANK-UNILEVEL-20260615: rank is gated by lifetime UNILEVEL income only.
+          const unilevelIncome = ledger
+            .filter((e) => e.entryType === 'unilevel')
+            .reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
           return {
             username: m.username,
             package: m.packageTier,
@@ -1485,7 +1492,8 @@ export class ProductionEncodingService {
             leftPoints: net?.leftPoints ?? 0,
             rightPoints: net?.rightPoints ?? 0,
             totalIncome: php(income),
-            currentRank: rankForIncome(income).rankName
+            unilevelIncome: php(unilevelIncome),
+            currentRank: rankForIncome(unilevelIncome).rankName
           };
         })
       );
@@ -1562,13 +1570,19 @@ export class ProductionEncodingService {
       eligible.map(async (member) => {
         const ledger = await this.repo.listWalletLedgerEntriesForUser(member.userId);
         const totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
-        const rank = rankForIncome(totalIncome);
+        // Leaderboard standings are by total income, but the rank tier is gated by
+        // lifetime UNILEVEL income only (GATE-RANK-UNILEVEL-20260615).
+        const unilevelIncome = ledger
+          .filter((entry) => entry.entryType === 'unilevel')
+          .reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+        const rank = rankForIncome(unilevelIncome);
         return {
           userId: member.userId,
           username: member.username,
           fullName: member.fullName,
           packageTier: member.packageTier,
           totalIncome,
+          unilevelIncome,
           rankName: rank.rankName,
           rankLevel: rank.level
         };

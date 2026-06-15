@@ -1,12 +1,15 @@
-// Unilevel rank ladder (owner sign-off item 8, 2026-06-13). Rank is determined
-// SOLELY by lifetime TOTAL INCOME (gross sum of wallet credits), NOT by unilevel
-// points. Thresholds + names come from the Yor compensation image-2 ladder.
+// Unilevel rank ladder. GATE-RANK-UNILEVEL-20260615: rank is determined SOLELY by
+// lifetime UNILEVEL INCOME total (sum of 'unilevel' wallet credits), NOT by overall
+// total income. Example: total income PHP 100k but unilevel income PHP 20k → NOT
+// ranked; you need PHP 50k of unilevel income to reach Manager, and so on up the
+// ladder. Thresholds + names come from the Yor compensation ladder image.
+// (Superseded: rank was previously gated by lifetime TOTAL income — GATE-RANK-TOTALINCOME-20260613.)
 // Below the first threshold the member is unranked.
 
 export type RankTier = {
   level: number; // 1..11; 0 = unranked
   name: string;
-  threshold: number; // minimum lifetime total income (PHP) to hold this rank
+  threshold: number; // minimum lifetime UNILEVEL income (PHP) to hold this rank
 };
 
 // Ordered ascending by threshold.
@@ -29,16 +32,17 @@ export const UNRANKED: RankTier = { level: 0, name: 'Unranked', threshold: 0 };
 export type RankProgress = {
   level: number;
   rankName: string;
-  totalIncome: number;
+  unilevelIncome: number; // the rank-qualifying income (lifetime unilevel credits)
   currentThreshold: number; // threshold of the held rank (0 when unranked)
   nextRankName: string | null; // null at the top of the ladder
   nextThreshold: number | null;
-  remainingToNext: number | null; // PHP needed to reach the next rank
+  remainingToNext: number | null; // PHP of unilevel income needed to reach the next rank
 };
 
-// Highest ladder tier whose threshold the income meets or exceeds.
-export function rankForIncome(totalIncome: number): RankProgress {
-  const income = Number.isFinite(totalIncome) && totalIncome > 0 ? totalIncome : 0;
+// GATE-RANK-UNILEVEL-20260615: highest ladder tier whose threshold the member's
+// lifetime UNILEVEL income meets or exceeds (overall total income is NOT used).
+export function rankForIncome(unilevelIncome: number): RankProgress {
+  const income = Number.isFinite(unilevelIncome) && unilevelIncome > 0 ? unilevelIncome : 0;
 
   let held: RankTier = UNRANKED;
   for (const tier of RANK_LADDER) {
@@ -54,7 +58,7 @@ export function rankForIncome(totalIncome: number): RankProgress {
   return {
     level: held.level,
     rankName: held.name,
-    totalIncome: income,
+    unilevelIncome: income,
     currentThreshold: held.threshold,
     nextRankName: next ? next.name : null,
     nextThreshold: next ? next.threshold : null,

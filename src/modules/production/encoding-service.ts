@@ -1452,7 +1452,10 @@ export class ProductionEncodingService {
     });
 
     if (moduleId === 'rankings') {
-      const members = (await this.repo.listMembers()).filter((m) => m.accountStatus === 'active');
+      // Exclude the company root account (yor01) from rankings — it is not a competing member.
+      const members = (await this.repo.listMembers()).filter(
+        (m) => m.accountStatus === 'active' && m.username?.toLowerCase() !== 'yor01'
+      );
       const userIds = members.map((m) => m.userId);
       const [networkRows, directMap] = await Promise.all([
         this.repo.listNetworkAccountsByUserIds(userIds),

@@ -3064,6 +3064,55 @@ export class ProductionEncodingService {
     return { stats, packageBreakdown, accounts };
   }
 
+  // Admin shadow-account overview. A shadow only stores SMB from valid pairing under
+  // its sub-tree and transfers it to the owner's main wallet — so the metrics that
+  // matter are leg volumes, matched points, and SMB transferred (not wallet/unilevel/
+  // binary, which shadows never have). Every member has 2 default reserved shadows;
+  // this surfaces all of them with the activity-relevant fields for monitoring.
+  async buildShadowAccountOverview() {
+    const [shadows, members] = await Promise.all([
+      this.repo.listShadowAccounts(),
+      this.repo.listMembers()
+    ]);
+    const memberById = new Map(members.map((m) => [m.userId, m]));
+
+    const rows = shadows.map((s) => {
+      const owner = memberById.get(s.ownerUserId);
+      const left = Number(s.leftVolume ?? 0);
+      const right = Number(s.rightVolume ?? 0);
+      const matched = Number(s.matchedPoints ?? Math.min(left, right));
+      return {
+        id: s.id,
+        shadowCode: s.shadowCode,
+        ownerUsername: owner?.username ?? '—',
+        ownerFullName: owner?.fullName ?? '—',
+        placement: s.placement,
+        state: s.state,
+        accountType: s.accountType,
+        leftVolume: left,
+        rightVolume: right,
+        matchedPoints: matched,
+        unmatchedSurplus: Math.abs(left - right),
+        totalEarned: Number(s.totalEarned ?? 0)
+      };
+    });
+
+    // Most-active first: shadows that actually earned, then by matched volume.
+    rows.sort((a, b) => b.totalEarned - a.totalEarned || b.matchedPoints - a.matchedPoints);
+
+    const isActivated = (state: string) => state === 'activated_shadow' || state === 'converted_full';
+    const stats = {
+      totalShadows: rows.length,
+      activated: rows.filter((r) => isActivated(r.state)).length,
+      reserved: rows.filter((r) => r.state === 'reserved_shadow').length,
+      earning: rows.filter((r) => r.totalEarned > 0).length,
+      totalMatchedPoints: rows.reduce((s, r) => s + r.matchedPoints, 0),
+      totalTransferred: Number(rows.reduce((s, r) => s + r.totalEarned, 0).toFixed(2))
+    };
+
+    return { stats, shadows: rows };
+  }
+
   async reconcileShadowEarnings() {
     const paid = await withMoneyLock('shadow-reconcile', () => this.repo.reconcileShadowEarnings());
     for (const p of paid) {

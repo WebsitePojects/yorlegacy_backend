@@ -337,6 +337,25 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
   );
 });
 
+// Shadow-account overview — system-wide shadow monitoring (leg volumes, matched, SMB transferred).
+adminRouter.get('/api/admin/shadow-overview', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({ stats: null, shadows: [] });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.buildShadowAccountOverview());
+  } catch (error) {
+    console.error('[admin-shadow-overview] load failed:', error);
+    res.status(500).json({ message: 'Unable to load shadow accounts.' });
+  }
+});
+
 // CD (Credit-Deduction) account center — real per-account data + package breakdown + totals.
 adminRouter.get('/api/admin/cd-accounts', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (_req, res) => {
   if (!isProductionMode()) {

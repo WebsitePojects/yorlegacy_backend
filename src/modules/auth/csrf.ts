@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getAllowedFrontendOrigins } from '../../config/env.js';
-import { CSRF_COOKIE_NAME, readCookie } from './session.js';
+import { CSRF_COOKIE_NAME, readCookie, timingSafeStringEqual } from './session.js';
 
 const OFFICE_WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const OFFICE_PREFIXES = ['/api/member', '/api/admin'];
@@ -38,7 +38,7 @@ export function enforceOfficeCsrf(req: Request, res: Response, next: NextFunctio
   const cookieToken = readCookie(req.headers.cookie, CSRF_COOKIE_NAME);
   const headerToken = req.header(CSRF_HEADER_NAME);
 
-  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+  if (!cookieToken || !headerToken || !timingSafeStringEqual(cookieToken, headerToken)) {
     res.status(403).json({ message: 'Office write blocked because the CSRF token is missing or invalid.' });
     return;
   }

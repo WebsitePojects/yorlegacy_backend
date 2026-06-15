@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { applyCors, applyRequestContext } from './lib/http.js';
 import { enforceOfficeCsrf } from './modules/auth/csrf.js';
 import { attachAuthUser } from './modules/auth/request-auth.js';
@@ -13,7 +13,7 @@ export const app = express();
 
 app.use(applyRequestContext);
 app.use(applyCors);
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 app.use(attachAuthUser);
 app.use(enforceOfficeCsrf);
 app.use(healthRouter);
@@ -23,8 +23,10 @@ app.use(memberRouter);
 app.use(adminRouter);
 app.use(pagesRouter);
 
-app.use((err: any, _req: any, res: any, _next: any) => {
+// Catch-all error handler. Logs the real error server-side but never leaks internal
+// detail (DB/constraint text, stack hints) to clients — route handlers already return
+// their own specific 4xx messages for user-facing validation failures.
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error('EXPRESS ERROR:', err);
-  const message = typeof err?.message === 'string' ? err.message : String(err ?? 'Internal server error');
-  res.status(500).json({ message });
+  res.status(500).json({ message: 'Internal server error. Please try again later.' });
 });

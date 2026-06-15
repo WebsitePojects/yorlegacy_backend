@@ -481,9 +481,21 @@ adminRouter.post('/api/admin/staff-accounts/:id/password', requireRole('admin', 
       return;
     }
 
-    // Only a superadmin can change a superadmin password.
-    if (target.role === 'superadmin' && req.authUser!.role !== 'superadmin') {
-      res.status(403).json({ message: 'Only a Super Admin can change a Super Admin password.' });
+    // GATE-ADMIN-PWD-PRIVILEGE-20260615: privilege model for resetting another
+    // staff account's password (no current-password challenge, so it must be scoped):
+    //   - superadmin: may reset any account.
+    //   - admin / bod: may reset CASHIER accounts and their OWN account only.
+    //   - nobody but a superadmin may reset an admin / bod / superadmin (prevents an
+    //     admin locking out a peer admin or escalating laterally).
+    const actor = req.authUser!;
+    const isSelf = actor.id === target.id;
+    const targetIsPrivileged = target.role === 'admin' || target.role === 'bod' || target.role === 'superadmin';
+    if (actor.role !== 'superadmin' && targetIsPrivileged && !isSelf) {
+      res.status(403).json({
+        message: target.role === 'superadmin'
+          ? 'Only a Super Admin can change a Super Admin password.'
+          : 'Only a Super Admin can change another administrator or board account password.'
+      });
       return;
     }
 

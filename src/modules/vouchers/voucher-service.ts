@@ -89,24 +89,42 @@ export const voucherService = {
       expiresAt = parsed.toISOString();
     }
 
-    const count = await voucherRepository.countAll();
-    const voucherCode = `VCH-${String(count + 1).padStart(5, '0')}`;
-
-    const created = await voucherRepository.insert({
-      voucherCode,
-      beneficiaryUserId: beneficiary.id,
-      beneficiaryUsername: username,
-      beneficiaryFullName: beneficiary.name ?? null,
-      packageTier,
-      quantity,
-      grantedByUserId: actor.id,
-      grantedByLabel: actor.name ?? actor.email ?? 'admin',
-      remarks: input.remarks?.slice(0, 200) ?? null,
-      expiresAt
-    });
+    // Sequential code (VCH-00001…). `count + 1` is not concurrency-safe, so retry on a
+    // unique-constraint conflict (re-reading the count each attempt) before giving up.
+    let created: VoucherRecord | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 5 && !created; attempt += 1) {
+      const count = await voucherRepository.countAll();
+      const voucherCode = `VCH-${String(count + 1 + attempt).padStart(5, '0')}`;
+      try {
+        created = await voucherRepository.insert({
+          voucherCode,
+          beneficiaryUserId: beneficiary.id,
+          beneficiaryUsername: username,
+          beneficiaryFullName: beneficiary.name ?? null,
+          packageTier,
+          quantity,
+          grantedByUserId: actor.id,
+          grantedByLabel: actor.name ?? actor.email ?? 'admin',
+          remarks: input.remarks?.slice(0, 200) ?? null,
+          expiresAt
+        });
+      } catch (error) {
+        // Duplicate voucher_code under concurrency — retry with a fresh count.
+        if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
 
     if (!created) {
-      throw new Error('Voucher service is unavailable because Supabase is not configured.');
+      throw new Error(
+        lastError instanceof Error
+          ? 'Could not allocate a unique voucher code, please try again.'
+          : 'Voucher service is unavailable because Supabase is not configured.'
+      );
     }
     return created;
   },

@@ -547,6 +547,10 @@ export type ProductionEncodingRepository = {
   findShadowAccountByCode(shadowCode: string): Promise<ProductionShadowAccount | null>;
   saveShadowAccounts(rows: ProductionShadowAccount[]): Promise<void>;
   listWalletLedgerEntriesForUser(userId: string): Promise<ProductionWalletLedgerEntry[]>;
+  // One grouped aggregate of credit totals (total + unilevel-only) per user, to avoid
+  // per-member ledger scans in rankings/leaderboard. Returns null if unavailable
+  // (no client / RPC missing) so callers can fall back to per-user reads.
+  aggregateWalletCreditTotals(): Promise<Map<string, { total: number; unilevel: number }> | null>;
   listRecentWalletLedger(limit: number): Promise<ProductionWalletLedgerEntry[]>;
   appendWalletLedgerEntry(entry: ProductionWalletLedgerEntry): Promise<void>;
   hasWalletLedgerProcess(processId: string): Promise<boolean>;
@@ -1476,15 +1480,24 @@ export class ProductionEncodingService {
         this.repo.countDirectReferralsByUserIds(userIds)
       ]);
       const networkMap = new Map(networkRows.map((r) => [r.userId, r]));
+      // One grouped aggregate instead of a ledger scan per member (falls back to
+      // per-user reads only if the aggregate RPC is unavailable).
+      const creditTotals = await this.repo.aggregateWalletCreditTotals();
+      const incomeFor = async (userId: string): Promise<{ total: number; unilevel: number }> => {
+        if (creditTotals) {
+          return creditTotals.get(userId) ?? { total: 0, unilevel: 0 };
+        }
+        const ledger = await this.repo.listWalletLedgerEntriesForUser(userId);
+        return {
+          total: ledger.reduce((sum, e) => sum + (e.creditAmount ?? 0), 0),
+          unilevel: ledger.filter((e) => e.entryType === 'unilevel').reduce((sum, e) => sum + (e.creditAmount ?? 0), 0)
+        };
+      };
       const rows = await Promise.all(
         members.map(async (m) => {
           const net = networkMap.get(m.userId);
-          const ledger = await this.repo.listWalletLedgerEntriesForUser(m.userId);
-          const income = ledger.reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
+          const { total: income, unilevel: unilevelIncome } = await incomeFor(m.userId);
           // GATE-RANK-UNILEVEL-20260615: rank is gated by lifetime UNILEVEL income only.
-          const unilevelIncome = ledger
-            .filter((e) => e.entryType === 'unilevel')
-            .reduce((sum, e) => sum + (e.creditAmount ?? 0), 0);
           return {
             username: m.username,
             package: m.packageTier,
@@ -1566,15 +1579,25 @@ export class ProductionEncodingService {
         !member.isLeaderboardExcluded &&
         !COMPANY_USERNAMES.has(member.username.toLowerCase())
     );
+    // One grouped aggregate instead of a ledger scan per member.
+    const creditTotals = await this.repo.aggregateWalletCreditTotals();
     const ranked = await Promise.all(
       eligible.map(async (member) => {
-        const ledger = await this.repo.listWalletLedgerEntriesForUser(member.userId);
-        const totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+        let totalIncome: number;
+        let unilevelIncome: number;
+        if (creditTotals) {
+          const agg = creditTotals.get(member.userId) ?? { total: 0, unilevel: 0 };
+          totalIncome = agg.total;
+          unilevelIncome = agg.unilevel;
+        } else {
+          const ledger = await this.repo.listWalletLedgerEntriesForUser(member.userId);
+          totalIncome = ledger.reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+          unilevelIncome = ledger
+            .filter((entry) => entry.entryType === 'unilevel')
+            .reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
+        }
         // Leaderboard standings are by total income, but the rank tier is gated by
         // lifetime UNILEVEL income only (GATE-RANK-UNILEVEL-20260615).
-        const unilevelIncome = ledger
-          .filter((entry) => entry.entryType === 'unilevel')
-          .reduce((sum, entry) => sum + (entry.creditAmount ?? 0), 0);
         const rank = rankForIncome(unilevelIncome);
         return {
           userId: member.userId,
@@ -1871,19 +1894,26 @@ export class ProductionEncodingService {
     unilevel: { levelsCredited: number; totalCredited: number };
     lifestyle: { credited: number; cappedOut: boolean; reason: string };
   }> {
-    const code = await this.repo.findActivationCodeByCode(codeValue);
-    if (!code || code.assignedUserId !== memberUserId || code.status !== 'available') {
-      throw new Error('Code is not available for consumption.');
-    }
+    // GATE-MAINT-CONSUME-LOCK-20260615: serialize per-code so a double-click / retry
+    // cannot pass the availability check twice and double-credit the maintenance PV.
+    return withMoneyLock(`maintenance:${codeValue.trim().toUpperCase()}`, async () => {
+      const code = await this.repo.findActivationCodeByCode(codeValue);
+      if (!code || code.assignedUserId !== memberUserId || code.status !== 'available') {
+        throw new Error('Code is not available for consumption.');
+      }
 
-    code.status = 'used';
-    await this.repo.saveActivationCodes([code]);
+      const now = this.repo.now();
+      code.status = 'used';
+      code.usedAt = now;
+      code.usedByUserId = memberUserId;
+      await this.repo.saveActivationCodes([code]);
 
-    return this.submitProductRepurchase({
-      memberUserId,
-      activationCodeValue: codeValue,
-      sku,
-      memberPackageTier
+      return this.submitProductRepurchase({
+        memberUserId,
+        activationCodeValue: codeValue,
+        sku,
+        memberPackageTier
+      });
     });
   }
 
@@ -3023,8 +3053,9 @@ export class ProductionEncodingService {
     const memberById = new Map(members.map((m) => [m.userId, m]));
     const netByUser = new Map(networks.map((n) => [n.userId, n]));
 
-    // Sum CD deductions + net encashment paid out per user (settled encashments only).
-    const settled = (status: string) => /paid|approved|released|queued/i.test(status);
+    // Sum CD deductions + net encashment actually paid out per user. Only 'paid'
+    // counts as money-out — pending/queued/approved are not yet disbursed.
+    const settled = (status: string) => /paid/i.test(status);
     const cdDeductionByUser = new Map<string, number>();
     const netEncashByUser = new Map<string, number>();
     for (const enc of encashments) {
@@ -4689,6 +4720,17 @@ export function createInMemoryProductionEncodingRepository(seed?: {
       }
     },
     listWalletLedgerEntriesForUser: async (userId) => state.walletLedger.filter((item) => item.userId === userId),
+    aggregateWalletCreditTotals: async () => {
+      const map = new Map<string, { total: number; unilevel: number }>();
+      for (const entry of state.walletLedger) {
+        const credit = entry.creditAmount ?? 0;
+        const agg = map.get(entry.userId) ?? { total: 0, unilevel: 0 };
+        agg.total += credit;
+        if (entry.entryType === 'unilevel') agg.unilevel += credit;
+        map.set(entry.userId, agg);
+      }
+      return map;
+    },
     listRecentWalletLedger: async (limit) =>
       [...state.walletLedger].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, limit),
     appendWalletLedgerEntry: async (entry) => {

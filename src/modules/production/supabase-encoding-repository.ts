@@ -501,6 +501,22 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       const { data } = await client.from('wallet_ledger').select('*').eq('user_id', userId).order('occurred_at', { ascending: true });
       return (data ?? []).map(mapWalletRow);
     },
+    aggregateWalletCreditTotals: async () => {
+      // Single grouped aggregate (SQL function 0016) instead of a per-member scan.
+      const { data, error } = await client.rpc('wallet_credit_totals_by_user');
+      if (error) {
+        console.error('[aggregateWalletCreditTotals] rpc error:', error.message);
+        return null; // caller falls back to per-user reads
+      }
+      const map = new Map<string, { total: number; unilevel: number }>();
+      for (const row of (data ?? []) as Array<{ user_id: string; total_credit: number | string; unilevel_credit: number | string }>) {
+        map.set(row.user_id, {
+          total: Number(row.total_credit ?? 0),
+          unilevel: Number(row.unilevel_credit ?? 0)
+        });
+      }
+      return map;
+    },
     listRecentWalletLedger: async (limit) => {
       const { data } = await client.from('wallet_ledger').select('*').order('occurred_at', { ascending: false }).limit(limit);
       return (data ?? []).map(mapWalletRow);

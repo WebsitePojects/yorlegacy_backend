@@ -36,7 +36,13 @@ pagesRouter.get('/api/public/announcements', async (_request, response) => {
 pagesRouter.post('/api/public/contact', async (request, response) => {
   const remoteKey = String(request.ip ?? request.headers['x-forwarded-for'] ?? 'unknown');
   const now = Date.now();
-  const bucket = (contactHits.get(remoteKey) ?? []).filter((v) => now - v < 60_000);
+  // Sweep stale IP buckets so the map can't grow unbounded across many unique IPs.
+  for (const [key, hits] of contactHits) {
+    const fresh = hits.filter((v) => now - v < 60_000);
+    if (fresh.length === 0) contactHits.delete(key);
+    else contactHits.set(key, fresh);
+  }
+  const bucket = contactHits.get(remoteKey) ?? [];
   bucket.push(now);
   contactHits.set(remoteKey, bucket);
   if (bucket.length > 5) {

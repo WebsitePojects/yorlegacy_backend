@@ -276,3 +276,70 @@ export async function findAdminProfileByUserId(
     officeTitle: data.office_title ?? undefined
   };
 }
+
+// GATE-ADMIN-PWD-20260615: staff (admin office) account directory + privileged
+// password reset. Used by the admin Change Password surface.
+export type StaffAccount = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: AppRole;
+};
+
+export async function listStaffAccounts(): Promise<StaffAccount[]> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('id,email,display_name,role')
+    .in('role', ['admin', 'superadmin', 'cashier', 'bod'])
+    .order('role', { ascending: true });
+  if (error || !data) {
+    return [];
+  }
+  return (data as Array<Pick<AppUserRow, 'id' | 'email' | 'display_name' | 'role'>>).map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role
+  }));
+}
+
+export async function findStaffAccountById(id: string): Promise<StaffAccount | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return null;
+  }
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('id,email,display_name,role')
+    .eq('id', id)
+    .in('role', ['admin', 'superadmin', 'cashier', 'bod'])
+    .maybeSingle<Pick<AppUserRow, 'id' | 'email' | 'display_name' | 'role'>>();
+  if (error || !data) {
+    return null;
+  }
+  return { id: data.id, email: data.email, displayName: data.display_name, role: data.role };
+}
+
+export async function updateUserPassword(
+  id: string,
+  passwordHash: string,
+  passwordSalt: string
+): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return false;
+  }
+  const { error } = await supabase
+    .from('app_users')
+    .update({ password_hash: passwordHash, password_salt: passwordSalt })
+    .eq('id', id);
+  if (error) {
+    console.error('updateUserPassword error', error);
+    return false;
+  }
+  return true;
+}

@@ -5,7 +5,13 @@ import { codeQuantitySchema, parseBody } from '../lib/validate.js';
 import { listSupportMessages, updateSupportMessageStatus } from '../modules/support/support-service.js';
 import { buildAdminOffice } from '../modules/admin/office-service.js';
 import { buildAdminSummary } from '../modules/admin/summary-service.js';
-import { findAdminProfileByUserId } from '../modules/auth/app-users.js';
+import {
+  findAdminProfileByUserId,
+  findStaffAccountById,
+  listStaffAccounts,
+  updateUserPassword
+} from '../modules/auth/app-users.js';
+import { createPasswordHash } from '../modules/auth/password.js';
 import { requireRole } from '../modules/auth/request-auth.js';
 import { getOpsModuleForProfile } from '../modules/operations/hybrid-operational-data.js';
 import {
@@ -329,6 +335,52 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
       remarks: typeof req.body?.remarks === 'string' ? req.body.remarks : ''
     })
   );
+});
+
+// GATE-ADMIN-PWD-20260615: real staff-account directory + privileged password reset.
+// Authorization rule: only a superadmin may change a superadmin's password; admin/bod cannot.
+adminRouter.get('/api/admin/staff-accounts', requireRole('admin', 'bod', 'superadmin'), async (_req, res) => {
+  try {
+    const accounts = await listStaffAccounts();
+    res.status(200).json({ accounts });
+  } catch (error) {
+    console.error('[admin-staff-accounts] load failed:', error);
+    res.status(500).json({ message: 'Unable to load staff accounts.' });
+  }
+});
+
+adminRouter.post('/api/admin/staff-accounts/:id/password', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+
+  if (newPassword.length < 8) {
+    res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    return;
+  }
+
+  try {
+    const target = await findStaffAccountById(id);
+    if (!target) {
+      res.status(404).json({ message: 'Staff account not found.' });
+      return;
+    }
+
+    // Only a superadmin can change a superadmin password.
+    if (target.role === 'superadmin' && req.authUser!.role !== 'superadmin') {
+      res.status(403).json({ message: 'Only a Super Admin can change a Super Admin password.' });
+      return;
+    }
+
+    const { hash, salt } = await createPasswordHash(newPassword);
+    const ok = await updateUserPassword(id, hash, salt);
+    if (!ok) {
+      res.status(503).json({ message: 'Password update is unavailable because Supabase is not configured.' });
+      return;
+    }
+    res.status(200).json({ ok: true, account: { id: target.id, displayName: target.displayName, role: target.role } });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to change password.' });
+  }
 });
 
 // GATE-VOUCHER-B1T1-20260615: Buy-1-Take-1 voucher inventory (admin-side surface).

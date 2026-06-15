@@ -560,6 +560,7 @@ export type ProductionEncodingRepository = {
   findUsersByIds(userIds: string[]): Promise<ProductionAppUser[]>;
   listActivationCodeEventsForUser(userId: string, limit: number): Promise<ProductionActivationCodeEvent[]>;
   listRecentActivationCodeEvents(limit: number): Promise<ProductionActivationCodeEvent[]>;
+  listActivationCodeEventsPaged(offset: number, limit: number): Promise<{ events: ProductionActivationCodeEvent[]; total: number }>;
   listNetworkAccounts(): Promise<ProductionNetworkAccount[]>;
   listDirectsBySponsor(sponsorUserId: string): Promise<ProductionNetworkAccount[]>;
   findPlacementChild(parentUserId: string, side: PlacementSide, shadowSide?: PlacementSide | null): Promise<ProductionNetworkAccount | null>;
@@ -2961,6 +2962,26 @@ export class ProductionEncodingService {
   // Reconciles shadow earnings (each shadow's own sub-legs pair → owner earns salesmatch,
   // transferred to main wallet tagged left/right_shadow_earning). Idempotent SQL function;
   // notifies any owner who was just paid so their dashboard ticks live.
+  // Paginated activation-code history (server-side) so the full audit trail is
+  // browsable without loading every event at once.
+  async getActivationCodeEventsPage(page: number, pageSize: number) {
+    const safePage = Math.max(1, Math.floor(page) || 1);
+    const safeSize = Math.min(200, Math.max(1, Math.floor(pageSize) || 50));
+    const { events, total } = await this.repo.listActivationCodeEventsPaged((safePage - 1) * safeSize, safeSize);
+    return {
+      events: events.map((event) => ({
+        actor: event.actorName,
+        action: event.action,
+        target: event.code,
+        occurredAt: event.createdAt
+      })),
+      total,
+      page: safePage,
+      pageSize: safeSize,
+      totalPages: Math.max(1, Math.ceil(total / safeSize))
+    };
+  }
+
   async reconcileShadowEarnings() {
     const paid = await withMoneyLock('shadow-reconcile', () => this.repo.reconcileShadowEarnings());
     for (const p of paid) {
@@ -4560,6 +4581,10 @@ export function createInMemoryProductionEncodingRepository(seed?: {
         .slice(-limit)
         .reverse(),
     listRecentActivationCodeEvents: async (limit) => [...state.codeEvents].slice(-limit).reverse(),
+    listActivationCodeEventsPaged: async (offset, limit) => {
+      const ordered = [...state.codeEvents].reverse();
+      return { events: ordered.slice(offset, offset + limit), total: ordered.length };
+    },
     listNetworkAccounts: async () => [...state.networkAccounts],
     listDirectsBySponsor: async (sponsorUserId) => state.networkAccounts.filter((item) => item.sponsorUserId === sponsorUserId),
     findPlacementChild: async (parentUserId, side, shadowSide) =>

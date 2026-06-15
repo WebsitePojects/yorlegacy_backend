@@ -649,6 +649,16 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
         .limit(limit);
       return (data ?? []).map(mapCodeEventRow);
     },
+    listActivationCodeEventsPaged: async (offset, limit) => {
+      // Server-side pagination + exact count so the full history is browsable
+      // without loading every event at once.
+      const { data, count } = await client
+        .from('activation_code_events')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      return { events: (data ?? []).map(mapCodeEventRow), total: count ?? 0 };
+    },
     listNetworkAccounts: async () => {
       const { data } = await client.from('network_accounts').select('*');
       return (data ?? []).map(mapNetworkRow);

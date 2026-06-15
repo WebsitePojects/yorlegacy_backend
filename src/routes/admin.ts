@@ -337,6 +337,27 @@ adminRouter.post('/api/admin/activation-codes/review', requireRole('admin', 'bod
   );
 });
 
+// Paginated activation-code history (full audit trail, server-side paged for performance).
+adminRouter.get('/api/admin/activation-code-events', requireRole('admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({ events: [], total: 0, page: 1, pageSize: 50, totalPages: 1 });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    const page = Number(req.query.page ?? 1);
+    const pageSize = Number(req.query.pageSize ?? 50);
+    res.status(200).json(await service.getActivationCodeEventsPage(page, pageSize));
+  } catch (error) {
+    console.error('[admin-code-events] load failed:', error);
+    res.status(500).json({ message: 'Unable to load activation-code history.' });
+  }
+});
+
 // GATE-ADMIN-PWD-20260615: real staff-account directory + privileged password reset.
 // Authorization rule: only a superadmin may change a superadmin's password; admin/bod cannot.
 adminRouter.get('/api/admin/staff-accounts', requireRole('admin', 'bod', 'superadmin'), async (_req, res) => {

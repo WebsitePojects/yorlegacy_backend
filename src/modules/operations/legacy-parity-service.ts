@@ -1155,7 +1155,7 @@ export function runAdminUpdateMemberProfile(
 
 export function runMemberUpdateCredentials(
   user: SessionUser,
-  payload: { email?: string; password?: string }
+  payload: { username?: string; email?: string; password?: string }
 ) {
   return isSandboxMode()
     ? updateSandboxMemberCredentials(user, payload)

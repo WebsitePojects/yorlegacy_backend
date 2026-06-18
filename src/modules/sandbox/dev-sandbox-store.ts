@@ -795,10 +795,6 @@ export function findSandboxUserByUsername(username: string): SandboxUserRecord |
   if (normalized === 'yorsuperadmin' || normalized === 'superadmin') {
     return readState().users.find((u) => u.id === 'yor-superadmin-demo') ?? null;
   }
-  if (normalized === 'yor01') {
-    return readState().users.find((u) => u.id === 'yor-member-demo') ?? null;
-  }
-
   const member = readState().members.find(
     (m) => m.username.toLowerCase() === normalized
   );
@@ -2331,7 +2327,7 @@ export function updateSandboxMemberPayout(
 
 export function updateSandboxMemberCredentials(
   actor: SessionUser,
-  payload: { email?: string; password?: string }
+  payload: { username?: string; email?: string; password?: string }
 ) {
   return updateSandboxState((state) => {
     const member = state.members.find((entry) => entry.userId === actor.id);
@@ -2347,6 +2343,24 @@ export function updateSandboxMemberCredentials(
     }
 
     const updates: string[] = [];
+
+    if (payload.username && payload.username.trim()) {
+      const nextUsername = payload.username.trim();
+      if (nextUsername.length < 3) {
+        throw new Error('Username must be at least 3 characters.');
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(nextUsername)) {
+        throw new Error('Username may only contain letters, numbers, dots, underscores, and hyphens.');
+      }
+      const usernameTaken = state.members.some(
+        (entry) => entry.userId !== actor.id && entry.username.trim().toLowerCase() === nextUsername.toLowerCase()
+      );
+      if (usernameTaken) {
+        throw new Error('That username is already in use.');
+      }
+      member.username = nextUsername;
+      updates.push('username');
+    }
 
     if (payload.email && payload.email.trim()) {
       const nextEmail = payload.email.trim().toLowerCase();

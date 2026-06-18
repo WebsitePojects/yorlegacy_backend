@@ -2,14 +2,14 @@
   "runtimeMode": "sandbox",
   "metadata": {
     "version": 1,
-    "lastResetAt": "2026-06-14T23:34:50.964Z",
-    "lastMutationAt": "2026-06-14T23:34:51.183Z"
+    "lastResetAt": "2026-06-18T18:06:48.594Z",
+    "lastMutationAt": "2026-06-18T18:06:48.979Z"
   },
   "users": [
     {
       "id": "yor-member-demo",
       "role": "member",
-      "name": "Yor Company01",
+      "name": "Yor Member",
       "email": "yor01@yor.local",
       "passwordHash": "933fa181d6655628d37cdf50217769329ecb6a2d7355e62efe3edea741ccc19439900e57437f5a3349eaff419a23a1f0b82b95a725644b5fe22035ad4b67575f",
       "passwordSalt": "ba43c72b000c8a310deced20454ebeb2",
@@ -36,7 +36,7 @@
     {
       "id": "yor-bod-demo",
       "role": "bod",
-      "name": "Yor BOD",
+      "name": "Yoren Abihay - BOD",
       "email": "yorbod@yor.local",
       "passwordHash": "a6ece2ee319d2401f1f75c765887969c9a6218ad4e2cf763e69659885e13acea98ae7efbae02078e9b4fbf6209b1bf218cb8c5ed93966c8edcfb19747cfe4aed",
       "passwordSalt": "89163257b38b2ef817bdbf4c149ce163",
@@ -78,7 +78,7 @@
     {
       "userId": "yor-member-demo",
       "username": "yor01",
-      "fullName": "Yor Company01",
+      "fullName": "Yor Member",
       "firstName": "Yor",
       "lastName": "Company01",
       "middleName": "",
@@ -485,7 +485,7 @@
       "actor": "System",
       "action": "sandbox_runtime_enabled",
       "target": "dev-only mutable store",
-      "occurredAt": "2026-06-14T23:34:50.964Z"
+      "occurredAt": "2026-06-18T18:06:48.594Z"
     }
   ]
 }

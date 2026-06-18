@@ -2701,6 +2701,82 @@ export class ProductionEncodingService {
     };
   }
 
+  async updateOwnMemberCredentials(
+    user: SessionUser,
+    payload: { username?: string; email?: string; password?: string }
+  ) {
+    const member = await this.requireMemberByUserId(user.id);
+    const linkedUser = await this.repo.findUserById(member.userId);
+
+    if (!linkedUser) {
+      throw new Error('User account not found.');
+    }
+
+    const updates: string[] = [];
+    const nextUsername = payload.username?.trim();
+
+    if (nextUsername && nextUsername !== member.username) {
+      if (nextUsername.length < 3) {
+        throw new Error('Username must be at least 3 characters.');
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(nextUsername)) {
+        throw new Error('Username may only contain letters, numbers, dots, underscores, and hyphens.');
+      }
+      const conflict = await this.repo.findUserByUsername(nextUsername);
+      if (conflict) {
+        throw new Error('Username is already taken.');
+      }
+
+      const oldUsername = member.username;
+      member.username = nextUsername;
+
+      if (linkedUser.email.trim().toLowerCase() === `${oldUsername.toLowerCase()}@yor.local`) {
+        linkedUser.email = `${nextUsername.toLowerCase()}@yor.local`;
+      }
+
+      updates.push('username');
+    }
+
+    if (typeof payload.email === 'string' && payload.email.trim()) {
+      const nextEmail = payload.email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+        throw new Error('Enter a valid email address.');
+      }
+      const emailOwner = await this.repo.findUserByEmail(nextEmail);
+      if (emailOwner && emailOwner.id !== linkedUser.id) {
+        throw new Error('That email address is already in use.');
+      }
+      linkedUser.email = nextEmail;
+      updates.push('email');
+    }
+
+    if (typeof payload.password === 'string' && payload.password.trim()) {
+      const nextPassword = payload.password.trim();
+      if (nextPassword.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+      const bundle = createPasswordHashSync(nextPassword);
+      linkedUser.passwordHash = bundle.hash;
+      linkedUser.passwordSalt = bundle.salt;
+      updates.push('password');
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No changes provided.');
+    }
+
+    await this.repo.saveMemberProfile(member);
+    await this.repo.saveUser(linkedUser);
+
+    return {
+      moneyMode: this.repo.getMoneyMode(),
+      action: 'member-update-credentials',
+      status: 'completed' as const,
+      reason: 'Credentials updated.',
+      detail: `Updated: ${updates.join(', ')}.`
+    };
+  }
+
   // Admin name change — persists the full name (and split parts) on the member
   // profile and keeps the app_users display name in sync.
   async changeMemberFullName(_actor: SessionUser, username: string, fullName: string) {

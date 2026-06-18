@@ -635,10 +635,11 @@ memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', '
 });
 
 memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : undefined;
   const email = typeof req.body?.email === 'string' ? req.body.email.trim() : undefined;
   const password = typeof req.body?.password === 'string' ? req.body.password : undefined;
 
-  if (!email && !password) {
+  if (!username && !email && !password) {
     res.status(400).json({ message: 'Provide at least one field to update.' });
     return;
   }
@@ -649,12 +650,28 @@ memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admi
       res.status(503).json({ message: 'Production encoding service is unavailable.' });
       return;
     }
-    res.status(200).json({ moneyMode: 'production', action: 'member-update-credentials', status: 'applied', reason: 'Credentials update requires Supabase Auth integration. Contact support.' });
+    try {
+      res.status(200).json(
+        await service.updateOwnMemberCredentials(req.authUser!, {
+          username: username || undefined,
+          email: email || undefined,
+          password: password || undefined
+        })
+      );
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update credentials.' });
+    }
     return;
   }
 
   try {
-    res.status(200).json(runMemberUpdateCredentials(req.authUser!, { email: email || undefined, password: password || undefined }));
+    res.status(200).json(
+      runMemberUpdateCredentials(req.authUser!, {
+        username: username || undefined,
+        email: email || undefined,
+        password: password || undefined
+      })
+    );
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update credentials.' });
   }

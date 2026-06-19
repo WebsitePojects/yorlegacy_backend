@@ -13,7 +13,7 @@ export const app = express();
 
 app.use(applyRequestContext);
 app.use(applyCors);
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use(attachAuthUser);
 app.use(enforceOfficeCsrf);
 app.use(healthRouter);

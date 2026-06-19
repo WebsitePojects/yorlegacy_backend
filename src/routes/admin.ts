@@ -360,6 +360,7 @@ adminRouter.post('/api/admin/news-posts', requireRole('admin', 'bod', 'superadmi
   try {
     const post = await newsService.create({
       title, body, category, status, pinned: Boolean(req.body?.pinned),
+      attachments: newsService.normalizeAttachments(req.body?.attachments),
       createdByUserId: req.authUser!.id, createdByLabel: req.authUser!.name ?? 'admin'
     });
     res.status(200).json({ post });
@@ -376,7 +377,8 @@ adminRouter.patch('/api/admin/news-posts/:id', requireRole('admin', 'bod', 'supe
       body: typeof req.body?.body === 'string' ? req.body.body.trim() : undefined,
       category: ['announcement', 'news', 'promo', 'memo'].includes(req.body?.category) ? req.body.category : undefined,
       status: ['draft', 'published', 'archived'].includes(req.body?.status) ? req.body.status : undefined,
-      pinned: typeof req.body?.pinned === 'boolean' ? req.body.pinned : undefined
+      pinned: typeof req.body?.pinned === 'boolean' ? req.body.pinned : undefined,
+      attachments: req.body?.attachments !== undefined ? newsService.normalizeAttachments(req.body.attachments) : undefined
     });
     res.status(200).json({ post });
   } catch (error) {

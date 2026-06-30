@@ -343,3 +343,21 @@ export async function updateUserPassword(
   }
   return true;
 }
+
+// GATE-MEMBER-CREDENTIALS-20260630: persist a member's own email change. Mirrors
+// updateUserPassword — direct app_users update by id.
+export async function updateUserEmail(id: string, email: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return false;
+  }
+  const { error } = await supabase
+    .from('app_users')
+    .update({ email: email.trim().toLowerCase() })
+    .eq('id', id);
+  if (error) {
+    console.error('updateUserEmail error', error);
+    return false;
+  }
+  return true;
+}

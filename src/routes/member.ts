@@ -7,6 +7,8 @@ import { submitSupportMessage } from '../modules/support/support-service.js';
 import { buildMemberOffice } from '../modules/member/office-service.js';
 import { buildMemberSummary } from '../modules/member/summary-service.js';
 import { requireRole } from '../modules/auth/request-auth.js';
+import { createPasswordHashSync } from '../modules/auth/password.js';
+import { findAppUserByEmail, updateUserEmail, updateUserPassword } from '../modules/auth/app-users.js';
 import { getMemberModule, getHybridMemberForUser } from '../modules/operations/hybrid-operational-data.js';
 import {
   buildGenealogy,
@@ -649,7 +651,55 @@ memberRouter.post('/api/member/profile/credentials', requireRole('member', 'admi
       res.status(503).json({ message: 'Production encoding service is unavailable.' });
       return;
     }
-    res.status(200).json({ moneyMode: 'production', action: 'member-update-credentials', status: 'applied', reason: 'Credentials update requires Supabase Auth integration. Contact support.' });
+    // GATE-MEMBER-CREDENTIALS-20260630: previously a stub that returned fake success
+    // and never persisted, so members could not change their password/email. Now
+    // hashes + writes directly to app_users via the same helpers the admin reset and
+    // registration use (createPasswordHashSync + verifyPassword are a matched pair).
+    try {
+      const userId = req.authUser!.id;
+      const updated: string[] = [];
+
+      if (email) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          res.status(400).json({ message: 'Enter a valid email address.' });
+          return;
+        }
+        const emailOwner = await findAppUserByEmail(email);
+        if (emailOwner && emailOwner.id !== userId) {
+          res.status(400).json({ message: 'That email address is already in use.' });
+          return;
+        }
+        if (!(await updateUserEmail(userId, email))) {
+          res.status(400).json({ message: 'Unable to update email.' });
+          return;
+        }
+        updated.push('email');
+      }
+
+      if (password) {
+        if (password.trim().length < 6) {
+          res.status(400).json({ message: 'Password must be at least 6 characters.' });
+          return;
+        }
+        const bundle = createPasswordHashSync(password.trim());
+        if (!(await updateUserPassword(userId, bundle.hash, bundle.salt))) {
+          res.status(400).json({ message: 'Unable to update password.' });
+          return;
+        }
+        updated.push('password');
+      }
+
+      res.status(200).json({
+        moneyMode: 'production',
+        action: 'member-update-credentials',
+        status: 'completed',
+        reason: 'Credentials updated.',
+        detail: `Updated: ${updated.join(', ')}.`
+      });
+    } catch (error) {
+      console.error('[member-credentials] failed:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to update credentials.' });
+    }
     return;
   }
 

@@ -24,6 +24,7 @@ import type { MoneyMode, OperationalMetric, ReportTable, SessionUser } from '../
 import { decodeReferralCode } from '../../lib/referral-utils.js';
 import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 import { notifyUser } from '../../lib/live-events.js';
+import { buildEncashmentAudit } from './encashment-audit.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
 export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR REFILL' | 'YOR VISION';
@@ -4092,12 +4093,18 @@ export class ProductionEncodingService {
   async buildAdminEncashmentCenter() {
     const rows = await this.repo.listEncashments({}, 200);
     const memberNames = new Map<string, string>();
-    for (const row of rows) {
-      if (!memberNames.has(row.userId)) {
-        const member = await this.repo.findMemberByUserId(row.userId);
-        memberNames.set(row.userId, member ? `${member.fullName} (${member.username})` : row.userId);
-      }
-    }
+    const ledgerByUser = new Map<string, ProductionWalletLedgerEntry[]>();
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    await Promise.all(
+      userIds.map(async (userId) => {
+        const [member, ledger] = await Promise.all([
+          this.repo.findMemberByUserId(userId),
+          this.repo.listWalletLedgerEntriesForUser(userId)
+        ]);
+        memberNames.set(userId, member ? `${member.fullName} (${member.username})` : userId);
+        ledgerByUser.set(userId, ledger);
+      })
+    );
     const peso = (value: number) =>
       `PHP ${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     return {
@@ -4114,7 +4121,12 @@ export class ProductionEncodingService {
         net: peso(row.netAmount),
         method: row.payoutMethod ?? '—',
         status: row.status,
-        remarks: row.remarks
+        remarks: row.remarks,
+        requestedAt: row.createdAt,
+        reviewedAt: row.reviewedAt,
+        paidAt: row.paidAt,
+        payoutDetails: row.payoutDetails,
+        audit: buildEncashmentAudit(ledgerByUser.get(row.userId) ?? [], row)
       })),
       totals: {
         gross: rows.reduce((sum, row) => sum + row.grossAmount, 0),

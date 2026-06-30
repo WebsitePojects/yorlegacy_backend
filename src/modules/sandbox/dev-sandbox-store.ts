@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { createPasswordHashSync } from '../auth/password.js';
 import type { AuditEvent, SessionUser } from '../../types/auth.js';
 import { decodeReferralCode, encodeReferralCode } from '../../lib/referral-utils.js';
+import { buildEncashmentAudit } from '../production/encashment-audit.js';
 
 export type MemberRecord = {
   userId: string;
@@ -2425,22 +2426,43 @@ export function updateSandboxMemberStatus(
 }
 
 export function buildSandboxAdminEncashments() {
-  const rows = readState().payoutRows;
+  const state = readState();
+  const rows = state.payoutRows;
   return {
     moneyMode: 'sandbox' as const,
-    encashments: rows.map((row, index) => ({
-      id: row.reference,
-      queueOrder: index + 1,
-      member: row.member,
-      gross: row.gross,
-      fee: row.fee,
-      tax: row.tax,
-      cdDeduction: row.cdDeduction,
-      net: row.net,
-      method: row.method,
-      status: row.status,
-      remarks: row.remarks
-    })),
+    encashments: rows.map((row, index) => {
+      const ledger = state.walletLedgerEntries
+        .filter((entry) => entry.memberUsername.toUpperCase() === row.member.toUpperCase())
+        .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.id.localeCompare(right.id))
+        .map((entry) => ({
+          ...entry,
+          walletType: entry.sourceReference === row.reference ? 'main' : entry.walletType,
+          entryType: entry.sourceReference === row.reference ? 'encashment' : entry.entryType,
+          status: entry.sourceReference === row.reference ? 'posted' : entry.status
+        }));
+      return {
+        id: row.reference,
+        queueOrder: index + 1,
+        member: row.member,
+        gross: row.gross,
+        fee: row.fee,
+        tax: row.tax,
+        systemRetainer: row.systemRetainer ?? currency(0),
+        cdDeduction: row.cdDeduction,
+        net: row.net,
+        method: row.method,
+        status: row.status,
+        remarks: row.remarks,
+        requestedAt: row.createdAt,
+        reviewedAt: null,
+        paidAt: /paid/i.test(row.status) ? row.createdAt : null,
+        payoutDetails: null,
+        audit: buildEncashmentAudit(ledger, {
+          id: row.reference,
+          grossAmount: parseCurrency(row.gross)
+        })
+      };
+    }),
     totals: {
       gross: rows.reduce((sum, row) => sum + parseCurrency(row.gross), 0),
       net: rows.reduce((sum, row) => sum + parseCurrency(row.net), 0),

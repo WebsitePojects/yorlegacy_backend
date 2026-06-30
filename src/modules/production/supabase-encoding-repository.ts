@@ -498,7 +498,13 @@ export function createSupabaseProductionEncodingRepository(client: SupabaseClien
       assertNoError(error, 'saveShadowAccounts');
     },
     listWalletLedgerEntriesForUser: async (userId) => {
-      const { data } = await client.from('wallet_ledger').select('*').eq('user_id', userId).order('occurred_at', { ascending: true });
+      const { data } = await client
+        .from('wallet_ledger')
+        .select('*')
+        .eq('user_id', userId)
+        .order('occurred_at', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
       return (data ?? []).map(mapWalletRow);
     },
     aggregateWalletCreditTotals: async () => {

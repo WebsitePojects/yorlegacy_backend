@@ -720,6 +720,11 @@ function readState(): SandboxState {
 
 function writeState(state: SandboxState): void {
   state.metadata.lastMutationAt = nowIso();
+  // Ensure the data directory exists before writing. resetSandboxState() writes
+  // without going through readState()'s existsSync guard, so on a fresh checkout
+  // (CI, new clone) the dev-data/ dir is absent and writeFileSync would ENOENT —
+  // which broke every backend deploy (npm test failed before the deploy step ran).
+  mkdirSync(path.dirname(sandboxDataFile), { recursive: true });
   writeFileSync(sandboxDataFile, JSON.stringify(state, null, 2), 'utf8');
 }
 

@@ -859,7 +859,7 @@ export function buildAdminEncashmentCenter(_viewer?: SessionUser) {
     payoutDetails: '—',
     status: row.status,
     remarks: row.remarks,
-    submittedAt: row.createdAt,
+    requestedAt: row.createdAt,
     reviewedBy: null,
     reviewedAt: null,
     paidAt: null,

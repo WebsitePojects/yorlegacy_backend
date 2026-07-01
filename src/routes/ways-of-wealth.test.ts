@@ -652,6 +652,15 @@ describe('Cross-stream – payout schedule, wallet, and encashment rules', () =>
 
     expect(encashmentsRes.status).toBe(200);
     expect(encashmentsRes.body.encashments.length).toBeGreaterThan(0);
+    expect(encashmentsRes.body.encashments[0]).toMatchObject({
+      requestedAt: expect.any(String),
+      reviewedAt: null,
+      audit: {
+        snapshotAvailable: true,
+        grossDebit: 3000,
+        reconciled: true
+      }
+    });
   });
 
   it('CD deduction is zero when member cdBalance is zero (Nogatu parity)', async () => {

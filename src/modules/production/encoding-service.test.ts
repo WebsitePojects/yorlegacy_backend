@@ -1106,6 +1106,20 @@ describe('ProductionEncodingService', () => {
     const requests = await repo.listEncashmentsForUser('member-user');
     expect(requests).toHaveLength(1);
     expect(requests[0].status).toBe('pending');
+
+    const center = await service.buildAdminEncashmentCenter();
+    expect(center.encashments[0]).toMatchObject({
+      requestedAt: requests[0].createdAt,
+      reviewedAt: null,
+      paidAt: null,
+      audit: {
+        totalIncomeCredits: 10000,
+        balanceBefore: 10000,
+        grossDebit: 1000,
+        balanceAfter: 9000,
+        reconciled: true
+      }
+    });
   });
 
   it('CD member encashment recovers 100% of the post-deduction net and settles the obligation when cleared', async () => {
@@ -1306,8 +1320,9 @@ describe('ProductionEncodingService', () => {
     expect(paidRow?.reviewedBy).not.toBe('admin-user');
     expect(paidRow?.reviewedAt).not.toBeNull();
     expect(paidRow?.paidAt).not.toBeNull();
-    expect(paidRow?.submittedAt).toBeTruthy();
+    expect(paidRow?.requestedAt).toBeTruthy();
     expect(paidRow?.processId).toBeTruthy();
+    expect(paidRow?.audit?.reconciled).toBe(true);
 
     await service.submitEncashment(memberActor, 2000);
     const second = (await repo.listEncashmentsForUser('member-user')).find((row) => row.status === 'pending');

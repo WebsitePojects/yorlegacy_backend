@@ -24,6 +24,7 @@ import type { MoneyMode, OperationalMetric, ReportTable, SessionUser } from '../
 import { decodeReferralCode } from '../../lib/referral-utils.js';
 import { buildRegistrationUrl } from '../../lib/frontend-origin.js';
 import { notifyUser } from '../../lib/live-events.js';
+import { buildEncashmentAudit } from './encashment-audit.js';
 
 export type PackageTier = 'Basic' | 'Classic' | 'Standard' | 'Business' | 'VIP';
 export type CodeFamily = 'YOR CODES' | 'YOR MAINTENANCE' | 'YOR PERFUME' | 'YOR REFILL' | 'YOR VISION';
@@ -4091,14 +4092,21 @@ export class ProductionEncodingService {
 
   async buildAdminEncashmentCenter() {
     const rows = await this.repo.listEncashments({}, 200);
-    // GATE-ENCASH-RECORD-20260701: resolve the requesting member's name for display.
+    // GATE-ENCASH-RECORD-20260701: resolve the requesting member's name AND fetch
+    // their ledger (for reconciliation audit) in one pass per member.
     const memberNames = new Map<string, string>();
-    for (const row of rows) {
-      if (!memberNames.has(row.userId)) {
-        const member = await this.repo.findMemberByUserId(row.userId);
-        memberNames.set(row.userId, member ? `${member.fullName} (${member.username})` : row.userId);
-      }
-    }
+    const ledgerByUser = new Map<string, ProductionWalletLedgerEntry[]>();
+    const userIds = [...new Set(rows.map((row) => row.userId))];
+    await Promise.all(
+      userIds.map(async (userId) => {
+        const [member, ledger] = await Promise.all([
+          this.repo.findMemberByUserId(userId),
+          this.repo.listWalletLedgerEntriesForUser(userId)
+        ]);
+        memberNames.set(userId, member ? `${member.fullName} (${member.username})` : userId);
+        ledgerByUser.set(userId, ledger);
+      })
+    );
     // Reviewers are staff (admin/cashier/bod/superadmin), not members — they have no
     // member_profiles row, so resolve via app_users (findUserById) instead of the
     // member lookup above, or the name silently falls back to a raw UUID.
@@ -4126,13 +4134,15 @@ export class ProductionEncodingService {
         payoutDetails: row.payoutDetails ?? '—',
         status: row.status,
         remarks: row.remarks,
-        // GATE-ENCASH-RECORD-20260701: full record — when it was submitted, who
-        // reviewed/settled it and when, plus the deterministic process reference.
-        submittedAt: row.createdAt,
+        // GATE-ENCASH-RECORD-20260701: full record — when it was requested, who
+        // reviewed/settled it and when, the deterministic process reference, and a
+        // ledger-reconciliation audit against the member's wallet history.
+        requestedAt: row.createdAt,
         reviewedBy: row.reviewedByUserId ? reviewerNames.get(row.reviewedByUserId) ?? row.reviewedByUserId : null,
         reviewedAt: row.reviewedAt,
         paidAt: row.paidAt,
-        processId: row.processId
+        processId: row.processId,
+        audit: buildEncashmentAudit(ledgerByUser.get(row.userId) ?? [], row)
       })),
       totals: {
         gross: rows.reduce((sum, row) => sum + row.grossAmount, 0),

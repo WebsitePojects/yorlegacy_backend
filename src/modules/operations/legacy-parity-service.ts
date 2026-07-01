@@ -856,8 +856,14 @@ export function buildAdminEncashmentCenter(_viewer?: SessionUser) {
     cdDeduction: row.cdDeduction,
     net: row.net,
     method: row.method,
+    payoutDetails: '—',
     status: row.status,
-    remarks: row.remarks
+    remarks: row.remarks,
+    submittedAt: row.createdAt,
+    reviewedBy: null,
+    reviewedAt: null,
+    paidAt: null,
+    processId: row.reference
   }));
 
   return {

@@ -1296,6 +1296,19 @@ describe('ProductionEncodingService', () => {
     await service.reviewEncashment(adminActor, first.id, 'mark-paid');
     expect((await repo.findEncashmentById(first.id))?.status).toBe('paid');
 
+    // Regression: GATE-ENCASH-RECORD-20260701 — the reviewer here (admin-user) has
+    // NO member_profiles row (only a memberProfile for member-user was seeded above).
+    // buildAdminEncashmentCenter must resolve the reviewer's name via app_users
+    // (findUserById), not the member lookup, or this falls back to a raw UUID.
+    const center = await service.buildAdminEncashmentCenter();
+    const paidRow = center.encashments.find((row) => row.id === first.id);
+    expect(paidRow?.reviewedBy).toBe('Admin');
+    expect(paidRow?.reviewedBy).not.toBe('admin-user');
+    expect(paidRow?.reviewedAt).not.toBeNull();
+    expect(paidRow?.paidAt).not.toBeNull();
+    expect(paidRow?.submittedAt).toBeTruthy();
+    expect(paidRow?.processId).toBeTruthy();
+
     await service.submitEncashment(memberActor, 2000);
     const second = (await repo.listEncashmentsForUser('member-user')).find((row) => row.status === 'pending');
     const balanceBeforeReject = await repo.sumLedgerMainBalance('member-user');

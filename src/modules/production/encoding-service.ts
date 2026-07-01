@@ -4091,12 +4091,22 @@ export class ProductionEncodingService {
 
   async buildAdminEncashmentCenter() {
     const rows = await this.repo.listEncashments({}, 200);
+    // GATE-ENCASH-RECORD-20260701: resolve the requesting member's name for display.
     const memberNames = new Map<string, string>();
     for (const row of rows) {
       if (!memberNames.has(row.userId)) {
         const member = await this.repo.findMemberByUserId(row.userId);
         memberNames.set(row.userId, member ? `${member.fullName} (${member.username})` : row.userId);
       }
+    }
+    // Reviewers are staff (admin/cashier/bod/superadmin), not members — they have no
+    // member_profiles row, so resolve via app_users (findUserById) instead of the
+    // member lookup above, or the name silently falls back to a raw UUID.
+    const reviewerNames = new Map<string, string>();
+    const reviewerIds = new Set(rows.map((row) => row.reviewedByUserId).filter((id): id is string => Boolean(id)));
+    for (const reviewerId of reviewerIds) {
+      const reviewer = await this.repo.findUserById(reviewerId);
+      reviewerNames.set(reviewerId, reviewer ? reviewer.displayName : reviewerId);
     }
     const peso = (value: number) =>
       `PHP ${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -4113,8 +4123,16 @@ export class ProductionEncodingService {
         cdDeduction: peso(row.cdDeduction),
         net: peso(row.netAmount),
         method: row.payoutMethod ?? '—',
+        payoutDetails: row.payoutDetails ?? '—',
         status: row.status,
-        remarks: row.remarks
+        remarks: row.remarks,
+        // GATE-ENCASH-RECORD-20260701: full record — when it was submitted, who
+        // reviewed/settled it and when, plus the deterministic process reference.
+        submittedAt: row.createdAt,
+        reviewedBy: row.reviewedByUserId ? reviewerNames.get(row.reviewedByUserId) ?? row.reviewedByUserId : null,
+        reviewedAt: row.reviewedAt,
+        paidAt: row.paidAt,
+        processId: row.processId
       })),
       totals: {
         gross: rows.reduce((sum, row) => sum + row.grossAmount, 0),

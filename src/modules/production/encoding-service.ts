@@ -47,11 +47,18 @@ export const UNILEVEL_MAX_LEVELS = 10;
 // calendar month — a month below this earns nothing and carries nothing forward.
 export const UNILEVEL_MONTHLY_MAINTENANCE_PV = 200;
 
-// GATE-RETAINER-EXEMPT-20260613: account identified by immutable userId, not username,
-// so name/username changes never affect the exemption. PrinceI.T is the system operator
-// account and is not charged the 5% system retainer on encashments.
+// GATE-OWNER-REWIRE-20260627: the system operator ("Prince I.T") is the account the
+// owner actually logs into — userId db514090 (username Princel.T). Identified by its
+// immutable userId so name/email/payout edits never affect this wiring.
+// Supersedes GATE-RETAINER-EXEMPT-20260613, which pointed at 0f0464cf: that row was the
+// original PrinceI.T seed but has since been reassigned to a real member (Leonora Rey
+// Hiramatsu), so it must NOT carry the operator exemption or receive the retainer.
+export const SYSTEM_OWNER_USER_ID = 'db514090-87da-40be-9099-262b6af71a1c';
+
+// The system operator is not charged the 5% system retainer on its own encashments, and
+// is the account that RECEIVES every other member's withheld 5% retainer.
 const SYSTEM_RETAINER_EXEMPT_USER_IDS = new Set([
-  '0f0464cf-9886-471f-9adf-5a4255a8043f' // PrinceI.T — system operator (userId is immutable)
+  SYSTEM_OWNER_USER_ID // Prince I.T — system operator (userId is immutable)
 ]);
 
 export type PackageConfig = {
@@ -4025,6 +4032,9 @@ export class ProductionEncodingService {
         row.status = 'paid';
         row.paidAt = reviewedAt;
         await this.applyEncashmentCdRecovery(row);
+        // GATE-OWNER-REWIRE-20260627: the 5% system retainer withheld from this
+        // payout is credited to the system operator's main wallet, exactly once.
+        await this.creditOwnerRetainer(row);
       }
 
       row.reviewedByUserId = actor.id;
@@ -4088,6 +4098,71 @@ export class ProductionEncodingService {
         });
       }
     }
+  }
+
+  // GATE-OWNER-REWIRE-20260627: post the 5% retainer withheld from a PAID encashment
+  // to the system operator's main wallet. No-op when the retainer is zero (exempt
+  // payout) or when the payer IS the operator. Keyed off the encashment's own
+  // processId so the going-forward credit and the one-time historical backfill share
+  // the same idempotent process id (postLedgerIfNeeded dedups — re-running is safe).
+  private async creditOwnerRetainer(row: ProductionEncashment) {
+    if (row.systemRetainer <= 0 || row.userId === SYSTEM_OWNER_USER_ID) {
+      return;
+    }
+    await this.postLedgerIfNeeded({
+      userId: SYSTEM_OWNER_USER_ID,
+      entryType: 'system_retainer',
+      sourceReference: row.id,
+      creditAmount: row.systemRetainer,
+      processId: `${row.processId}:owner-retainer`,
+      notes: `System retainer (5%) from encashment ${row.id}.`
+    });
+  }
+
+  // GATE-OWNER-REWIRE-20260627: one-time historical backfill — credit the operator
+  // for the 5% withheld on every already-PAID encashment. Idempotent via the shared
+  // process key, so it can be run repeatedly and alongside the going-forward path
+  // without double-crediting. Returns how many entries were (newly) posted.
+  async backfillOwnerRetainer(): Promise<{ scanned: number; credited: number; totalAmount: number }> {
+    const rows = await this.repo.listEncashments({ status: 'paid' }, 100000);
+    let credited = 0;
+    let totalAmount = 0;
+    for (const row of rows) {
+      if (row.systemRetainer <= 0 || row.userId === SYSTEM_OWNER_USER_ID) {
+        continue;
+      }
+      const processId = `${row.processId}:owner-retainer`;
+      if (await this.repo.hasWalletLedgerProcess(processId)) {
+        continue;
+      }
+      await this.creditOwnerRetainer(row);
+      credited += 1;
+      totalAmount = Number((totalAmount + row.systemRetainer).toFixed(2));
+    }
+    return { scanned: rows.length, credited, totalAmount };
+  }
+
+  // GATE-OWNER-REWIRE-20260627: summary for the operator-only dashboard card — the
+  // running total of every member's 5% retainer credited to the operator's wallet.
+  async getOwnerRetainerSummary(actorUserId: string): Promise<{
+    isOwner: boolean;
+    totalRetainer: number;
+    entryCount: number;
+    lastCreditedAt: string | null;
+  }> {
+    if (actorUserId !== SYSTEM_OWNER_USER_ID) {
+      return { isOwner: false, totalRetainer: 0, entryCount: 0, lastCreditedAt: null };
+    }
+    const ledger = await this.repo.listWalletLedgerEntriesForUser(SYSTEM_OWNER_USER_ID);
+    const retainerEntries = ledger.filter((entry) => entry.entryType === 'system_retainer');
+    const totalRetainer = Number(
+      retainerEntries.reduce((sum, entry) => sum + entry.creditAmount - entry.debitAmount, 0).toFixed(2)
+    );
+    const lastCreditedAt = retainerEntries.reduce<string | null>(
+      (latest, entry) => (latest === null || entry.occurredAt > latest ? entry.occurredAt : latest),
+      null
+    );
+    return { isOwner: true, totalRetainer, entryCount: retainerEntries.length, lastCreditedAt };
   }
 
   async buildAdminEncashmentCenter() {
@@ -4194,7 +4269,11 @@ export class ProductionEncodingService {
       { streamId: 'unilevel', label: 'Unilevel Bonus', walletType: 'main', entryType: 'unilevel' },
       { streamId: 'global', label: 'Global Bonus', walletType: 'main', entryType: 'global_bonus' },
       { streamId: 'left-shadow-earning', label: 'Left Shadow Earning', walletType: 'main', entryType: 'left_shadow_earning' },
-      { streamId: 'right-shadow-earning', label: 'Right Shadow Earning', walletType: 'main', entryType: 'right_shadow_earning' }
+      { streamId: 'right-shadow-earning', label: 'Right Shadow Earning', walletType: 'main', entryType: 'right_shadow_earning' },
+      // GATE-OWNER-REWIRE-20260627: system operator's retainer commission shows as its
+      // own encashable breakdown line/chip in the wallet. Zero (and hidden as "no
+      // activity") for every non-operator member.
+      { streamId: 'system-retainer', label: 'System Retainer Commission', walletType: 'main', entryType: 'system_retainer' }
     ];
 
     const incomeBreakdown = INCOME_STREAM_META.map(m => ({
@@ -4254,7 +4333,8 @@ export class ProductionEncodingService {
       unilevel: 'Unilevel Bonus',
       global_bonus: 'Global Bonus',
       left_shadow_earning: 'Left Shadow Earning',
-      right_shadow_earning: 'Right Shadow Earning'
+      right_shadow_earning: 'Right Shadow Earning',
+      system_retainer: 'System Retainer Commission'
     };
 
     const formatPhp = (v: number) =>

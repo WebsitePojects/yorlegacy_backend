@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ProductionEncodingService,
+  SYSTEM_OWNER_USER_ID,
   createInMemoryProductionEncodingRepository,
   normalizeFullName,
   type ProductionActivationCode,
@@ -1330,6 +1331,55 @@ describe('ProductionEncodingService', () => {
     await service.reviewEncashment(adminActor, second!.id, 'reject', 'Payout details incomplete.');
     expect((await repo.findEncashmentById(second!.id))?.status).toBe('rejected');
     expect(await repo.sumLedgerMainBalance('member-user')).toBe(balanceBeforeReject + 2000);
+  });
+
+  // GATE-OWNER-REWIRE-20260627: the 5% system retainer withheld from a member's PAID
+  // encashment is credited to the operator wallet, encashable, and summarized for the
+  // operator-only dashboard card. Idempotent and operator-exempt.
+  it('credits the system retainer to the operator wallet on mark-paid and summarizes it', async () => {
+    const memberUser = seedUser('member-user', 'Member', 'member@yor.local');
+    const memberProfile = seedMember('member-user', 'YOR0001', 'YOR-MEMBER-0001', 'Standard', 'Member One');
+    const adminUser = seedUser('admin-user', 'Admin', 'admin@yor.local', 'admin');
+    const repo = createInMemoryProductionEncodingRepository({
+      users: [memberUser, adminUser],
+      members: [memberProfile],
+      networkAccounts: [seedNetwork('member-user', 'Standard', null, null, null)],
+      walletLedger: [
+        {
+          id: 'seed-ledger-owner', userId: 'member-user', walletType: 'main', entryType: 'direct_referral',
+          sourceReference: 'seed', creditAmount: 10000, debitAmount: 0, balanceAfter: 10000,
+          processId: 'seed:dr:owner', notes: 'Seed balance.', occurredAt: '2026-06-08T08:00:00.000Z', status: 'posted'
+        }
+      ]
+    });
+    const service = new ProductionEncodingService(repo);
+    const memberActor = { id: 'member-user', name: 'Member', email: 'member@yor.local', role: 'member' as const };
+    const adminActor = { id: 'admin-user', name: 'Admin', email: 'admin@yor.local', role: 'admin' as const };
+
+    // Before payout: operator sees zero; a non-owner sees isOwner:false.
+    expect(await service.getOwnerRetainerSummary(SYSTEM_OWNER_USER_ID)).toMatchObject({ isOwner: true, totalRetainer: 0 });
+    expect((await service.getOwnerRetainerSummary('member-user')).isOwner).toBe(false);
+
+    // PHP 4000 gross → 5% retainer = PHP 200 withheld.
+    await service.submitEncashment(memberActor, 4000);
+    const [req] = await repo.listEncashmentsForUser('member-user');
+    expect(req.systemRetainer).toBe(200);
+    await service.reviewEncashment(adminActor, req.id, 'mark-paid');
+
+    // Operator wallet now holds the 200 as an encashable system_retainer credit.
+    const ownerLedger = await repo.listWalletLedgerEntriesForUser(SYSTEM_OWNER_USER_ID);
+    const retainerCredit = ownerLedger.find((e) => e.entryType === 'system_retainer');
+    expect(retainerCredit?.creditAmount).toBe(200);
+    expect(retainerCredit?.walletType).toBe('main');
+    expect(await repo.sumLedgerMainBalance(SYSTEM_OWNER_USER_ID)).toBe(200);
+
+    const summary = await service.getOwnerRetainerSummary(SYSTEM_OWNER_USER_ID);
+    expect(summary).toMatchObject({ isOwner: true, totalRetainer: 200, entryCount: 1 });
+    expect(summary.lastCreditedAt).toBeTruthy();
+
+    // Idempotent: backfill posts nothing new for the already-credited paid encashment.
+    expect((await service.backfillOwnerRetainer()).credited).toBe(0);
+    expect((await service.getOwnerRetainerSummary(SYSTEM_OWNER_USER_ID)).totalRetainer).toBe(200);
   });
 
   it('rebuilds the live binary tree with the newly encoded member in the selected slot', async () => {

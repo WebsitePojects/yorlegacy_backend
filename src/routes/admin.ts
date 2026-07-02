@@ -172,6 +172,27 @@ adminRouter.post('/api/admin/payouts/approve', requireRole('admin', 'bod', 'supe
   res.status(200).json(runAdminApproveEncashment(req.authUser!, payoutId));
 });
 
+// GATE-OWNER-REWIRE-20260627: one-time (idempotent) historical backfill that credits
+// the system operator for the 5% withheld on every already-paid encashment. Safe to
+// re-run — the shared process key dedups, so repeat calls credit nothing new.
+adminRouter.post('/api/admin/owner/retainer-backfill', requireRole('superadmin'), async (req, res) => {
+  if (!isProductionMode()) {
+    res.status(400).json({ message: 'Retainer backfill is only available in production mode.' });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service unavailable.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.backfillOwnerRetainer());
+  } catch (error) {
+    console.error('[owner-retainer-backfill] failed:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to backfill owner retainer.' });
+  }
+});
+
 adminRouter.get('/api/admin/cashiers', requireRole('admin', 'bod', 'superadmin'), async (req, res) => {
   if (isProductionMode()) {
     const service = getProductionEncodingService();

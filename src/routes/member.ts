@@ -617,6 +617,26 @@ memberRouter.post(
   }
 );
 
+// GATE-OWNER-REWIRE-20260627: operator-only summary of all members' 5% system
+// retainer credited to the operator wallet. Non-owner callers get isOwner:false so
+// the dashboard card simply does not render for them.
+memberRouter.get('/api/member/owner/retainer-summary', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
+  if (!isProductionMode()) {
+    res.status(200).json({ isOwner: false, totalRetainer: 0, entryCount: 0, lastCreditedAt: null });
+    return;
+  }
+  const service = getProductionEncodingService();
+  if (!service) {
+    res.status(503).json({ message: 'Production encoding service is unavailable because Supabase is not configured.' });
+    return;
+  }
+  try {
+    res.status(200).json(await service.getOwnerRetainerSummary(req.authUser!.id));
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to load retainer summary.' });
+  }
+});
+
 memberRouter.post('/api/member/profile/payout', requireRole('member', 'admin', 'cashier', 'bod', 'superadmin'), async (req, res) => {
   const payoutOption = typeof req.body?.payoutOption === 'string' ? req.body.payoutOption : '';
   const payoutDetails = typeof req.body?.payoutDetails === 'string' ? req.body.payoutDetails : '';
